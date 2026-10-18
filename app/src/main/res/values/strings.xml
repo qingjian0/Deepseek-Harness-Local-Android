@@ -113,11 +113,11 @@
     <string name="setting_plugin_sub">One-click install dsh ecosystem plugins</string>
     <string name="setting_user_prompt">User instructions</string>
     <string name="setting_user_prompt_sub">Add your own standing instructions on top of the built-in environment guide</string>
-    <string name="user_prompt_intro">These instructions are appended to the app\'s built-in environment guide and apply to every new session. The app never overwrites what you write here, and upgrading keeps it as-is. You can also ask the AI to write here for you.</string>
+    <string name="user_prompt_intro">These instructions apply to every new session, alongside the app\'s built-in environment guide. The file is yours: the app never rewrites it, and upgrading keeps it as-is. You can also ask the AI to write here for you.</string>
     <string name="user_prompt_placeholder">For example: always answer in Chinese. Or: when I say "back up", copy the workspace to the Documents folder.</string>
     <string name="user_prompt_save">Save</string>
     <string name="user_prompt_saved">Saved. Takes effect in new sessions.</string>
-    <string name="user_prompt_path">Stored in the user section of AGENTS.md (managed by the app, yours is never overwritten)</string>
+    <string name="user_prompt_path">Saved as the whole AGENTS.md file - it is yours alone and the app never edits it</string>
     <string name="plugin_center_title">Community Plugins</string>
     <string name="plugin_center_sub">One-click install dsh ecosystem plugins (npm)</string>
     <string name="plugin_install">Install</string>

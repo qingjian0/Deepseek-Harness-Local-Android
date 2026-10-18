@@ -615,6 +615,21 @@ object EngineConfig {
             |    - id: android-narrow-rightbar
             |      name: ./android-plugins/narrow-rightbar/index.js
             |
+            |# App-owned agent instructions (v1.4.0). The environment manual used to be
+            |# written into ${'$'}DSH_HOME/AGENTS.md, the engine's only user-global *instruction*
+            |# file: a user-role message that is outranked by project instructions and first
+            |# to be dropped when the 64KiB instruction budget overflows. Registering it as a
+            |# system prompt section gives it the authority it needs and frees AGENTS.md to
+            |# be 100% user-owned (no markers, no split logic, no upgrade merge).
+            |# Content comes from tools/instructions/build.mjs -> assets/mobile/resident.md,
+            |# deployed to ${'$'}DSH_HOME/mobile/ by MobileInstructions on every boot.
+            |- insert:
+            |    - id: android-mobile-instructions
+            |      name: ./android-plugins/mobile-instructions.mjs
+            |      config:
+            |        file: mobile/resident.md
+            |        order: 100
+            |
             |""".trimMargin()
         runCatching {
             if (!f.isFile || f.readText() != body) f.writeText(body)
@@ -623,7 +638,10 @@ object EngineConfig {
         // sit beside it. Deploy from assets (kept in sync by the same idempotent check).
         runCatching {
             // 单文件插件（.mjs）：overlay 直接指向文件
-            listOf("priv-mode.mjs", "bridge-token.mjs", "fast-mode.mjs", "plugin-health.mjs").forEach { fileName ->
+            // mobile-instructions.mjs（v1.4.0）把 $DSH_HOME/mobile/resident.md 注册成
+            // system prompt section —— 即原来 AGENTS.md 里的环境说明，换成强层。
+            listOf("priv-mode.mjs", "bridge-token.mjs", "fast-mode.mjs", "plugin-health.mjs", "mobile-instructions.mjs")
+                .forEach { fileName ->
                 val src = ctx.assets.open("android-plugins/$fileName").use { it.readBytes() }
                 val dst = File(f.parentFile, "android-plugins/$fileName")
                 deployOne(dst, src.toString(Charsets.UTF_8), fileName)

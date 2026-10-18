@@ -113,11 +113,11 @@
     <string name="setting_plugin_sub">一键安装 dsh 生态插件</string>
     <string name="setting_user_prompt">自定义指令</string>
     <string name="setting_user_prompt_sub">在自带的环境说明之上，补写你自己的长期指令</string>
-    <string name="user_prompt_intro">这里的指令会追加到应用自带的环境说明之后，对每个新会话生效。应用永不覆盖你写的内容，升级也会原样保留。也可以直接让 AI 帮你写到这里。</string>
+    <string name="user_prompt_intro">这里的指令对每个新会话生效，与应用自带的环境说明并存。整个文件归你：应用永不改写，升级也原样保留。也可以直接让 AI 帮你写到这里。</string>
     <string name="user_prompt_placeholder">例如：始终用中文回答。或者：我说「备份」时，把工作区复制到 Documents 目录。</string>
     <string name="user_prompt_save">保存</string>
     <string name="user_prompt_saved">已保存，新会话生效</string>
-    <string name="user_prompt_path">保存在 AGENTS.md 的用户段（由应用管理，你的内容永不被覆盖）</string>
+    <string name="user_prompt_path">整份 AGENTS.md 都归你（应用永不改写；环境说明已移到系统提示）</string>
     <string name="plugin_center_title">社区插件</string>
     <string name="plugin_center_sub">一键安装 dsh 生态插件（npm）</string>
     <string name="plugin_install">安装</string>

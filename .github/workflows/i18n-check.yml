@@ -38,6 +38,20 @@ jobs:
       - name: Run i18n checks
         run: python3 scripts/check-i18n.py
 
+      # v1.4.0: agent 指令产物（app/src/main/assets/mobile）由 tools/instructions 编译。
+      # 这步重新构建并逐字节比对，既跑预算门禁（resident <= 6KB / 2000 tok），也拦住
+      # 手改资产；放在这条轻量 workflow 里，PR 阶段就能红，不必等双架构 APK 构建。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 校验指令产物与源码一致
+        run: node tools/instructions/ci/check.mjs
+
+      # 插件在发布前至少过一遍语法检查：assets 里的 .mjs 不会被任何 Kotlin 工具链校验。
+      - name: 校验 agent 插件语法
+        run: node --check app/src/main/assets/android-plugins/mobile-instructions.mjs
+
       - name: Upload full report on failure
         if: failure()
         run: python3 scripts/check-i18n.py 2>&1 | tee i18n-report.txt || true

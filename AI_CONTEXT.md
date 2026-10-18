@@ -1021,3 +1021,31 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
   （commit `687f282e`，2026-10-17）。本项目 runtime 仍锁定 `@deepseek-ai/dsh 0.2.0-rc.2`，
   因为 Android 运行时有多处针对 0.2.0-rc.2 的 bionic/Termux/PTY/native 补丁；
   0.2.1 适配不与本次修复混发，待单独做依赖差异审查、补丁迁移、双架构构建与真机验证。
+
+## 2026-10-19 v1.4.0：agent 指令改为构建产物 + system prompt section（versionCode 246）
+
+- **动机**：v1.3.2/1.3.3 把 App 的环境说明与用户指令塞进同一个 `$DSH_HOME/AGENTS.md`。
+  该文件是引擎唯一的 user-global 指令文件，`dsh-agent-instructions` 以 **user 角色**
+  system-reminder 注入：权威低于 project 指令、64KiB 预算溢出时**最先被丢弃**，还要靠
+  标记注释做分段与升级合并。31KB 常驻 ≈ 8k tokens/会话。
+- **实现**：
+  1. `tools/instructions/` 单一作者源 → `build.mjs` 编译到 `app/src/main/assets/mobile/`
+     （resident.md + docs×7 + skills×2），`ci/check.mjs` 在 CI 逐字节比对构建产物；
+  2. `android-plugins/mobile-instructions.mjs` 把 resident.md 注册为 section
+     `mobile:environment`（order 100，与 persona(0)/plan-policy(500) 相邻），`text` 同步求值
+     （statSync + mtime memo），自带 7168B 上限并在段落边界截断，文件缺失时给**降级段**；
+  3. `MobileInstructions`（替换 `AgentContextSeed`）在 boot 注入 assets → `$HOME/mobile/`
+     与 `$HOME/skills/`，并迁移 `AGENTS.md`：v1.3.2 分段只留用户段、旧种子归档、
+     无标记的文件不碰；读失败不覆盖、备份失败不写入、写盘用 temp+rename。
+  4. 设置页文案与三语 strings 改为「整份文件归用户」。
+- **实测**：常驻 31,016B → 4,458B（≈1,063 tok），docs/skills 按需；`node tools/instructions/ci/check.mjs`
+  PASS（篡改资产会红）；插件经真实 `cordis` + `dsh-system-prompt` 加载，section 注册与同步求值验证通过。
+- **团队审查**：4 个同题材分支（`feat/android-env-*`）不整并（基线落后、整并会产生第二个
+  environment section 并丢 v1.3.2 用户段）；只吸收 S1（扩展中心 `X-DSH-Token`，原 seed 命令实测 403）、
+  S3（缺文件降级）、S5（注册日志）。P0×2（Kotlin raw string `${'$'}` 转义、`File(File)` 构造）、
+  P1×5（字节截断、读失败覆盖、无门控迁移、备份失败、旧种子静默清空）已修。
+- **发版收尾**：versionName 1.4.0 / versionCode 246；`RELEASE_NOTES_v1.4.0.md`；
+  `docs/INSTRUCTIONS.md` + `.en.md`（三语 README 已加文档入口）。CI（i18n-check + 双架构
+  android-build）在 `b8d1108` 上双绿，证明 Kotlin 编译与打包通过。
+- **未验证（需真机）**：APK 内 `assets.list` 的运行时行为、真机引擎加载 overlay 插件、
+  v1.3.3→v1.4.0 升级迁移、section 在 10+ 轮 + compaction 后仍生效（通道回归协议待跑）。
