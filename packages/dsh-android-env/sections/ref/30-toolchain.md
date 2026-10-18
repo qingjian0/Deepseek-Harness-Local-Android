@@ -49,3 +49,25 @@ zipalign -f 4 app-unsigned.apk app-aligned.apk && apksigner sign --ks my.keystor
 - 向 aapt 传入 `-I /system/framework/framework-res.apk`：它携带 framework 资源表，`android:xxx` 属性据此解析。
 - `d8` 是 Java 程序。如果 `java` 不在 PATH 上，先发现 JDK：`JAVA=$(ls -d $PREFIX/extensions/*/lib/jvm/*/bin/java 2>/dev/null | head -1)`，不要硬编码某个固定 JDK 路径。
 - Gradle 也能用，但它仍然需要这个 classpath jar，并会联网下载自己的依赖。
+## 扩展故障排查（先自愈，再汇报）
+
+扩展目录位于 `$PREFIX/extensions/<id>/{bin,lib}`。
+
+1. **`command not found`** → 扩展缺失或已安装未激活：安装并轮询直到 green，然后重启引擎（`scr dump` → 点工具栏里的“重启/ Restart”）。
+2. **`CANNOT LINK EXECUTABLE: "libX.so" not found`** → 先试一次 `{"id":"<id>","force":true}`；仍缺再从 Termux 镜像单独拉对应 `.deb`，只取其中的 `lib/`。
+3. **`bad interpreter` / `env: xxx: not found`** → 把 shebang 改写为真实解释器路径（`ls $PREFIX/extensions/*/bin`）。应用已自动修复常见 shim。
+4. **`扩展目录发布失败`** → 有应用删不掉的残留（通常是 root 拥有）。避免无限重试：切 Root 模式再试一次，或让用户手动删掉那个目录。
+5. 下结论前先核实证据：`/ext/list` 与 `$PREFIX/engine.log`（安装计数、`bins 缺失`、`boot step` 耗时）。
+
+汇报时给出：精确命令、精确错误、已尝试过什么、以及修复方案或下一步用户动作。
+
+
+## 权限模式（`DSH_ANDROID_PRIV_MODE`）
+
+- `normal` — 仅 sandbox app uid；`$HOME` 可以用，但设计上无法做系统级修改。
+- `shizuku` — 与 normal 相同，但多了 `shz` 桥（adb uid 2000）：进程管理、系统属性、包查询。
+- `root` — 引擎以 uid 0 运行：可完全访问，但仍应留在 `$HOME` 里除非用户另有要求；破坏宿主环境就等于破坏自己的工作区。
+  - git 陷阱：应用创建的仓库通常是 app-owner → `fatal: detected dubious ownership`。用 `git -c safe.directory='*' ...`。
+
+**当前生效的模式见下方动态上下文**（每步求值），不要凭这份列表猜测。
+

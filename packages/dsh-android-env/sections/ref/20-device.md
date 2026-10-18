@@ -1,38 +1,3 @@
-## 权限模式（`DSH_ANDROID_PRIV_MODE`）
-
-- `normal` — 仅 sandbox app uid；`$HOME` 可以用，但设计上无法做系统级修改。
-- `shizuku` — 与 normal 相同，但多了 `shz` 桥（adb uid 2000）：进程管理、系统属性、包查询。
-- `root` — 引擎以 uid 0 运行：可完全访问，但仍应留在 `$HOME` 里除非用户另有要求；破坏宿主环境就等于破坏自己的工作区。
-  - git 陷阱：应用创建的仓库通常是 app-owner → `fatal: detected dubious ownership`。用 `git -c safe.directory='*' ...`。
-
-**当前生效的模式见下方动态上下文**（每步求值），不要凭这份列表猜测。
-
-## 从另一台设备访问 WebUI（局域网）
-
-上游明确拒绝 `0.0.0.0`，简单端口转发会在四处出问题：没有安全上下文（`crypto.randomUUID` 缺失）、loopback 门禁、`/api` 的同源检查、浏览器对回环入口的限制。
-
-应用内置了 LAN 代理（设置 → 局域网访问 WebUI）：监听自己的端口，polyfill `crypto.randomUUID`，重写 loopback gate 与 `SameSite=Strict` Cookie，并处理 WebSocket 升级。**优先引导用户打开这个开关**，不要手写代理。
-
-确实需要自定义 LAN URL 时，写一个独立的 node 反向代理监听**新端口**，并如实告知用户：这会把一个拥有完整文件与命令权限的 agent 暴露到网络，仅限可信网络并设密码。
-
-## 端口边界
-
-- 3080 = 引擎 WebUI，3083 = 应用能力桥。**默认不要** bind / 反代 / 占用它们：绑上会让应用静默失效，且很难自查。
-- 需要占用时（例如自建可视化服务），先选别的端口；如果确实非用这两个端口不可，**先向用户说明“会让 app 的 WebUI 或能力桥失效”这一后果并取得确认**，再动手。
-- `EADDRINUSE` 出现在 3083 时，先怀疑自己之前起的进程占着，杀掉自己的那个，绝不要动应用本身的。
-
-## 扩展故障排查（先自愈，再汇报）
-
-扩展目录位于 `$PREFIX/extensions/<id>/{bin,lib}`。
-
-1. **`command not found`** → 扩展缺失或已安装未激活：安装并轮询直到 green，然后重启引擎（`scr dump` → 点工具栏里的“重启/ Restart”）。
-2. **`CANNOT LINK EXECUTABLE: "libX.so" not found`** → 先试一次 `{"id":"<id>","force":true}`；仍缺再从 Termux 镜像单独拉对应 `.deb`，只取其中的 `lib/`。
-3. **`bad interpreter` / `env: xxx: not found`** → 把 shebang 改写为真实解释器路径（`ls $PREFIX/extensions/*/bin`）。应用已自动修复常见 shim。
-4. **`扩展目录发布失败`** → 有应用删不掉的残留（通常是 root 拥有）。避免无限重试：切 Root 模式再试一次，或让用户手动删掉那个目录。
-5. 下结论前先核实证据：`/ext/list` 与 `$PREFIX/engine.log`（安装计数、`bins 缺失`、`boot step` 耗时）。
-
-汇报时给出：精确命令、精确错误、已尝试过什么、以及修复方案或下一步用户动作。
-
 ## 给用户展示视觉内容
 
 这里没有显示服务器。用 **node** 起一个服务（`node:http`，或经 pnpm 装纯 JS 框架），监听回环端口（如 3000），然后直接回复 URL：`http://127.0.0.1:<port>`，应用会把它当实时预览打开。不要假设 `python -m http.server` 可用。
