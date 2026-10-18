@@ -1022,7 +1022,7 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
   因为 Android 运行时有多处针对 0.2.0-rc.2 的 bionic/Termux/PTY/native 补丁；
   0.2.1 适配不与本次修复混发，待单独做依赖差异审查、补丁迁移、双架构构建与真机验证。
 
-## 2026-10-19 v1.4.0（未发布）：agent 指令改为构建产物 + system prompt section
+## 2026-10-19 v1.4.0：agent 指令改为构建产物 + system prompt section（versionCode 246）
 
 - **动机**：v1.3.2/1.3.3 把 App 的环境说明与用户指令塞进同一个 `$DSH_HOME/AGENTS.md`。
   该文件是引擎唯一的 user-global 指令文件，`dsh-agent-instructions` 以 **user 角色**
@@ -1044,5 +1044,8 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
   environment section 并丢 v1.3.2 用户段）；只吸收 S1（扩展中心 `X-DSH-Token`，原 seed 命令实测 403）、
   S3（缺文件降级）、S5（注册日志）。P0×2（Kotlin raw string `${'$'}` 转义、`File(File)` 构造）、
   P1×5（字节截断、读失败覆盖、无门控迁移、备份失败、旧种子静默清空）已修。
-- **未验证**：Kotlin 真实编译、APK 打包后 `assets.list` 行为、真机引擎加载 overlay 插件、
+- **发版收尾**：versionName 1.4.0 / versionCode 246；`RELEASE_NOTES_v1.4.0.md`；
+  `docs/INSTRUCTIONS.md` + `.en.md`（三语 README 已加文档入口）。CI（i18n-check + 双架构
+  android-build）在 `b8d1108` 上双绿，证明 Kotlin 编译与打包通过。
+- **未验证（需真机）**：APK 内 `assets.list` 的运行时行为、真机引擎加载 overlay 插件、
   v1.3.3→v1.4.0 升级迁移、section 在 10+ 轮 + compaction 后仍生效（通道回归协议待跑）。

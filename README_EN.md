@@ -10,7 +10,7 @@
 
 
 [![CI](https://github.com/Soodok/Deepseek-Harness-Local-Android/actions/workflows/android-build.yml/badge.svg)](https://github.com/Soodok/Deepseek-Harness-Local-Android/actions/workflows/android-build.yml)
-![Release](https://img.shields.io/badge/release-v1.3.3-blue)
+![Release](https://img.shields.io/badge/release-v1.4.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-green)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 
@@ -107,6 +107,7 @@ Every capability has its own document (design trade-offs, measured numbers, trou
 | [Notifications & background](docs/NOTIFICATIONS.en.md) | AI progress, task completion, LAN reminder, clean exit |
 | [Complex-scenario field notes](docs/COMPLEX_SCENARIOS.md) | noisy pages, cross-app tasks, failure recovery, measured |
 | [Fast-path picker](docs/FAST_PATH_PICKER.md) | on-device UI element selection and discrimination |
+| [Agent instructions](docs/INSTRUCTIONS.en.md) | how the 31KB AGENTS.md seed became build artifacts plus a system prompt section; ~4KB resident, on-demand docs and skills, migration and CI gates |
 
 ## ⛔ Limits (please be aware)
 
@@ -165,7 +166,7 @@ Normal mode is the default; choose Shizuku or Root only when the task requires a
 
 ## 📦 Installation
 
-**Download a Release (recommended)**: grab the APK from [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) (pick `arm64-v8a` for phones; latest is **v1.3.3**), then install with unknown sources allowed. Any v1.0.0+ build can be installed over the top.
+**Download a Release (recommended)**: grab the APK from [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) (pick `arm64-v8a` for phones; latest is **v1.4.0**), then install with unknown sources allowed. Any v1.0.0+ build can be installed over the top.
 
 > 📦 **Which file to pick**: normal users want **`dsh-mobile-*-arm64-v8a.apk`** (release-signed).
 > Names ending in **`-debug`** are debug-signed builds - for log capture, or for users already on a
