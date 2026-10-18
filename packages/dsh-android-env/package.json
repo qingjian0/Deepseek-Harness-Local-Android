@@ -1,7 +1,24 @@
 {
   "name": "dsh-android-env",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "description": "DSH Mobile's Android environment manual, delivered as ordered systemPrompt sections instead of a seeded AGENTS.md.",
   "type": "module",
-  "dsh": { "bundle": true },
-  "peerDependencies": { "@deepseek-ai/dsh-system-prompt": "*" }
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./sections/*": "./sections/*"
+  },
+  "files": [
+    "index.js",
+    "sections"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-system-prompt": "*"
+  },
+  "dsh": {
+    "android": {
+      "assetDir": "android-plugins/android-env",
+      "entry": "index.js"
+    }
+  }
 }

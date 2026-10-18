@@ -520,6 +520,25 @@ object EngineConfig {
             |    - id: android-fast-mode
             |      name: ./android-plugins/fast-mode.mjs
             |
+            |# Android environment manual (v1.3.1). Replaces the old seeded AGENTS.md:
+            |# that channel is a user-role message that only refreshes on file reads, gets
+            |# compacted away in long sessions, and is injected once per session. This
+            |# plugin instead registers ordered systemPrompt sections (orders 44-50) plus
+            |# one per-step runtime context (order 15), and re-reads each section body from
+            |# disk on every assemble. complete is always false (two complete sections make
+            |# assemble() throw).
+            |#
+            |# disabledSections turns whole blocks off without touching files; the two
+            |# UI-automation blocks are the bulk of the text, so a chat-only setup wants
+            |# [ui-automation, ui-antipatterns]. p0Probe is the channel-verification switch
+            |# (first line of every reply must be P0-PROBE-OK) - keep it false in releases.
+            |- insert:
+            |    - id: android-env
+            |      name: ./android-plugins/android-env/index.js
+            |      config:
+            |        disabledSections: []
+            |        p0Probe: false
+            |
             |# Narrow-screen UI fixes (v1.2.175 - v1.2.181). Each is a *client plugin
             |# package* (directory form, e.g. narrow-sidebar/package.json): the package
             |# declares dsh.client + exports["./client"], and the engine's client-modules
@@ -575,6 +594,21 @@ object EngineConfig {
                         .use { it.readBytes() }
                     val dst = File(f.parentFile, "android-plugins/$pkg/$fileName")
                     deployOne(dst, src.toString(Charsets.UTF_8), "$pkg/$fileName")
+                }
+            }
+            // android-env（v1.3.1）：引擎端插件包，正文是 sections/*.md。
+            // 目录名用 assets.list 枚举 —— 在 Kotlin 里再维护一份文件名清单迟早会漏。
+            // 源码在 packages/dsh-android-env/，构建时由 syncAndroidEnvAssets 复制进 assets。
+            run {
+                val pkg = "android-plugins/android-env"
+                val rels = mutableListOf("index.js", "package.json")
+                runCatching {
+                    ctx.assets.list("$pkg/sections")?.sorted()?.forEach { rels += "sections/$it" }
+                }.onFailure { Log.w(TAG, "list assets/$pkg/sections failed: ${it.message}") }
+                rels.forEach { rel ->
+                    val src = ctx.assets.open("$pkg/$rel").use { it.readBytes() }
+                    val dst = File(f.parentFile, "$pkg/$rel")
+                    deployOne(dst, src.toString(Charsets.UTF_8), "android-env/$rel")
                 }
             }
         }.onFailure { Log.w(TAG, "android plugin deploy failed: ${it::class.simpleName}: ${it.message}", it) }
