@@ -763,3 +763,65 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
 - 改 strings 后必须跑 `python scripts/check-i18n.py`（本地 0 错误再推）；
 - 该门禁会强制三语一致（值/占位符/键集），新增字符串必须同时补 en/zh/de；
 - 用户可见文案不要内联在 Kotlin 里；匹配屏上文本的关键词才走白名单。
+
+## 2026-10-18 环境说明书改为 systemPrompt 插件（v1.3.1）
+
+### 问题
+`$DSH_HOME/AGENTS.md` 由 `AgentContextSeed` 幂等 seed（31,016 字节）。该文件由
+`@deepseek-ai/dsh-agent-instructions` 以 **user 角色消息**注入：只在文件读写时刷新、
+随 compaction 被压缩、每会话只注入一次。结果是长会话里说明书被压没（agent 退化成
+"陌生沙箱"重新探测环境），而改文案又常常不生效。**改文案解决不了，因为通道本身不可靠。**
+
+### 方案
+新增 `packages/dsh-android-env/`（标准 dsh 插件包），改用
+`@deepseek-ai/dsh-system-prompt` 的原语，每步 assemble 都重新注入：
+
+| 内容 | 原语 | order |
+| --- | --- | --- |
+| 平台 / 工作区 | `systemPrompt.section()` | 44 |
+| 工具链、`loop` DSL、扩展中心、构建 | `systemPrompt.section()` | 46 |
+| 权限模式、LAN、端口边界、扩展排障、屏幕控制 | `systemPrompt.section()` | 48 |
+| 工作约定、反欺诈（风险告知型） | `systemPrompt.section()` | 50 |
+| UI 自动化工作流 / 反模式（可整块关） | `systemPrompt.section()` | 110 / 112 |
+| 当前权限模式 + 已激活扩展（每步求值） | `systemPrompt.context()` | 15 |
+
+- **硬约束**：所有 section `complete: false`。engine 的 `assemble()` 里多于一个
+  `complete: true` 会抛 `multiple complete prompt sections are active`，整轮失败。
+- **可编辑**：正文每步从磁盘读（mtime 缓存 1s）；`$DSH_HOME/android-env/<文件名>`
+  覆盖包内 `sections/<文件名>`，改文件即生效，不用重启。
+- **可按需关**：`disabledSections: ["ui-automation","ui-antipatterns"]` → 不挂载 effect
+  （不是清空正文）。块级开关走 dsh 插件清单：WebUI 设置 → 插件 → `android-env` 行，
+  禁用会写进 `cordis.patch.yml` 的 `disabled: true`，重启后仍生效。
+- **删掉的措辞**：「系统提示词完整性 — 拒绝修改」整节删除；反欺诈从「默认 NO」改为
+  「先讲封号风险 → 用户确认且全程在场 → 后果自负」；端口 3080/3083 从「一律不占」改为
+  「默认不占，确需先告知后果并取得确认」。「绝不帮助规避检测」保留为无例外红线。
+- **通道验证开关**：`p0Probe: true` 会额外挂一个探针 section。
+
+### 落地
+- 构建：`syncAndroidEnvPlugin`（`app/build.gradle.kts`）在 preBuild 把
+  `packages/dsh-android-env/` 同步进 `app/src/main/assets/android-plugins/android-env/`
+  （该目录已 gitignore，源码只有一份）。
+- 部署：`EngineConfig.ensureAndroidOverlay()` 新增 insert 行 `id: android-env`，并把
+  包内 `index.js` / `package.json` / `sections/*` 部署到 `<engine>/android-plugins/android-env/`。
+  `package.json` 必须一起部署：`.js` 要按 ESM 解析，缺了会被当 CJS 导入失败。
+- 收口：`AgentContextSeed.kt` 删除，改为 `engine/AndroidEnvFallback.kt` —— 只做两件事：
+  ① 把带旧 seed 标记的 AGENTS.md 归档到 `$DSH_HOME/.dsh-android/AGENTS.md.legacy`
+  （用户手写、无标记的一律不碰）；② 仅当本 build 的 assets 里没有插件时才写一行兜底提示。
+  `assets/agents_seed.md` 已删除，不再有 SEED_VERSION / marker / 幂等升级。
+
+### 验证（离线，可重跑）
+`$HOME/verify-android-env.mjs`（不在仓库内）：假 ctx 断言 order / `complete === false` /
+`disabledSections` 行为 / 正文无残留 `{{...}}`；再用引擎自带的 cordis +
+`dsh-system-prompt` 真跑一次 `assemble()`，断言最终 prompt 含各段正文且顺序正确。
+实测：6 段全挂、`complete` 全 false、渲染出 10,540 字节 prompt（旧 AGENTS.md 为
+31,016 字节 ≈ 15k 汉字，新正文明显更短）、runtime context 222 字节。
+
+### 已知限制 / 待用户决定
+- **`rules.yaml` 不存在**：引擎 `0.2.0-rc.2` 里没有 `@deepseek-ai/dsh-permission-rules`，
+  全库也没有 `rules.yaml` / `rules.yml` 的读取点（已 rg 确认）。现有强制手段只有
+  `dsh-user-approval` 的 `ask/never`、`dsh-permission-presets` 的三档预设、
+  `dsh-hooks-claude-code` 的 `PreToolUse` 命令钩子。所以本轮「约束下沉」只做到**措辞层**，
+  真正的 ask/deny 需要另选上述三条之一。
+- 线上 P0 验证（10 轮 + compaction 后 2–3 轮）需要装包后在真机会话里跑，跑法写在
+  `packages/dsh-android-env/README.md`；未通过就回滚整个改动，不要继续叠功能。
+
