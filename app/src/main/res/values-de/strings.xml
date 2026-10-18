@@ -116,11 +116,11 @@
     <string name="setting_plugin_sub">dsh-Ökosystem-Plugins mit einem Klick installieren</string>
     <string name="setting_user_prompt">Eigene Anweisungen</string>
     <string name="setting_user_prompt_sub">Eigene dauerhafte Anweisungen ergänzend zur eingebauten Umgebungsbeschreibung</string>
-    <string name="user_prompt_intro">Diese Anweisungen werden an die eingebaute Umgebungsbeschreibung der App angehängt und gelten für jede neue Sitzung. Die App überschreibt sie nie, auch bei Updates nicht. Du kannst die KI auch bitten, hier für dich zu schreiben.</string>
+    <string name="user_prompt_intro">Diese Anweisungen gelten für jede neue Sitzung, zusammen mit der eingebauten Umgebungsbeschreibung. Die Datei gehört dir: die App überschreibt sie nie, auch bei Updates nicht. Du kannst die KI auch bitten, hier für dich zu schreiben.</string>
     <string name="user_prompt_placeholder">Zum Beispiel: Antworte immer auf Deutsch. Oder: Wenn ich "sichern" sage, kopiere den Arbeitsbereich in den Documents-Ordner.</string>
     <string name="user_prompt_save">Speichern</string>
     <string name="user_prompt_saved">Gespeichert. Gilt in neuen Sitzungen.</string>
-    <string name="user_prompt_path">Gespeichert im Nutzerabschnitt von AGENTS.md (von der App verwaltet, deiner wird nie überschrieben)</string>
+    <string name="user_prompt_path">Gespeichert als die ganze AGENTS.md - sie gehört dir, die App ändert sie nie</string>
     <string name="plugin_center_title">Community-Plugins</string>
     <string name="plugin_center_sub">dsh-Ökosystem-Plugins mit einem Klick installieren (npm)</string>
     <string name="plugin_install">Installieren</string>

@@ -1,0 +1,17 @@
+{
+  "residentBytes": 3977,
+  "residentTokens": 950,
+  "docs": [
+    "extensions-center.md",
+    "extensions-troubleshooting.md",
+    "lan-webui.md",
+    "privilege-modes.md",
+    "screen-api.md",
+    "toolchain.md",
+    "visual-preview.md"
+  ],
+  "skills": [
+    "android-app-build",
+    "ui-loop"
+  ]
+}

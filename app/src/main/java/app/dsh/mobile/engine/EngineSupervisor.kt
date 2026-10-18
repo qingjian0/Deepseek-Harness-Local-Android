@@ -278,10 +278,13 @@ class EngineSupervisor(private val ctx: Context) {
                 step("guardian-restore")
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
 
-                // Agent 上下文种子（m1.35）：幂等预写 $HOME/AGENTS.md（dsh 原生 user-global
-                // 指令），让 Agent 首轮就带 Android 世界观，省掉环境探索 token
-                withContext(Dispatchers.IO) { AgentContextSeed.ensure(ctx) }
-                step("agent-seed")
+                // App-owned instructions (v1.4.0)：部署 tools/instructions 编译出的
+                // mobile/ 产物（resident.md + docs + skills），并把 $HOME/AGENTS.md
+                // 迁移成纯用户文件。环境说明本身由 android-plugins/mobile-instructions.mjs
+                // 注册成 system prompt section —— 强于指令层里那条 user 消息，也不再和
+                // 用户内容共用同一个文件、同一份 64KiB 预算。
+                withContext(Dispatchers.IO) { MobileInstructions.ensure(ctx) }
+                step("mobile-instructions")
 
                 // 孤儿进程回收（v1.2.104）：**必须早于桥 bind 与引擎 fork** ——
                 // 历史孤儿会攥着继承来的 3080/3083 监听 socket 不撒手（无 CLOEXEC，

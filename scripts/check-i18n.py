@@ -59,24 +59,16 @@ ALLOWED_CJK_LITERALS = {
     # zh catalog still carries Chinese category names, so both are matched.
     ("ExtensionStoreActivity.kt", "语言运行时"),
     ("ExtensionStoreActivity.kt", "编译构建"),
-    # AgentContextSeed teaches the agent to recognise UI labels in BOTH languages
-    # (the app ships zh + en). These Chinese strings are intentional examples of
-    # on-screen text the agent must match, not user-facing copy that needs i18n.
-    ("AgentContextSeed.kt", "重启"),
-    ("AgentContextSeed.kt", "允许"),
-    ("AgentContextSeed.kt", "确定"),
-    ("AgentContextSeed.kt", "扩展目录发布失败"),
-    ("AgentContextSeed.kt", "缺失"),
-    ("AgentContextSeed.kt", "构建完成"),
-    ("AgentContextSeed.kt", "设置"),
 }
 
-# Whole files exempt from the Kotlin-literal CJK scan: these embed *bilingual
-# agent instructions* (the seed tells the agent which on-screen labels to match
-# in either language), so Chinese examples inside them are by design.
-ALLOWED_CJK_FILES = {
-    "AgentContextSeed.kt",
-}
+# Whole files exempt from the Kotlin-literal CJK scan.
+#
+# v1.4.0: the empty set is intentional — the only exempt file used to be
+# AgentContextSeed.kt, which carried the bilingual environment manual inside a
+# Kotlin raw string. That manual now lives in tools/instructions/content/ and is
+# compiled into assets/mobile/ (markdown, outside the Kotlin literal scan), so no
+# Kotlin file needs the exemption any more.
+ALLOWED_CJK_FILES = set()
 
 errors = []
 notes = []
