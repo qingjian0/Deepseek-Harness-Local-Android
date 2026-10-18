@@ -89,17 +89,21 @@ missing `orientation` key falls back to the legacy boolean, otherwise
 in the `onResume` change branch, so a cold start in landscape mode rendered
 the mobile layout until the preference changed again.
 
-## Agent-facing text (`AgentContextSeed`)
+## Agent-facing text (`dsh-android-env` plugin)
 
-`AGENTS.md` is seeded into `$DSH_HOME` and instructs the agent to **tap UI labels
-by their on-screen text**, so it had to move with the UI:
+The environment manual is no longer a seeded `AGENTS.md`; it ships as the
+`packages/dsh-android-env` plugin and is injected as ordered system-prompt
+sections (see that package's README). It instructs the agent to **tap UI labels
+by their on-screen text**, so it had to move with the UI. The body lives in
+`packages/dsh-android-env/sections/*.md`; edit those files, not `$DSH_HOME/AGENTS.md`:
 
 - `设置 → 重启引擎` → `Settings → Restart engine` → `Einstellungen → Engine neu starten`
 - `scr tap-text "重启"` → `scr tap-text "Restart"` → `scr tap-text "Neustart"`
 - error fingerprints `扩展目录发布失败…` → `Extension publish failed`
 
-`SEED_VERSION` was bumped 9 → 10 so existing installs pick up the reworded seed,
-and again 27 → 28 (v1.2.120) so the German labels above are taught.
+There is no `SEED_VERSION` any more: section bodies are re-read from disk on
+every assemble (1s mtime cache), so a wording fix reaches the next step of a
+running session without bumping a version or restarting the engine.
 
 ## Not translated on purpose
 

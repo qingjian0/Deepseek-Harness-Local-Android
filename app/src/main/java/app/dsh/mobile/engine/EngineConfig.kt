@@ -520,6 +520,32 @@ object EngineConfig {
             |    - id: android-fast-mode
             |      name: ./android-plugins/fast-mode.mjs
             |
+            |# Android environment manual (v1.3.1). Replaces the old seeded AGENTS.md:
+            |# that channel is a user-role message that only refreshes on file reads, gets
+            |# compacted away in long sessions, and is injected once per session.
+            |#
+            |# Three layers, cheapest first:
+            |#   1. one resident systemPrompt section (order 44, ~720 chars) holding the
+            |#      facts that otherwise cost ten exploratory turns;
+            |#   2. one per-step runtime context (order 15) for privilege mode and the
+            |#      active extension list;
+            |#   3. a skill whose body is only an index (~320 chars) plus a resourceBase
+            |#      directory, so the model reads just the topic file it needs.
+            |# Every section keeps complete: false (two complete sections make assemble()
+            |# throw). Section bodies are re-read from disk on every assemble.
+            |#
+            |# disabledSections turns whole blocks off without touching files:
+            |# core (the resident facts), dynamic (the per-step context) or skill (the
+            |# on-demand manual, which then disappears from the catalog entirely).
+            |# p0Probe is the channel-verification switch (first line of every reply must
+            |# be P0-PROBE-OK) - keep it false in releases.
+            |- insert:
+            |    - id: android-env
+            |      name: ./android-plugins/android-env/index.js
+            |      config:
+            |        disabledSections: []
+            |        p0Probe: false
+            |
             |# Narrow-screen UI fixes (v1.2.175 - v1.2.181). Each is a *client plugin
             |# package* (directory form, e.g. narrow-sidebar/package.json): the package
             |# declares dsh.client + exports["./client"], and the engine's client-modules
@@ -575,6 +601,32 @@ object EngineConfig {
                         .use { it.readBytes() }
                     val dst = File(f.parentFile, "android-plugins/$pkg/$fileName")
                     deployOne(dst, src.toString(Charsets.UTF_8), "$pkg/$fileName")
+                }
+            }
+            // android-env（v1.3.1）：引擎端插件包。正文分两层：
+            //   sections/10-core.md       常驻 section（每步注入）
+            //   sections/ref/*.md         skill 索引指向的主题文件（按需 read）
+            // 文件清单用 assets.list 枚举 —— 在 Kotlin 里再维护一份清单迟早会漏。
+            // ⚠️ assets.list 对**目录**也会返回名字（sections/ref），直接 open 会抛
+            // FileNotFoundException；所以要按"该路径 list 结果为空 = 它是文件"来过滤。
+            run {
+                val pkg = "android-plugins/android-env"
+                fun filesUnder(dir: String, prefix: String): List<String> =
+                    runCatching {
+                        ctx.assets.list(dir)?.filter { name ->
+                            val children = runCatching { ctx.assets.list("$dir/$name") }.getOrNull()
+                            children == null || children.isEmpty()
+                        }?.sorted()?.map { "$prefix$it" } ?: emptyList()
+                    }.onFailure { Log.w(TAG, "list assets/$dir failed: ${it.message}") }
+                        .getOrDefault(emptyList())
+
+                val rels = mutableListOf("index.js", "package.json")
+                rels += filesUnder("$pkg/sections", "sections/")
+                rels += filesUnder("$pkg/sections/ref", "sections/ref/")
+                rels.forEach { rel ->
+                    val src = ctx.assets.open("$pkg/$rel").use { it.readBytes() }
+                    val dst = File(f.parentFile, "$pkg/$rel")
+                    deployOne(dst, src.toString(Charsets.UTF_8), "android-env/$rel")
                 }
             }
         }.onFailure { Log.w(TAG, "android plugin deploy failed: ${it::class.simpleName}: ${it.message}", it) }

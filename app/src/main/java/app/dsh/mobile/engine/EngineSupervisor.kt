@@ -244,10 +244,11 @@ class EngineSupervisor(private val ctx: Context) {
                 step("guardian-restore")
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
 
-                // Agent 上下文种子（m1.35）：幂等预写 $HOME/AGENTS.md（dsh 原生 user-global
-                // 指令），让 Agent 首轮就带 Android 世界观，省掉环境探索 token
-                withContext(Dispatchers.IO) { AgentContextSeed.ensure(ctx) }
-                step("agent-seed")
+                // 环境说明书的收尾（v1.3.1）：归档老版 seed 出来的 31KB AGENTS.md
+                // （user 通道、会被 compaction 压掉），正文改由 android-env 插件以
+                // systemPrompt section 每步注入；只有当本 build 没打包插件时才写一行兜底。
+                withContext(Dispatchers.IO) { AndroidEnvFallback.ensure(ctx) }
+                step("agent-env-fallback")
 
                 // 孤儿进程回收（v1.2.104）：**必须早于桥 bind 与引擎 fork** ——
                 // 历史孤儿会攥着继承来的 3080/3083 监听 socket 不撒手（无 CLOEXEC，
