@@ -616,13 +616,13 @@ object EngineConfig {
             |      name: ./android-plugins/narrow-rightbar/index.js
             |
             |# App-owned agent instructions (v1.4.0). The environment manual used to be
-            |# written into $DSH_HOME/AGENTS.md, the engine's only user-global *instruction*
+            |# written into ${'$'}DSH_HOME/AGENTS.md, the engine's only user-global *instruction*
             |# file: a user-role message that is outranked by project instructions and first
             |# to be dropped when the 64KiB instruction budget overflows. Registering it as a
             |# system prompt section gives it the authority it needs and frees AGENTS.md to
             |# be 100% user-owned (no markers, no split logic, no upgrade merge).
             |# Content comes from tools/instructions/build.mjs -> assets/mobile/resident.md,
-            |# deployed to $DSH_HOME/mobile/ by MobileInstructions on every boot.
+            |# deployed to ${'$'}DSH_HOME/mobile/ by MobileInstructions on every boot.
             |- insert:
             |    - id: android-mobile-instructions
             |      name: ./android-plugins/mobile-instructions.mjs

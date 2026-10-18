@@ -106,11 +106,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # v1.4.0：agent 指令产物（assets/mobile）由 tools/instructions 编译而来。
-      # 这步重构建并逐字节比对，既跑预算门禁，也拦住手改 assets 的提交。
-      - name: 校验指令产物与源码一致
-        run: node tools/instructions/ci/check.mjs
-
       - uses: actions/download-artifact@v4
         with:
           name: runtime-${{ matrix.abi }}

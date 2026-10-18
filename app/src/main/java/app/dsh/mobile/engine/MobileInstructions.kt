@@ -3,6 +3,9 @@ package app.dsh.mobile.engine
 import android.content.Context
 import android.util.Log
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * App-owned agent instructions, deployed as build artifacts (v1.4.0).
@@ -19,9 +22,13 @@ import java.io.File
  * `app/src/main/assets/android-plugins/mobile-instructions.mjs`, reading
  * `$DSH_HOME/mobile/resident.md`. This object only deploys that bundle:
  *
- *   assets/mobile/resident.md        -> $DSH_HOME/mobile/resident.md
- *   assets/mobile/docs/*.md          -> $DSH_HOME/mobile/docs/
- *   assets/mobile/skills/<id>/*.md   -> $DSH_HOME/skills/<id>/SKILL.md
+ *   assets/mobile/resident.md          -> $DSH_HOME/mobile/resident.md
+ *   assets/mobile/docs (one .md each)  -> $DSH_HOME/mobile/docs/
+ *   assets/mobile/skills/<id>/SKILL.md -> $DSH_HOME/skills/<id>/SKILL.md
+ *
+ * (No "slash-star" sequences in this comment: Kotlin block comments nest, and a glob
+ * such as docs-slash-star-dot-md would silently open a second comment and swallow the
+ * rest of the file — CI caught exactly that on the first push.)
  *
  * The bundle is compiled by `tools/instructions/build.mjs` from a single authored
  * source; `tools/instructions/ci/check.mjs` fails CI when the committed assets drift
@@ -29,6 +36,15 @@ import java.io.File
  *
  * Skills land in `$DSH_HOME/skills` because that is the skill provider's default user
  * root — no profile edit is needed for them to show up in the catalog.
+ *
+ * ## Safety rules for the takeover
+ * 1. Never treat "unreadable" as "absent": a previous install's uid or a bad SELinux
+ *    label makes the file exist but fail to read. Writing over it would destroy user
+ *    data, so an unreadable file is skipped and retried on the next boot (the boot
+ *    step runs after the ownership self-heal for exactly this reason).
+ * 2. Only take over after this build actually ships the plugin that replaces the old
+ *    channel; otherwise the agent would lose the environment manual entirely.
+ * 3. A failed archive aborts the rewrite — the backup exists precisely for that case.
  */
 object MobileInstructions {
 
@@ -37,6 +53,9 @@ object MobileInstructions {
     private const val ASSET_ROOT = "mobile"
     private const val FILE_NAME = "AGENTS.md"
     private const val HOME_DIR = "mobile"
+
+    /** Presence of this asset means the build can replace the old instruction channel. */
+    private const val PLUGIN_ASSET = "android-plugins/mobile-instructions.mjs"
 
     /** Marker the app writes into the user-owned file once it has taken over the manual. */
     private const val OWNED_MARK =
@@ -47,12 +66,20 @@ object MobileInstructions {
     private const val LEGACY_USER_BEGIN = "<!-- >>> user instructions (app never edits below) >>> -->"
     private const val LEGACY_USER_END = "<!-- <<< user instructions <<< -->"
 
+    /** Pointer we leave behind after archiving a legacy seed: not user content. */
+    private val LEGACY_HINT = Regex("<!--\\s*Legacy content was archived to [^>]*-->")
+
+    /** The empty-section placeholder written by v1.3.2: not user content, must not survive. */
+    private val LEGACY_PLACEHOLDER = Regex(
+        "<!--\\s*Add your own instructions below this line\\.[\\s\\S]*?-->",
+    )
+
     /** Idempotent boot step: deploy the bundle, then hand AGENTS.md over to the user. */
     fun ensure(ctx: Context) {
-        val home = File(EngineConfig.dshHome(ctx))
+        val home = EngineConfig.dshHome(ctx)
         runCatching { deployBundle(ctx, home) }
             .onFailure { Log.w(TAG, "bundle deploy failed: ${it.message}") }
-        runCatching { migrateAgentsMd(home) }
+        runCatching { migrateAgentsMd(ctx, home) }
             .onFailure { Log.w(TAG, "AGENTS.md migration failed: ${it.message}") }
     }
 
@@ -60,17 +87,14 @@ object MobileInstructions {
     fun readUserInstructions(ctx: Context): String? {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val text = runCatching { if (file.isFile) file.readText() else null }.getOrNull() ?: return null
-        return text.replace(OWNED_MARK, "").trim().ifEmpty { null }
+        return text.replace(OWNED_MARK, "").replace(LEGACY_HINT, "").trim().ifEmpty { null }
     }
 
     /** Replaces the file. The app's environment manual is not stored here any more. */
     fun writeUserInstructions(ctx: Context, content: String?) {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val body = content?.trim().orEmpty()
-        runCatching {
-            file.parentFile?.mkdirs()
-            file.writeText(if (body.isEmpty()) OWNED_MARK + "\n" else body + "\n")
-        }.onFailure { Log.w(TAG, "write AGENTS.md failed: ${it.message}") }
+        writeAtomic(file, if (body.isEmpty()) OWNED_MARK + "\n" else body + "\n")
     }
 
     // ---------------------------------------------------------------- deploy
@@ -82,14 +106,21 @@ object MobileInstructions {
         deploySkills(ctx, home)
     }
 
+    /**
+     * Docs are app-owned, but the directory is also the one the manual tells the model to
+     * read, so pruning is ledger-based: only files this app deployed before are removed.
+     */
     private fun deployDocs(ctx: Context, mobile: File) {
         val names = assetChildren(ctx, "$ASSET_ROOT/docs")
         val dir = File(mobile, "docs")
         names.forEach { deploy(ctx, "$ASSET_ROOT/docs/$it", File(dir, it)) }
-        // The directory is app-owned: drop pages we shipped before and no longer compile.
-        dir.listFiles()?.forEach { f ->
-            if (f.isFile && f.name.endsWith(".md") && f.name !in names) f.delete()
+
+        val ledger = File(mobile, "deployed-docs.txt")
+        val previous = readLedger(ledger)
+        (previous - names.toSet()).forEach { stale ->
+            if (stale.endsWith(".md") && !stale.contains('/') && !stale.contains("..")) File(dir, stale).delete()
         }
+        writeLedger(ledger, names)
     }
 
     /**
@@ -101,9 +132,7 @@ object MobileInstructions {
         val ids = assetChildren(ctx, "$ASSET_ROOT/skills")
         val targetRoot = File(home, "skills")
         val ledger = File(File(home, HOME_DIR), "deployed-skills.txt")
-        val previous = runCatching {
-            ledger.readText().lineSequence().filter { it.isNotBlank() }.toSet()
-        }.getOrDefault(emptySet())
+        val previous = readLedger(ledger)
 
         ids.forEach { id -> deploy(ctx, "$ASSET_ROOT/skills/$id/SKILL.md", File(File(targetRoot, id), "SKILL.md")) }
 
@@ -111,10 +140,7 @@ object MobileInstructions {
         (previous - ids.toSet()).forEach { stale ->
             if (safeName.matches(stale)) File(targetRoot, stale).deleteRecursively()
         }
-        runCatching {
-            ledger.parentFile?.mkdirs()
-            ledger.writeText(ids.joinToString("\n") + "\n")
-        }
+        writeLedger(ledger, ids)
     }
 
     private fun assetChildren(ctx: Context, path: String): List<String> =
@@ -137,60 +163,121 @@ object MobileInstructions {
         }.onFailure { Log.w(TAG, "deploy $assetPath failed: ${it.message}") }
     }
 
+    private fun readLedger(file: File): Set<String> = runCatching {
+        file.readText().lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }.getOrDefault(emptySet())
+
+    private fun writeLedger(file: File, values: List<String>) {
+        runCatching {
+            file.parentFile?.mkdirs()
+            writeAtomic(file, values.joinToString("\n") + "\n")
+        }
+    }
+
     // ------------------------------------------------------------- migration
 
     /**
      * Turn a legacy `AGENTS.md` into a user-owned file:
      *  - split layout (v1.3.2+) -> keep only the user section body;
-     *  - bare app seed (older)  -> nothing in it belongs to the user, clear it;
+     *  - bare app seed (older)  -> nothing in it belongs to the app any more, archive it;
      *  - no app markers at all  -> user-authored, leave untouched.
-     * The original file is always backed up first.
+     * The original is always archived first, and a failed archive aborts the rewrite.
      */
-    private fun migrateAgentsMd(home: File) {
+    private fun migrateAgentsMd(ctx: Context, home: File) {
         val file = File(home, FILE_NAME)
-        val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
+
+        if (!file.exists()) {
+            if (shipsPlugin(ctx)) writeAtomic(file, OWNED_MARK + "\n")
+            return
+        }
+
+        val existing = runCatching { file.readText() }.getOrNull()
         if (existing == null) {
-            file.writeText(OWNED_MARK + "\n")
+            // Exists but unreadable: old uid / bad label. Never overwrite blind.
+            Log.w(TAG, "$FILE_NAME exists but is unreadable; leaving it alone (retry next boot)")
             return
         }
         if (existing.contains(OWNED_MARK)) return
+        if (!shipsPlugin(ctx)) {
+            Log.w(TAG, "plugin not packaged in this build; keeping legacy $FILE_NAME untouched")
+            return
+        }
 
         val userSection = extractLegacyUserSection(existing)
         when {
             userSection != null -> {
-                backup(file, existing)
-                file.writeText(userSection.ifEmpty { OWNED_MARK } + "\n")
-                Log.i(TAG, "AGENTS.md migrated: user section kept (${userSection.length} chars)")
+                val backup = archive(file, existing) ?: return
+                writeAtomic(file, userSection.ifEmpty { OWNED_MARK } + "\n")
+                Log.i(TAG, "$FILE_NAME migrated: user section kept (${userSection.length} chars, backup ${backup.name})")
             }
 
             existing.contains(LEGACY_SEED_PREFIX) -> {
-                backup(file, existing)
-                file.writeText(OWNED_MARK + "\n")
-                Log.i(TAG, "AGENTS.md migrated: legacy app seed removed (backup kept)")
+                val backup = archive(file, existing) ?: return
+                writeAtomic(
+                    file,
+                    OWNED_MARK + "\n" +
+                        "<!-- Legacy content was archived to ${backup.name}; copy back anything you had added there. -->\n",
+                )
+                Log.i(TAG, "$FILE_NAME migrated: legacy app seed removed (backup ${backup.name})")
             }
 
-            else -> Log.i(TAG, "AGENTS.md has no app markers; left untouched")
+            else -> Log.i(TAG, "$FILE_NAME has no app markers; left untouched")
         }
     }
 
+    /** User section body, with the empty-section placeholder stripped; null when absent. */
     private fun extractLegacyUserSection(text: String): String? {
         val begin = text.indexOf(LEGACY_USER_BEGIN)
         if (begin < 0) return null
         val bodyStart = text.indexOf('\n', begin).let { if (it < 0) text.length else it + 1 }
         val end = text.indexOf(LEGACY_USER_END, bodyStart)
         val body = if (end < 0) text.substring(bodyStart) else text.substring(bodyStart, end)
-        return body.trim()
+        return body.replace(LEGACY_PLACEHOLDER, "").trim()
     }
 
-    private fun backup(file: File, text: String) {
-        var target = File(file.parentFile, "${FILE_NAME}.bak-legacy")
+    private fun shipsPlugin(ctx: Context): Boolean =
+        runCatching { ctx.assets.open(PLUGIN_ASSET).close() }.isSuccess
+
+    // ------------------------------------------------------------------ io
+
+    /**
+     * Archive the current file next to it. Returns the backup file, or null when the
+     * archive could not be written — callers must abort the destructive step then.
+     */
+    private fun archive(file: File, text: String): File? {
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        var target = File(file.parentFile, "${FILE_NAME}.bak-legacy-$stamp")
         var index = 2
         while (target.exists()) {
-            target = File(file.parentFile, "${FILE_NAME}.bak-legacy-$index")
+            target = File(file.parentFile, "${FILE_NAME}.bak-legacy-$stamp-$index")
             index++
         }
-        runCatching { target.writeText(text) }
-            .onSuccess { Log.i(TAG, "AGENTS.md backed up to ${target.name}") }
-            .onFailure { Log.w(TAG, "AGENTS.md backup failed: ${it.message}") }
+        val ok = runCatching { writeAtomic(target, text) }.getOrDefault(false)
+        if (!ok) {
+            Log.w(TAG, "archive $FILE_NAME failed; aborting the destructive migration step")
+            return null
+        }
+        return target
+    }
+
+    /**
+     * Write through a temp file + rename so a killed process never leaves a truncated
+     * file behind. Android allows rename within the same directory.
+     */
+    private fun writeAtomic(file: File, text: String): Boolean {
+        file.parentFile?.mkdirs()
+        val tmp = File(file.parentFile, "${file.name}.tmp")
+        return runCatching {
+            tmp.writeText(text)
+            if (!tmp.renameTo(file)) {
+                file.writeText(text)
+                tmp.delete()
+            }
+            true
+        }.getOrElse {
+            runCatching { tmp.delete() }
+            Log.w(TAG, "write ${file.name} failed: ${it.message}")
+            false
+        }
     }
 }

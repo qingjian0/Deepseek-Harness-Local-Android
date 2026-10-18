@@ -8,7 +8,7 @@
  * 预算与引用在构建期校验，超了就失败——这是防止种子再次膨胀的唯一有效手段。
  * 产物提交进仓库，ci/check.mjs 重新构建并逐字节比对，防止有人手改 assets。
  */
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -82,20 +82,27 @@ for (const file of list("content/procedures")) {
 if (bytes(resident) > BUDGET_BYTES) problems.push(`resident ${bytes(resident)}B 超出预算 ${BUDGET_BYTES}B`);
 if (tokens(resident) > BUDGET_TOKENS) problems.push(`resident ~${tokens(resident)} tokens 超出预算 ${BUDGET_TOKENS}`);
 
+// ---------- 插值安全 ----------
+// The section text is run through the engine's {{variable}} interpolation: an unknown
+// or malformed {{...}} makes every prompt assembly throw. Keep the compiled prompt free
+// of braces and catch it here instead of in production.
+if (resident.includes("{{") || resident.includes("}}")) {
+  problems.push("resident 含 {{ }}：section 文本会被 system prompt 插值，未知变量会让每轮渲染失败（docs/ 不进 prompt，不受此限）");
+}
+
 // ---------- 引用可达 ----------
+// Docs are referenced as `docs/<name>.md` in the resident index.
 for (const m of resident.matchAll(/docs\/([a-z0-9-]+\.md)/g)) {
   if (!docs.has(m[1])) problems.push(`resident 引用了不存在的文档 docs/${m[1]}`);
 }
-for (const m of resident.matchAll(/`([a-z0-9][a-z0-9-]+)`/g)) {
-  const id = m[1];
-  if (docs.has(`${id}.md`)) continue;
-  if (existsSync(join(OUT, "skills", id, "SKILL.md"))) continue;
-}
 
-writeFileSync(
-  join(OUT, "manifest.json"),
-  JSON.stringify({ residentBytes: bytes(resident), residentTokens: tokens(resident), docs: [...docs].sort(), skills }, null, 2) + "\n",
-);
+// Skills are referenced in content/index.md as a bullet `- `<id>` —— ...`.
+// The em-dash separator is what distinguishes them from command bullets such as
+// "- `python3` — ..." in the facts section, which are not skill references.
+for (const m of resident.matchAll(/^- `([a-z0-9][a-z0-9-]+)` ——/gm)) {
+  const id = m[1];
+  if (!skills.includes(id)) problems.push(`resident 引用了不存在的技能 \`${id}\`（可用: ${skills.join(", ")}）`);
+}
 
 console.log(`resident  ${bytes(resident)}B  ~${tokens(resident)} tok   (预算 ${BUDGET_BYTES}B / ${BUDGET_TOKENS} tok)`);
 console.log(`docs      ${docs.size}`);

@@ -5,7 +5,7 @@
  *   2) 预算与引用检查由 build.mjs 负责，这里继承它的退出码。
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +33,11 @@ try {
 }
 
 const distDir = join(ROOT, "..", "..", "..", "app", "src", "main", "assets", "mobile");
+
+if (!existsSync(distDir)) {
+  console.error("✗ 缺少 app/src/main/assets/mobile —— 先跑 node tools/instructions/build.mjs 并提交产物");
+  process.exit(1);
+}
 const committed = new Map(walk(distDir).map((f) => [f.path, f.full]));
 const built = new Map(walk(TMP).map((f) => [f.path, f.full]));
 const problems = [];

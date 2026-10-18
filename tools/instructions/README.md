@@ -12,9 +12,9 @@
 
 | | 改前（v1.3.3） | 改后 |
 |---|---|---|
-| 每会话常驻 | 31,016B ≈ 8,000 tok（整份 AGENTS.md） | **3,977B ≈ 950 tok** |
+| 每会话常驻 | 31,016B ≈ 8,000 tok（整份 AGENTS.md） | **4,458B ≈ 1,063 tok** |
 | 指令链 64KiB 预算 | 应用段占掉近一半 | 不占用，全留给用户与项目 |
-| 手册 / 流程 | 全常驻 | 7 篇 docs + 2 个 skill，按需 |
+| 手册 / 流程 | 全常驻 | 7 篇 docs + 2 个 skill，按需；缺文件时插件给降级段 |
 | 增长约束 | 每版都涨（v1 → v48） | 构建卡 6KB / 2000 tok；CI 卡手改产物 |
 
 ## 目录
@@ -37,7 +37,7 @@ node tools/instructions/build.mjs       # 写 app/src/main/assets/mobile
 node tools/instructions/ci/check.mjs    # 重构建 + 逐字节比对（CI 跑这个）
 ```
 
-产物**提交进仓库**，因为 APK 直接打包 assets。`ci/check.mjs` 保证提交的产物与 `content/` 一致，同时跑预算与引用检查——要放宽预算必须显式改 `build.mjs` 顶部常量。
+产物**提交进仓库**，因为 APK 直接打包 assets（不再生成 manifest.json）。`ci/check.mjs` 保证提交的产物与 `content/` 一致，同时跑预算与引用检查——要放宽预算必须显式改 `build.mjs` 顶部常量。
 
 ## 运行时
 

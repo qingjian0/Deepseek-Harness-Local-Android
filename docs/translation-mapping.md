@@ -89,17 +89,22 @@ missing `orientation` key falls back to the legacy boolean, otherwise
 in the `onResume` change branch, so a cold start in landscape mode rendered
 the mobile layout until the preference changed again.
 
-## Agent-facing text (`AgentContextSeed`)
+## Agent-facing text (`tools/instructions`)
 
-`AGENTS.md` is seeded into `$DSH_HOME` and instructs the agent to **tap UI labels
-by their on-screen text**, so it had to move with the UI:
+The environment manual used to be a Kotlin template seeded into `$DSH_HOME/AGENTS.md`
+(`AgentContextSeed`, removed in v1.4.0). It now lives in `tools/instructions/content/`
+and is compiled into `app/src/main/assets/mobile/`; the compiled resident section is
+registered as a system prompt section by `android-plugins/mobile-instructions.mjs`.
 
-- `设置 → 重启引擎` → `Settings → Restart engine` → `Einstellungen → Engine neu starten`
+The manual still has to move with the UI, because it tells the agent which on-screen
+labels to match when it drives the accessibility service:
+
 - `scr tap-text "重启"` → `scr tap-text "Restart"` → `scr tap-text "Neustart"`
 - error fingerprints `扩展目录发布失败…` → `Extension publish failed`
 
-`SEED_VERSION` was bumped 9 → 10 so existing installs pick up the reworded seed,
-and again 27 → 28 (v1.2.120) so the German labels above are taught.
+Those bilingual label lists now live in `content/policy/` and `content/reference/`.
+Edit them there and re-run `node tools/instructions/build.mjs`; the old `SEED_VERSION`
+counter is gone (the build gate replaces it — the compiled bundle is byte-compared in CI).
 
 ## Not translated on purpose
 

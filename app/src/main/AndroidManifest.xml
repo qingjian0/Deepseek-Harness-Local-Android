@@ -90,7 +90,7 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
-        <!-- 用户自定义指令（v1.3.2，issue #19）：编辑 AGENTS.md 的用户段，App 永不覆盖 -->
+        <!-- 用户自定义指令（v1.4.0）：整份 AGENTS.md 归用户，App 绝不改写；环境说明已改由 system prompt section 提供 -->
         <activity
             android:name=".UserPromptActivity"
             android:exported="false"
