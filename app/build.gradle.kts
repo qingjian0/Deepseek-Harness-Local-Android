@@ -107,6 +107,34 @@ val prepareRuntime by tasks.registering {
 }
 tasks.named("preBuild") { dependsOn(prepareRuntime) }
 
+// ── Android 环境说明书插件（v1.3.1）──────────────────────────────────────
+// 源码只维护一份：packages/dsh-android-env/（标准 dsh 插件包布局：index.js +
+// sections/*.md + package.json）。APK 只认 assets，所以构建时把它同步进
+// src/main/assets/android-plugins/android-env/（该目录已在 .gitignore 里）。
+//
+// 为什么不用 Copy 任务 + assets.srcDir：那会给生成目录声明 outputs，Gradle 8 的
+// 隐式依赖校验会判定 mergeAssets 与它重叠并直接报错。这里照抄 prepareRuntime
+// 的做法 —— doLast 里直接写文件、只挂 preBuild，风险最低（CI 已验证过这个形状）。
+val syncAndroidEnvPlugin by tasks.registering {
+    val srcDir = rootProject.file("packages/dsh-android-env")
+    val dstDir = file("src/main/assets/android-plugins/android-env")
+    outputs.upToDateWhen { false }
+    doLast {
+        if (!srcDir.isDirectory) {
+            logger.warn("android-env: 源目录缺失 " + srcDir.absolutePath + "，保持 assets 现状")
+            return@doLast
+        }
+        dstDir.deleteRecursively()
+        srcDir.copyRecursively(dstDir, overwrite = true)
+        // README 是给开发者看的，不进 APK
+        File(dstDir, "README.md").delete()
+        val files = dstDir.walkTopDown().filter { it.isFile }.count()
+        logger.lifecycle("android-env: 已同步 " + files + " 个文件 → " + dstDir.relativeTo(projectDir))
+    }
+}
+tasks.named("preBuild") { dependsOn(syncAndroidEnvPlugin) }
+
+
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     // 扩展中心解包链路：Termux .deb 的 data.tar.xz 解码（纯 Java 实现，~110KB）

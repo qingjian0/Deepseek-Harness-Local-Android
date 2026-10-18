@@ -11,6 +11,8 @@ captures/
 *.aab
 # 运行时快照不入库（CI 构建时注入）
 app/src/main/assets/runtime.zip
+# android-env 插件由 packages/dsh-android-env 在构建时同步进来，只有一份源码
+app/src/main/assets/android-plugins/android-env/
 # 签名密钥绝不入库
 keystore/
 *.keystore
