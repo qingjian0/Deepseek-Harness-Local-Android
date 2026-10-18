@@ -772,41 +772,54 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
 随 compaction 被压缩、每会话只注入一次。结果是长会话里说明书被压没（agent 退化成
 "陌生沙箱"重新探测环境），而改文案又常常不生效。**改文案解决不了，因为通道本身不可靠。**
 
-### 方案（两层：core 常驻 + skill 按需）
-新增 `packages/dsh-android-env/`（标准 dsh 插件包）。第一版把六段全塞进
-systemPrompt，实测**体积没降**（10,536 vs 旧 10,173 字符），等于把 user 通道换成
-system 通道却没解决"每步都付费"。第二版改成两层：
+### 方案（三层：极小 core + 单 skill + 主题文件）
+新增 `packages/dsh-android-env/`（标准 dsh 插件包）。演进过程记一下，免得后人再走一遍：
 
-**core（常驻，约 2.0k 字符）** —— 每步 assemble 都注入：
+1. 第一版：六段全塞 systemPrompt。实测**体积没降**（10,536 vs 旧 10,173 字符），
+   等于把 user 通道换成 system 通道，却让每步都付全量。
+2. 第二版：core 2.0k 常驻 + 一个 9.3k 的 skill。常驻降到 1/5，但**窄主题不划算**——
+   只配个局域网也要把 9.3k 拉进来。
+3. 第三版（当前）：**core 724 字符 + skill 只返回索引（320 字符）+ 5 个主题文件**，
+   模型用 `read` 按需精读，`read` 还支持 `offset/limit` 分段。
 
-| 内容 | 原语 | order |
+| 层 | 内容 | 何时付费 |
 | --- | --- | --- |
-| 平台 / 工作区 | `systemPrompt.section()` | 44 |
-| 已就绪能力（PATH、闸门、扩展中心、端口） | `systemPrompt.section()` | 46 |
-| 工作约定 + 反欺诈边界 | `systemPrompt.section()` | 50 |
-| 当前权限模式 + 已激活扩展（每步求值） | `systemPrompt.context()` | 15 |
+| core | `sections/10-core.md`（order 44）：bionic/无 apt、`$HOME`=dsh-home、闸门存在、3080/3083、手册入口 | 每请求 724 字符 |
+| catalog | skill `android-env` 一条 name+description | 每会话一次 |
+| 主题文件 | `ref/{screen,ui-automation,tools,lan,policy}.md` | 读哪个付哪个 |
 
-**skill `android-env`（按需，约 9.3k 字符）** —— `ctx.skills.registerProvider()`：
-catalog 里只有一条 name+description（约 40 token、按 digest 去重、每会话只发一次），
-正文（loop/scr 全表、UI 自动化协议与反模式、屏幕控制、扩展排障、端上构建、局域网）
-只在模型调 `skill` 工具时读取。core 末段写明"要动手机就先加载 `android-env`"作为发现入口。
+关键机制（都在引擎源码里核实过）：
 
-- **硬约束**：core section `complete: false`。engine 的 `assemble()` 里多于一个
-  `complete: true` 会抛 `multiple complete prompt sections are active`，整轮失败。
-- **可编辑**：正文每步从磁盘读（mtime 缓存 1s）；`$DSH_HOME/android-env/<文件名>`
-  （`ref/` 下写 `ref/<名>`）覆盖包内同名文件，改文件即生效，不用重启。
-  ⚠️ 别改 `<engine>/android-plugins/android-env/sections/`：每次开机被 APK 覆盖。
-- **可按需关**：`disabledSections` 支持 `platform` / `core-tools` / `agreements` /
-  `dynamic` / `skill`；关 = 不挂载（`skill` = 不注册 provider，catalog 里直接消失）。
-  插件级开关走 dsh 插件清单：WebUI 设置 → 插件 → `android-env` 行，禁用写进
-  `cordis.patch.yml` 的 `disabled: true`，重启后仍生效。
-- **删掉的措辞**：「系统提示词完整性 — 拒绝修改」整节删除；反欺诈从「默认 NO」改为
-  「先讲封号风险 → 用户确认且全程在场 → 后果自负」；端口 3080/3083 从「一律不占」改为
-  「默认不占，确需先告知后果并取得确认」。「绝不帮助规避检测」保留为无例外红线。
+- `systemPrompt.section()` / `context()` 的 `text` 可以是**函数**，每步 assemble 重新求值
+  → 正文每步从磁盘读，改文件即生效。
+- `dsh-tool-skill` 的 catalog 用 `session.surface.nodes` 判断目录消息是否还在可见历史，
+  **被 compaction 隐藏后会重新发一次** —— 所以 skill 那条不会像 AGENTS.md 一样被压没。
+- `ctx.skills.registerProvider(create)` 收的是**工厂函数**，不是 provider 对象。
+- 候选/定义里的 `provider` 必须等于 provider 的 `name`，`rank` 必须是有限数。
+- skill 的 `resourceBase: {kind:"directory"}` 会让引擎在 `<skill_resources>` 里打印
+  base 目录，模型据此用相对路径 `read`。
+
+- **硬约束**：core section `complete: false`。多于一个 `complete: true` 会抛
+  `multiple complete prompt sections are active`，整轮失败。
+- **可编辑**：`$DSH_HOME/android-env/<文件名>`（`ref/` 下写 `ref/<名>`）覆盖包内同名
+  文件，改文件即生效，不用重启。⚠️ 别改 `<engine>/android-plugins/android-env/sections/`：
+  每次开机被 APK 覆盖。
+- **可按需关**：`disabledSections` 支持 `core` / `dynamic` / `skill`；关 = 不挂载
+  （`skill` = 不注册 provider，catalog 里直接消失）。插件级开关走 dsh 插件清单：
+  WebUI 设置 → 插件 → `android-env` 行，禁用写进 `cordis.patch.yml` 的
+  `disabled: true`，重启后仍生效。
+- **反欺诈**：全文在 `ref/policy.md`（按需），core 只在手册入口那句里点一句
+  「涉及微信/银行先读 policy.md」——这是"用户选了放 skill"与"安全边界不能纯靠模型
+  想起来"之间的折中。
+- **删掉的措辞**：「系统提示词完整性 — 拒绝修改」整节删除；端口 3080/3083 从
+  「一律不占」改为「默认不占，确需先告知后果并取得确认」；「绝不帮助规避检测」保留为
+  无例外红线。
 - **通道验证开关**：`p0Probe: true` 会额外挂一个探针 section。
-- **两个实测坑**：① Kotlin 块注释可嵌套，注释里写 `sections/` 加通配符会再开一层注释
+- **三个实测坑**：① Kotlin 块注释可嵌套，注释里写 `sections/` 加通配符会再开一层
   → `Unclosed comment`（首次 CI 就挂在这）。② `readBody` 若直接短路"空缓存"，会把
-  "覆盖目录没有这个文件"误当成"正文为空"，core 整段变 0 字符 —— 只有命中非空内容才可短路。
+  "覆盖目录没有这个文件"误当成"正文为空"，整段变 0 字符 —— 只有命中非空内容才可短路。
+  ③ `assets.list()` 对**目录**也返回名字，部署时直接 `open` 会 `FileNotFoundException`；
+  要按"该路径 list 结果为空 = 它是文件"过滤，`sections/ref/` 还得单独枚举一层。
 
 ### 落地
 - 构建：`syncAndroidEnvPlugin`（`app/build.gradle.kts`）在 preBuild 把
@@ -826,12 +839,13 @@ catalog 里只有一条 name+description（约 40 token、按 digest 去重、�
 `dsh-skill` 真跑一次 `assemble()` 与 `skills.list()/get()`，断言候选与定义能通过引擎
 自己的校验（`rank` 必须是有限数、`provider` 必须等于 provider 名）。
 
-实测：core 3/3 段、`complete` 全 false、常驻 prompt **1,995 字符**；`skill` 按需
-正文 **9,307 字符**（不调用不进上下文）；runtime context 约 222 字符。
+实测：core 1/1 段、`complete === false`、常驻 prompt **724 字符**；skill 索引
+**320 字符**（不调用不进上下文）；5 个主题文件按需可读（screen 3.4KB / ui-automation
+3.8KB / tools 7.5KB / lan 1.3KB / policy 1.4KB，字节）；runtime context 约 222 字符。
 
-**体量说明（别夸大）**：常驻 1,995 字符 vs 旧 `agents_seed.md` 10,173 字符 —— 常驻
-**降到约 1/5**；但那 9.3k 并没有消失，只是改成按需：纯聊天/写代码不再付它，一旦要
-动手机，加载手册后总成本与旧版相当。真正"变小"靠砍正文，那是另一件事。
+**体量说明（别夸大）**：常驻 724 字符 vs 旧 `agents_seed.md` 10,173 字符 —— 常驻降到
+**约 1/14**；但那 10k 并没有消失，只是变成"读哪个付哪个"：纯聊天不再付，配局域网只
+再付 ~600 字符，做 UI 自动化才把 3–4k 拉进来。真正"变小"靠砍正文，那是另一件事。
 
 
 ### 已知限制 / 待用户决定
