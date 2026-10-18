@@ -1,0 +1,7 @@
+{
+  "name": "dsh-android-env",
+  "version": "0.0.1",
+  "type": "module",
+  "dsh": { "bundle": true },
+  "peerDependencies": { "@deepseek-ai/dsh-system-prompt": "*" }
+}
