@@ -8,6 +8,11 @@
  * - targetSdk 28 下 SELinux 允许对 filesDir 内文件 execve（Termux 同款豁免）
  * - 单引擎进程假设：全局只跟踪一个 child pid，接口保持最小
  * - 子进程 setsid + TIOCSCTTY 使其成为会话首进程，node-pty 类库需要真实 tty 语义
+ *
+ * ⚠️ 导出符号名与 applicationId 强耦合：JNI 默认按
+ *   Java_<包名下划线化>_<类名>_<方法名> 查找实现。改包名（app.dsh.mobile →
+ *   dsh.dsh.mobile 就是这样）必须同步改下面的 5 个 Java_* 符号，否则运行期
+ *   System.loadLibrary 成功但首个调用抛 UnsatisfiedLinkError（2026-10-26 实测）。
  */
 #include <jni.h>
 #include <unistd.h>
@@ -83,7 +88,7 @@ static void close_inherited_fds(void) {
  * 成功返回 master fd，失败返回负的 errno 取反（Java 层取 abs 得 errno）。
  */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeForkPty(
+Java_dsh_dsh_mobile_engine_Pty_nativeForkPty(
         JNIEnv *env, jclass clazz,
         jstring jCmd, jobjectArray jArgs, jstring jCwd,
         jobjectArray jEnv, jint rows, jint cols) {
@@ -168,13 +173,13 @@ fail_errno:
 
 /* 当前跟踪的子进程 PID（供 Java 层进程组/树级清理） */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeChildPid(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeChildPid(JNIEnv *env, jclass clazz) {
     return (g_child > 0) ? (jint)g_child : -1;
 }
 
 /* 阻塞等待子进程退出，返回原始 waitpid status（Java 层解析） */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
     if (g_child <= 0) return -1;
     int status = 0;
     if (waitpid(g_child, &status, 0) < 0) return -errno;
@@ -184,12 +189,12 @@ Java_app_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
 
 /* 向子进程发送信号（SIGTERM=15 / SIGKILL=9） */
 JNIEXPORT void JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeSignalChild(JNIEnv *env, jclass clazz, jint sig) {
+Java_dsh_dsh_mobile_engine_Pty_nativeSignalChild(JNIEnv *env, jclass clazz, jint sig) {
     if (g_child > 0) kill(g_child, sig);
 }
 
 /* Java 层关闭 master fd 后子进程收到 SIGHUP 会自然退出，此处兜底强杀 */
 JNIEXPORT void JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeForceKill(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeForceKill(JNIEnv *env, jclass clazz) {
     if (g_child > 0) kill(g_child, SIGKILL);
 }
