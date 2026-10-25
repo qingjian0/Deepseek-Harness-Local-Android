@@ -342,10 +342,12 @@ class EngineSupervisor(private val ctx: Context) {
                     var pluginRecoveryRequested = false
                     val health = withContext(Dispatchers.IO) { awaitPluginHealth(proc, bootId) }
                     if (health != null) {
+                        val failedText =
+                            health.failedEntries.joinToString(",") { "${it.id}:${it.name}" }
                         val summary =
                             "plugin health: ok=${health.ok} " +
                                 "missing=[${health.missingServices.joinToString(",")}] " +
-                                "failed=[${health.failedEntries.joinToString(",") { \"${it.id}:${it.name}\" }}]"
+                                "failed=[$failedText]"
                         Log.i(TAG, summary)
                         runCatching { EngineLog.append(logFile(), "[health] " + summary) }
                     } else {
