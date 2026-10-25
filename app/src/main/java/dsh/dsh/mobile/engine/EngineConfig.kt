@@ -21,6 +21,75 @@ import java.nio.file.Files
 object EngineConfig {
 
     const val DEFAULT_PORT = 3080
+
+    /** 能力桥默认端口；实际端口可能顺延（见 AgentBridge.currentPort） */
+    const val DEFAULT_BRIDGE_PORT = 3083
+
+    /** 本地嵌入模型服务端口（FastPicker 语义层），端口探测必须避开 */
+    const val LOCAL_EMBED_PORT = 3085
+
+    private const val PORT_PREFS = "dsh_ports"
+    private const val KEY_ENGINE_PORT = "engine_port"
+    private const val KEY_BRIDGE_PORT = "bridge_port"
+
+    /**
+     * 端口策略（v1.5.2，用户要求「3080 被占就用 3081/3082」）。
+     *
+     * 背景：包名与端口都固定的年代，同一台手机装两个 DSH（旧包 app.dsh.mobile +
+     * 新包 dsh.dsh.mobile）必然抢 3080/3083 —— 后启动的那个 bind 失败、启动报错
+     * （实测新包日志：`[bridge] bind FAILED on 127.0.0.1:3083: EADDRINUSE`）。
+     *
+     * 策略 = **优先上次成功端口 → 被占则 +1 顺延（最多 20 个）**。
+     *  · 记住上次端口：正常重启时端口稳定，用户收藏的 WebUI 地址不会乱跳；
+     *  · 顺延：临时冲突自愈，不必让用户手动退出另一个实例；
+     *  · 只绑 127.0.0.1：端口变化不扩大暴露面（LAN 访问仍走独立代理）。
+     */
+    private fun portPrefs(ctx: android.content.Context) =
+        ctx.getSharedPreferences(PORT_PREFS, android.content.Context.MODE_PRIVATE)
+
+    fun lastEnginePort(ctx: android.content.Context): Int =
+        portPrefs(ctx).getInt(KEY_ENGINE_PORT, DEFAULT_PORT)
+
+    fun rememberEnginePort(ctx: android.content.Context, port: Int) {
+        portPrefs(ctx).edit().putInt(KEY_ENGINE_PORT, port).apply()
+    }
+
+    fun lastBridgePort(ctx: android.content.Context): Int =
+        portPrefs(ctx).getInt(KEY_BRIDGE_PORT, DEFAULT_BRIDGE_PORT)
+
+    fun rememberBridgePort(ctx: android.content.Context, port: Int) {
+        portPrefs(ctx).edit().putInt(KEY_BRIDGE_PORT, port).apply()
+    }
+
+    /** 端口当前是否可绑（仅探测回环；探测到释放之间存在理论竞态，调用方仍要有 bind 失败分支） */
+    fun portFree(port: Int): Boolean = runCatching {
+        java.net.ServerSocket().use { s ->
+            s.reuseAddress = true
+            s.bind(java.net.InetSocketAddress("127.0.0.1", port))
+        }
+        true
+    }.getOrDefault(false)
+
+    /** 从 preferred 起找一个可绑定端口；都被占则原样返回（让上层走失败与提示路径） */
+    fun pickPort(preferred: Int, maxOffset: Int = 20, skip: Set<Int> = emptySet()): Int {
+        for (off in 0..maxOffset) {
+            val p = preferred + off
+            if (p > 65_535 || p in skip) continue
+            if (portFree(p)) return p
+        }
+        return preferred
+    }
+
+    /** 引擎端口：上次端口 → 被占则顺延；结果立即持久化（下次优先复用） */
+    fun resolveEnginePort(ctx: android.content.Context): Int {
+        val p = pickPort(
+            lastEnginePort(ctx),
+            skip = setOf(LOCAL_EMBED_PORT, AgentBridge.currentPort(ctx)),
+        )
+        rememberEnginePort(ctx, p)
+        return p
+    }
+
     const val HEALTH_TIMEOUT_MS = 45_000L
     const val HEALTH_INTERVAL_MS = 500L
 
@@ -1330,6 +1399,9 @@ object EngineConfig {
             // 桥 token（v1.2.99）：只交给引擎子进程，供 scr/notify 等闸门脚本鉴权。
             // 第三方 App 拿不到 → 无法调用读屏/点击/通知等设备能力。
             "DSH_BRIDGE_TOKEN=${AgentBridge.currentToken().orEmpty()}",
+            // v1.5.2：桥端口可能因占用顺延（同机多实例），gates 脚本
+            // (_dsh_http.sh 的 DSH_BRIDGE_PORT 变量) 必须拿到实际值。
+            "DSH_BRIDGE_PORT=${AgentBridge.currentPort(ctx)}",
             "LD_LIBRARY_PATH=" + (
                 listOf(File(root, "lib"), File(root, "usr/lib")) +
                     extRoots.map { File(it, "lib") }

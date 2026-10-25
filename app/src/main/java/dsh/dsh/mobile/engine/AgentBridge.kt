@@ -40,7 +40,22 @@ import java.nio.charset.StandardCharsets
 object AgentBridge {
 
     private const val TAG = "AgentBridge"
+    /** 默认端口（兼容旧引用）；实际监听端口见 [currentPort]，可能因占用顺延 */
     const val PORT = 3083
+
+    /**
+     * 实际监听端口（v1.5.2）。0 = 尚未启动。
+     *
+     * 同机多个 DSH 实例（不同包名）会抢默认 3083；[start] 时从上次成功端口起顺延，
+     * 绑定成功后写入这里并持久化。gates 脚本通过 DSH_BRIDGE_PORT 环境变量拿这个值。
+     */
+    @Volatile private var activePort = 0
+
+    fun currentPort(ctx: Context): Int =
+        if (activePort > 0) activePort else EngineConfig.lastBridgePort(ctx)
+
+    /** 无 Context 版本（已启动时才有意义；0 = 尚未启动） */
+    fun currentPortNow(): Int = activePort
     private const val CHANNEL_ID = "agent_notify"
 
     @Volatile private var server: ServerSocket? = null
@@ -147,7 +162,27 @@ object AgentBridge {
         // 同设备第三方 App 拿不到 → 无法调用读屏/点击/通知等能力。
         ensureToken(ctx)
         try {
-            val ss = ServerSocket(PORT, 16, java.net.InetAddress.getByName("127.0.0.1"))
+            // v1.5.2：默认端口被占用时顺延（最多 20 个），避免同机多实例直接起不来
+            val base = EngineConfig.pickPort(
+                EngineConfig.lastBridgePort(ctx),
+                skip = setOf(EngineConfig.LOCAL_EMBED_PORT, EngineConfig.lastEnginePort(ctx)),
+            )
+            var found: ServerSocket? = null
+            var boundPort = base
+            for (i in 0..20) {
+                val p = base + i
+                if (p > 65_535 || p == EngineConfig.LOCAL_EMBED_PORT) continue
+                try {
+                    found = ServerSocket(p, 16, java.net.InetAddress.getByName("127.0.0.1"))
+                    boundPort = p
+                    break
+                } catch (e: Exception) {
+                    Log.w(TAG, "bridge bind :$p failed (${e.message}); trying next port")
+                }
+            }
+            val ss = found ?: throw java.io.IOException("no free bridge port near $base")
+            activePort = boundPort
+            EngineConfig.rememberBridgePort(ctx, boundPort)
             server = ss
             thread = Thread({
                 while (!ss.isClosed) {
@@ -159,7 +194,7 @@ object AgentBridge {
                     }
                 }
             }, "AgentBridge").apply { isDaemon = true; start() }
-            Log.i(TAG, "agent bridge started on 127.0.0.1:$PORT")
+            Log.i(TAG, "agent bridge started on 127.0.0.1:$boundPort")
             // 对话完成监听（v1.2.57）：不依赖 AI 主动调 notify —— 只要会话写入
             // turn/end 事件就提示用户（用户反馈「任务完成后通知栏没有任何信息」）。
             TurnWatcher.start(ctx.applicationContext) { session ->
@@ -171,16 +206,17 @@ object AgentBridge {
             // 误判成「无障碍没开 / 桥没就绪」，真因（端口被占）谁也看不见。
             // 现在把占用者一并查出来 —— 典型元凶是继承了桥 listen socket 的历史
             // 孤儿（3083 无 O_CLOEXEC，见 OrphanReaper 顶部说明），并主动告知用户。
-            val holder = portHolder()
+            val triedPort = if (activePort > 0) activePort else EngineConfig.lastBridgePort(ctx)
+            val holder = portHolder(triedPort)
             Log.e(
                 TAG,
-                "bridge bind FAILED on 127.0.0.1:$PORT: ${e.message}" +
+                "bridge bind FAILED on 127.0.0.1:$triedPort: ${e.message}" +
                     (holder?.let { "; holder=$it" } ?: ""),
             )
             // 也落 engine.log：用户/支持要把这个文件发出来，logcat 抓不到历史
             runCatching {
                 java.io.File(EngineConfig.engineRoot(ctx), "engine.log")
-                    .appendText("[bridge] bind FAILED on 127.0.0.1:$PORT: ${e.message}; holder=${holder ?: "?"}\n")
+                    .appendText("[bridge] bind FAILED on 127.0.0.1:$triedPort: ${e.message}; holder=${holder ?: "?"}\n")
             }
             runCatching {
                 notify(
@@ -191,7 +227,7 @@ object AgentBridge {
                             "body",
                             ctx.getString(
                                 R.string.bridge_down_body,
-                                PORT,
+                                triedPort,
                                 holder ?: e.message.orEmpty(),
                             ),
                         )
@@ -202,16 +238,16 @@ object AgentBridge {
     }
 
     /**
-     * 谁占着 [PORT]（v1.2.104）。
+     * 谁占着 [port]（v1.2.104）。
      *
      * `/proc/net/tcp` 的 LISTEN 行给出 socket inode 与所有者 uid；再遍历
      * `/proc/<pid>/fd` 反查哪个进程打开着这个 inode（**同 uid 才看得见**，
      * 别的 uid 直接跳过 —— 不做猜测）。返回形如 `uid=10228 inode=39939 pid=6760(node ...)`。
      */
-    private fun portHolder(): String? = runCatching {
+    private fun portHolder(port: Int): String? = runCatching {
         val f = java.io.File("/proc/net/tcp").readLines().drop(1)
             .map { it.trim().split(Regex("\\s+")) }
-            .firstOrNull { c -> c.size > 9 && c[1].endsWith("%04X".format(PORT)) && c[3] == "0A" }
+            .firstOrNull { c -> c.size > 9 && c[1].endsWith("%04X".format(port)) && c[3] == "0A" }
             ?: return@runCatching null
         val inode = f[9]
         val uid = f[7]
@@ -598,9 +634,10 @@ object AgentBridge {
             if (f.isFile) f.readText().takeLast(2500) else "(no engine.log)"
         }.getOrDefault("(log read failed)")
 
-        // 3080 HTTP 探测
+        // HTTP 探测（v1.5.2：跟随实际引擎端口，可能不是 3080）
+        val probePort = EngineConfig.lastEnginePort(ctx)
         val httpProbe = runCatching {
-            val c = (java.net.URL("http://127.0.0.1:3080/").openConnection()
+            val c = (java.net.URL("http://127.0.0.1:$probePort/").openConnection()
                     as java.net.HttpURLConnection).apply { connectTimeout = 4000; readTimeout = 4000 }
             val code = c.responseCode
             // readNBytes(int) 是 API 33+；Android 11 上会 NoSuchMethod——用 Kotlin readBytes 截断
@@ -613,10 +650,10 @@ object AgentBridge {
         val crlf = "\r\n"
         val wsProbe = listOf("/ws", "/", "/api/ws", "/socket").joinToString("<br>") { p ->
             runCatching {
-                java.net.Socket("127.0.0.1", 3080).use { sock ->
+                java.net.Socket("127.0.0.1", probePort).use { sock ->
                     sock.soTimeout = 4000
                     val req = "GET $p HTTP/1.1" + crlf +
-                        "Host: 127.0.0.1:3080" + crlf +
+                        "Host: 127.0.0.1:$probePort" + crlf +
                         "Upgrade: websocket" + crlf +
                         "Connection: Upgrade" + crlf +
                         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" + crlf +
@@ -635,7 +672,7 @@ object AgentBridge {
 <h3>1. WebView UA</h3><pre id="ua"></pre>
 <h3>2. JS API probe (false = missing)</h3><pre id="api"></pre>
 <h3>3. Engine state</h3><pre>$engineState</pre>
-<h3>4. HTTP probe on 3080</h3><pre>$httpProbe</pre>
+<h3>4. HTTP probe on $probePort</h3><pre>$httpProbe</pre>
 <h3>5. WebSocket probe</h3><pre>$wsProbe</pre>
 <h3>6. Runtime version</h3><pre>$runtimeVer</pre>
 <h3>7. Frontend polyfill</h3><pre>$poly</pre>

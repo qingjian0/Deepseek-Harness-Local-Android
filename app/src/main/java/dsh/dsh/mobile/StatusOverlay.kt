@@ -535,7 +535,7 @@ object StatusOverlay {
                 Thread {
                     runCatching {
                         val tok = dsh.dsh.mobile.engine.AgentBridge.currentToken() ?: return@Thread
-                        val c = (java.net.URL("http://127.0.0.1:3083/daemon/stop")
+                        val c = (java.net.URL("http://127.0.0.1:${dsh.dsh.mobile.engine.AgentBridge.currentPort(ctx)}/daemon/stop")
                             .openConnection() as java.net.HttpURLConnection).apply {
                             requestMethod = "POST"
                             setRequestProperty("X-DSH-Token", tok)
@@ -579,7 +579,7 @@ object StatusOverlay {
                     val active = runCatching {
                         val tok = dsh.dsh.mobile.engine.AgentBridge.currentToken()
                         if (tok == null) false else {
-                            val c = (java.net.URL("http://127.0.0.1:3083/daemon/status")
+                            val c = (java.net.URL("http://127.0.0.1:${dsh.dsh.mobile.engine.AgentBridge.currentPortNow().takeIf { it > 0 } ?: dsh.dsh.mobile.engine.EngineConfig.DEFAULT_BRIDGE_PORT}/daemon/status")
                                 .openConnection() as java.net.HttpURLConnection).apply {
                                 setRequestProperty("X-DSH-Token", tok)
                                 connectTimeout = 2000; readTimeout = 2000

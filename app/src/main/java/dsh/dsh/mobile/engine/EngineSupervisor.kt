@@ -66,7 +66,7 @@ class EngineSupervisor(private val ctx: Context) {
     val healthyPort: Int get() = when (val s = _state.value) {
         is State.Healthy -> s.port
         is State.SafeMode -> s.port
-        else -> EngineConfig.DEFAULT_PORT
+        else -> activePort
     }
 
     /** 从 engine.log 提取**本次启动**的 `dsh web:` 输出（带 token 完整 URL）。
@@ -106,10 +106,19 @@ class EngineSupervisor(private val ctx: Context) {
     fun webUrl(): String = when (val s = _state.value) {
         is State.Healthy -> s.tokenUrl ?: "http://127.0.0.1:${s.port}/"
         is State.SafeMode -> s.tokenUrl ?: "http://127.0.0.1:${s.port}/"
-        else -> "http://127.0.0.1:${EngineConfig.DEFAULT_PORT}/"
+        else -> "http://127.0.0.1:$activePort/"
     }
 
     @Volatile private var process: EngineProcess? = null
+
+    /**
+     * 本次启动使用的引擎端口（v1.5.2）。
+     *
+     * 默认 3080，但同机另一个 DSH 实例（不同包名）会占用它 —— 启动前按
+     * 「上次成功端口 → 被占则顺延」解析（见 EngineConfig.resolveEnginePort），
+     * 所有 URL / 健康探测 / 状态上报都用这个字段，绝不再直接引用 DEFAULT_PORT。
+     */
+    @Volatile private var activePort: Int = EngineConfig.DEFAULT_PORT
     @Volatile private var recoveredPlugin: String? = null
     @Volatile private var logOffsetAtSpawn = 0L
     @Volatile private var loopJob: Job? = null
@@ -302,6 +311,12 @@ class EngineSupervisor(private val ctx: Context) {
                 withContext(Dispatchers.IO) { AgentBridge.start(ctx) }
                 step("bridge")
 
+                // v1.5.2（用户要求）：同机多实例/端口被占时不再直接启动失败 ——
+                // 按「上次成功端口 → 被占则顺延」选一个引擎端口，避开能力桥与嵌入服务。
+                activePort = withContext(Dispatchers.IO) { EngineConfig.resolveEnginePort(ctx) }
+                step("port")
+                Log.i(TAG, "engine port: $activePort (bridge :${AgentBridge.currentPort(ctx)})")
+
                 // 本地快速决策层预热（v1.4.22）：模型已下载时后台拉起 llama-server，
                 // 让 FastPicker 语义匹配在每次引擎启动后即可用（服务不随重启恢复，
                 // 不预热就会整段退化到云端，每步多几秒）。不触发模型下载，失败静默。
@@ -347,7 +362,7 @@ class EngineSupervisor(private val ctx: Context) {
                 process = proc
                 step("spawn")
 
-                val healthy = pollHealth(EngineConfig.DEFAULT_PORT, proc)
+                val healthy = pollHealth(activePort, proc)
                 step("health-poll")
                 if (healthy) {
                     BootTrace.stage(BootTrace.Stage.LOADING)
@@ -420,16 +435,16 @@ class EngineSupervisor(private val ctx: Context) {
                         val t1 = System.currentTimeMillis()
                         val restartMs = restartStartedAt?.let { " (total restart took ${t1 - it}ms)" } ?: ""
                         restartStartedAt = null
-                        Log.i(TAG, (if (safe) "engine healthy in SAFE MODE on :${EngineConfig.DEFAULT_PORT}" else "engine healthy on :${EngineConfig.DEFAULT_PORT}") + restartMs)
+                        Log.i(TAG, (if (safe) "engine healthy in SAFE MODE on :$activePort" else "engine healthy on :$activePort") + restartMs)
                         _state.value =
-                            if (safe) State.SafeMode(EngineConfig.DEFAULT_PORT, tokenUrl, notice)
-                            else State.Healthy(EngineConfig.DEFAULT_PORT, tokenUrl, notice)
+                            if (safe) State.SafeMode(activePort, tokenUrl, notice)
+                            else State.Healthy(activePort, tokenUrl, notice)
                         BootTrace.ready(ctx)
                         userVisibleBootT0 = System.currentTimeMillis()
                         pluginRecoveryRestarts = 0
                         backoffIndex = 0
                         withContext(Dispatchers.IO) {
-                            ShizukuHttpBridge.start(ctx, EngineConfig.DEFAULT_PORT)
+                            ShizukuHttpBridge.start(ctx, activePort)
                         }
                         val status = proc.exitFuture.get()
                         if (shouldExitLoop()) break
@@ -472,14 +487,22 @@ class EngineSupervisor(private val ctx: Context) {
                     withContext(Dispatchers.IO) { reclaimPort() }
                     deterministicFailure = null
                     delay(1_200)
+                    // v1.5.2：回收只对「同 uid 的孤儿」有效；如果占用者是另一个 DSH
+                    // 实例（不同包名，杀不掉），就顺延一个端口再启动，而不是红脸失败。
+                    if (withContext(Dispatchers.IO) { portInUse() }) {
+                        val next = EngineConfig.lastEnginePort(ctx) + 1
+                        EngineConfig.rememberEnginePort(ctx, next)
+                        activePort = withContext(Dispatchers.IO) { EngineConfig.resolveEnginePort(ctx) }
+                        Log.w(TAG, "port still held after reclaim — switching engine port to $activePort")
+                    }
                 } else {
                     Log.e(
                         TAG,
                         "port reclaim exhausted (${EngineConfig.MAX_PORT_RECLAIMS} lifetime attempts) — " +
-                            "port ${EngineConfig.DEFAULT_PORT} is held by a foreign process",
+                            "port $activePort is held by a foreign process",
                     )
                     _state.value = State.Failed(
-                        "port ${EngineConfig.DEFAULT_PORT} is in use by another process",
+                        "port $activePort is in use by another process",
                     )
                     break
                 }
@@ -580,7 +603,7 @@ class EngineSupervisor(private val ctx: Context) {
             nodeBin = EngineConfig.nodeBin(ctx),
             entryJs = EngineConfig.dshEntry(ctx),
             cwd = EngineConfig.workspaces(ctx),
-            env = EngineConfig.buildEnv(ctx, EngineConfig.DEFAULT_PORT, bootId),
+            env = EngineConfig.buildEnv(ctx, activePort, bootId),
             logFile = logFile(),
             suPath = suPath,
             patchPaths = patchPaths,
@@ -590,7 +613,7 @@ class EngineSupervisor(private val ctx: Context) {
     private fun portInUse(timeoutMs: Int = 700): Boolean {
         return try {
             java.net.Socket().use { s ->
-                s.connect(java.net.InetSocketAddress("127.0.0.1", EngineConfig.DEFAULT_PORT), timeoutMs)
+                s.connect(java.net.InetSocketAddress("127.0.0.1", activePort), timeoutMs)
                 true
             }
         } catch (e: java.net.ConnectException) {
@@ -601,7 +624,7 @@ class EngineSupervisor(private val ctx: Context) {
     }
 
     private fun reclaimPort() {
-        Log.w(TAG, "port ${EngineConfig.DEFAULT_PORT} in use — reclaiming (orphan engine node)")
+        Log.w(TAG, "port $activePort in use — reclaiming (orphan engine node)")
         val d = "$"
         val killCmd =
             "for p in " + d + "(ls /proc | grep -E '^[0-9]+" + d + "'); do " +
@@ -624,7 +647,7 @@ class EngineSupervisor(private val ctx: Context) {
             waitPortFree(1_800)
         }
         if (portInUse(300)) {
-            Log.e(TAG, "port ${EngineConfig.DEFAULT_PORT} STILL in use after sweeps — next boot will likely fail")
+            Log.e(TAG, "port $activePort STILL in use after sweeps — next boot will choose another port")
         }
     }
 

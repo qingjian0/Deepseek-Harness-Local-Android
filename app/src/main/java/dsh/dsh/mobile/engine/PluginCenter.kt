@@ -279,7 +279,7 @@ object PluginCenter {
     private fun runDshPluginCli(ctx: Context, verb: String, pkg: String): Pair<Boolean, String> {
         val node = EngineConfig.nodeBin(ctx)
         val entry = EngineConfig.dshEntry(ctx)
-        val env = EngineConfig.buildEnv(ctx, EngineConfig.DEFAULT_PORT)
+        val env = EngineConfig.buildEnv(ctx, EngineConfig.lastEnginePort(ctx))
         val pb = ProcessBuilder(
             node.absolutePath, "--expose-internals", entry.absolutePath,
             "plugin", "--profile", "web", verb, pkg,
