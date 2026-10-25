@@ -1,5 +1,28 @@
 # AI_CONTEXT
 
+## v1.4.21 已发布（2026-10-25，插件中心重写，tag run 40206163982，7 分钟全绿）
+- **参考对象**：开源 DSHA（DSH-APP/DSHA，Apache 2.0）的 PluginFragment / PluginRepository /
+  PluginSource / PluginSort——源码经 GitHub contents API 取（raw.githubusercontent 被墙）。
+  其设计要点：市场/已安装双标签、富卡片、四种排序、下载源切换、链接安装四来源识别、
+  检查更新/更新/回退、能力声明、可取消进度、批量导出。
+- **我们实现**（`PluginMarket.kt` 新增 340 行 + `PluginStoreActivity.kt` 重写）：
+  双标签、富卡片（版本/体积/作者/推荐角标）、**兼容性分级徽标**（纯 JS/需原生编译/
+  引擎 fork/未验证，复用 NativePluginCheck 7 信号）、五种排序、检查更新、详情弹窗
+  （按需拉 registry 得 unpackedSize + 判断依据）、离线兜底（bundledCatalog）。
+  加强点相对 DSHA：兼容性内联（DSHA 只有「能力声明」按钮）、精确版本升级、体积展示。
+- **端到端实测（emulator-5554 / dsh36 x86_64）**：浏览 100 条、搜索 cost-meter 18 条、
+  安装 dsh-cost-meter@1.9.39 ok=true、已安装标签 v1.9.39·3.3MB、排序切换、详情
+  Size 7.0MB+Pure JS、卸载 ok=true（Packages:-3）、profile 清空。
+- **踩坑**：① i18n 门禁禁止 Kotlin 中文字面量——Sort 枚举标签改 labelRes 资源引用；
+  ② 网络不通时市场会空屏——fetchCatalog 失败回退 bundledCatalog（旧版 BUILTIN 清单）；
+  ③ 空态提示重复渲染（subtitle + 列表内 hint）——改为单条。
+- versionCode 271。4 资产上线（226.6MB release 签名校验过）。
+
+## v1.4.20 已发布（2026-10-25，tag run 40199891720，8 分钟全绿）
+- 4 资产上线（arm64/x86_64 × debug/release）。含 #42/#43/#44/#47 四项修复 +
+  README 体积修正 + CI 刷包修复。versionCode 270。
+- issue #42/#43/#44/#47 已通知报告人验证。
+
 ## 2026-10-25 issues/PR 批量处理
 - **修复已推送**（commit 2a3db3d，将随 v1.4.20 发）：
   #42 Android 10 存储权限（WRITE/READ maxSdkVersion 28→29——MANAGE 是 API 30 才有，

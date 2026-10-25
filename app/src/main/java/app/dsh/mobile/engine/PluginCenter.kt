@@ -44,6 +44,20 @@ object PluginCenter {
 
     /** 内置兜底（远程拉不到时用；与 community-plugins.json 同步，desc 英文过 i18n 门禁）。
      *  均已核对 peerDependencies 兼容引擎 0.2.0-rc.2（2026-10-10 npm registry 实查）。 */
+    /**
+     * 内置精选清单（v1.4.21）—— 供 [PluginMarket] 在远端清单拉取失败时兜底，
+     * 保证插件市场不空屏（离线/网络重置场景实测会空）。
+     */
+    fun bundledCatalog(): List<PluginMarket.Entry> = BUILTIN.map {
+        PluginMarket.Entry(
+            pkg = it.pkg,
+            name = it.id,
+            desc = it.desc,
+            repo = it.repo,
+            official = true,
+        )
+    }
+
     private val BUILTIN = listOf(
         PluginInfo("cost-meter", "dsh-cost-meter",
             "Session cost tracking: per-conversation/daily cost, multi-vendor price tables"),
