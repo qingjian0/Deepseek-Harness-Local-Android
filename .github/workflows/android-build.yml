@@ -377,10 +377,18 @@ jobs:
     # 刷成了连续的重复包（v1.4.18-380/381/382/384）。本仓库的发布语义是：
     # tag v* → publish-release（正式签名）；main push → publish-edge（单个滚动
     # prerelease）。此 job 降级为仅手动触发，需要测试分发时在 Actions 页面跑。
+    #
+    # ⚠️ v1.4.22（本 Fork 自定义）：上游仓库把发布 job 全部用
+    # `github.repository == 'Soodok/...'` 硬门禁，Fork 后这些 job 永远 skip ——
+    # 于是「构建绿了却没有任何 APK 可下载」。这里把本 job 恢复为**本仓库的自动
+    # 分发渠道**：main push 且 build-apk 成功就发一个 debug 签名 Release
+    # （tag = v<versionName>-<run_number>，唯一不覆盖）。上游仓库仍靠上面的硬门禁
+    # 保持人工发布流程，不受影响。
     if: >-
-      github.repository == 'Soodok/Deepseek-Harness-Local-Android'
-      && github.event_name == 'workflow_dispatch'
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main'
       && needs.build-apk.result == 'success'
+      && github.repository != 'Soodok/Deepseek-Harness-Local-Android'
     needs: [build-apk]
     runs-on: ubuntu-24.04
     permissions:
