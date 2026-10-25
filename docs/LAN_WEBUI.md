@@ -83,6 +83,6 @@ app 内置一个 node 反向代理（`assets/tools/lan-web-proxy.mjs`），只�
 | 文件 | 作用 |
 |---|---|
 | `app/src/main/assets/tools/lan-web-proxy.mjs` | node 反向代理（部署到 `dsh-home/tools/`） |
-| `app/src/main/java/app/dsh/mobile/engine/LanWebProxy.kt` | Kotlin 侧启停、鉴权、常驻通知、进程清理 |
-| `app/src/main/java/app/dsh/mobile/LanWebOffReceiver.kt` | 通知「关闭」按钮的广播接收器 |
-| `app/src/main/java/app/dsh/mobile/LanAccessDialog.kt` | 显示验证码与地址的提示框 |
+| `app/src/main/java/dsh/dsh/mobile/engine/LanWebProxy.kt` | Kotlin 侧启停、鉴权、常驻通知、进程清理 |
+| `app/src/main/java/dsh/dsh/mobile/LanWebOffReceiver.kt` | 通知「关闭」按钮的广播接收器 |
+| `app/src/main/java/dsh/dsh/mobile/LanAccessDialog.kt` | 显示验证码与地址的提示框 |

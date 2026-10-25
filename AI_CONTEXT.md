@@ -1121,11 +1121,11 @@
 - None.
 
 ## Key paths
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/ScreenOcr.kt`（离线 OCR：降采样/缓存/节流冷却/预热）
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/DshAccessibilityService.kt`（dump 兜底 + waitForIdle 快速返回 + 本地模型自动就绪）
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/engine/AgentContextSeed.kt`（seed v32：OCR/本地快速层说明）
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/engine/SceneMemory.kt`（pending 机制 + 诊断字段）
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/engine/LocalModel.kt`（本地嵌入模型：下载 + llama-server 启动）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/ScreenOcr.kt`（离线 OCR：降采样/缓存/节流冷却/预热）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/DshAccessibilityService.kt`（dump 兜底 + waitForIdle 快速返回 + 本地模型自动就绪）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/engine/AgentContextSeed.kt`（seed v32：OCR/本地快速层说明）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/engine/SceneMemory.kt`（pending 机制 + 诊断字段）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/engine/LocalModel.kt`（本地嵌入模型：下载 + llama-server 启动）
 - `E:/Deepeek harness/dsh-android/scripts/probes/loop_common.py`（测试库；`/memory/clear` 等写端点须传 body 才是 POST）
 - `E:/Deepeek harness/dsh-android/scripts/probes/_ocr_canvas.html`（canvas 测试页；PC 起 `python -m http.server 8899 --directory scripts/probes`，模拟器 Chrome 访问 `http://10.0.2.2:8899/_ocr_canvas.html`）
 - `E:/Deepeek harness/dsh-android/dist/v1.2.120/`（已上架产物）
@@ -1231,7 +1231,7 @@
 
 ### 真机验证证据
 - 日志：`[dsh-android] narrow-sidebar: 已接管（侧栏全宽，隐藏 2 个对话列；视口 386x777）`
-  （引擎日志 `/data/user/0/app.dsh.mobile/files/engine/engine.log`，由 MainActivity 的
+  （引擎日志 `/data/user/0/dsh.dsh.mobile/files/engine/engine.log`，由 MainActivity 的
   `onConsoleMessage` 转发 —— 只转发 WARNING+ 或含 `[dsh-android]` 前缀的消息）。
 - 设备文件哈希 = 本地哈希（`f3cc06de…`，含 `isInOverlay`/`hasCloseButton`）。
 - 截图确认：主界面正常（v1.2.179）、竖屏展开侧栏 → 侧栏全宽 + 对话流隐藏。
@@ -1247,7 +1247,7 @@
 - 无线 adb（192.168.101.21:9000）会周期性掉线，需 `adb connect` 重连。
 - `adb push` 到 `/data/local/tmp` 用 **Windows 真实路径**（`C:/Users/Qt/AppData/Local/Temp/...`），
   `/tmp/...` 是 Git Bash 虚拟路径，adb 看不到。
-- 引擎 node 直接跑脚本验证导入：`su -c 'B=/data/user/0/app.dsh.mobile/files; export
+- 引擎 node 直接跑脚本验证导入：`su -c 'B=/data/user/0/dsh.dsh.mobile/files; export
   LD_LIBRARY_PATH=$B/engine/lib:$B/engine/bin; export DSH_HOME=$B/dsh-home; cd $B;
   $B/engine/bin/node /data/local/tmp/x.mjs'`（引号地狱时改用推送 .sh 文件执行）。
 - 大包部署：`split -b 10M` 分片 → 设备端 `for i in $(seq 1 N); do cat p_$i >> x.apk; done`
@@ -1390,7 +1390,7 @@ const rightbar = rightbar === 0 || available < 300 ? 0 : Math.min(available, …
 - **ColorOS/OnePlus 上 `pm install -r` 会把无障碍服务关掉**（`enabled_accessibility_services`
   变 null）。重装后需重新启用：
   `adb shell settings put secure enabled_accessibility_services
-  app.dsh.mobile/app.dsh.mobile.DshAccessibilityService`
+  dsh.dsh.mobile/dsh.dsh.mobile.DshAccessibilityService`
   `adb shell settings put secure accessibility_enabled 1`
 
 ### 2026-10-17 续：语音发送后「悬浮框收起闪一两下」（v1.2.185）
@@ -1877,7 +1877,7 @@ beta 包构建于该文件修改之后，经 dex/arsc 校验确认已包含 `sta
 | 其他（含 android） | **抛错** `native path opener is unsupported on android` |
 
 前端把内部错误统一显示成 `openDocument.error`（「无法打开配置文件」），用户误以为文件损坏。
-文件本身完好，路径：`/data/user/0/app.dsh.mobile/files/dsh-home/profiles/web/cordis.patch.yml`。
+文件本身完好，路径：`/data/user/0/dsh.dsh.mobile/files/dsh-home/profiles/web/cordis.patch.yml`。
 该按钮在 1.3.3（引擎 0.2.0）就存在，属长期平台差异，非 1.4.0 引入。
 
 ### 修法（不改 228MB runtime）
@@ -1967,7 +1967,7 @@ $ ls files/dsh-home/workspaces/   →  Permission denied
   | 项 | 修复前 | 修复后 |
   |---|---|---|
   | 探针结果 | `docs=true`（假阳性） | `docs=false` ✅ |
-  | 落点 | `/storage/emulated/0/Documents/dshdata` | `Android/data/app.dsh.mobile/files/dshdata` ✅ |
+  | 落点 | `/storage/emulated/0/Documents/dshdata` | `Android/data/dsh.dsh.mobile/files/dshdata` ✅ |
   | `ls workspaces/` | Permission denied | 正常 ✅ |
   | 引擎 `readdir`/`readFile` | EACCES | `list: ['proj']` / `read: hello` ✅ |
 - plugin-health `ok:true`，`failedEntries:[]`。

@@ -39,19 +39,19 @@ val releaseKeyPassword = releaseSetting("DSH_RELEASE_KEY_PASSWORD", "keyPassword
 val releaseSigningReady = releaseStorePassword != null && releaseKeystoreFile.isFile
 
 android {
-    namespace = "app.dsh.mobile"
+    namespace = "dsh.dsh.mobile"
     // CI 上 compileSdk=35；本地 SDK 只有 33/36/36.1 时可临时降/升到此值，
     // compileSdk 仅决定编译期 API 可见性，不影响运行时行为（targetSdk=28 才是生效阈值）。
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.dsh.mobile"
+        applicationId = "dsh.dsh.mobile"
         minSdk = 26
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
         targetSdk = 28
-        versionCode = 271
-        versionName = "1.4.21"
+        versionCode = 272
+        versionName = "1.5.0"
 
         ndk {
             abiFilters += listOf(targetAbi)

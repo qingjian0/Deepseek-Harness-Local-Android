@@ -28,7 +28,7 @@
  *
  * ## Why the app and not a terminal editor
  * The document lives inside the app's private directory
- * (`/data/data/app.dsh.mobile/files/dsh-home/...`). No terminal editor shipped
+ * (`/data/data/dsh.dsh.mobile/files/dsh-home/...`). No terminal editor shipped
  * in the runtime (`vi`, `nano`) is reachable from the WebUI's click, and the
  * user is looking at the browser — bouncing them to a terminal would be worse
  * than the current failure. The in-app editor also gives a save path that

@@ -91,7 +91,7 @@ Settings → Extensions → **LAN WebUI access** exposes the phone's running Web
 **Keep data and permissions under your control**
 The engine listens only on `127.0.0.1`; sessions, credentials, and workspaces stay in the phone's private storage — whether model requests leave the device depends on the model endpoint you configure.
 
-- Sessions and workspaces live under **`Android/data/app.dsh.mobile/files/dshdata`** on external storage — visible in a file manager and easy to copy as a backup
+- Sessions and workspaces live under **`Android/data/dsh.dsh.mobile/files/dshdata`** on external storage — visible in a file manager and easy to copy as a backup
 - Upgrading from an older build **migrates** data automatically (copy → verify entry count → delete the old copy; on a count mismatch the original is kept)
 - If the external directory is unavailable the app falls back to private storage (uninstalling then loses data)
 - ⚠️ **Note**: `Android/data/` is app-specific external storage and is **removed when you uninstall**. Copy it out regularly if you need it long-term; `profiles/` (which holds credentials) always stays in private storage.

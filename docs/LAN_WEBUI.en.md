@@ -87,6 +87,6 @@ process there).
 | File | Role |
 |---|---|
 | `app/src/main/assets/tools/lan-web-proxy.mjs` | the node reverse proxy (deployed to `dsh-home/tools/`) |
-| `app/src/main/java/app/dsh/mobile/engine/LanWebProxy.kt` | start/stop, auth, persistent notification, process cleanup |
-| `app/src/main/java/app/dsh/mobile/LanWebOffReceiver.kt` | broadcast receiver behind the Stop button |
-| `app/src/main/java/app/dsh/mobile/LanAccessDialog.kt` | dialog that shows the code and address |
+| `app/src/main/java/dsh/dsh/mobile/engine/LanWebProxy.kt` | start/stop, auth, persistent notification, process cleanup |
+| `app/src/main/java/dsh/dsh/mobile/LanWebOffReceiver.kt` | broadcast receiver behind the Stop button |
+| `app/src/main/java/dsh/dsh/mobile/LanAccessDialog.kt` | dialog that shows the code and address |

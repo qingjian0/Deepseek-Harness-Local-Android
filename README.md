@@ -91,7 +91,7 @@ DSH Mobile 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harnes
 
 引擎只监听 `127.0.0.1`；会话、凭证、工作区**全部留在手机私有存储**，模型请求是否离开设备取决于你配置的模型服务地址。
 
-- 会话与工作区放在**外部存储的 `Android/data/app.dsh.mobile/files/dshdata`** —— 文件管理器里可见、可直接复制备份
+- 会话与工作区放在**外部存储的 `Android/data/dsh.dsh.mobile/files/dshdata`** —— 文件管理器里可见、可直接复制备份
 - 老版本升级：私有目录里的数据**自动迁移**过去（复制 → 核对条目数 → 删旧，数量不一致就保留原数据）
 - 外部目录不可用时自动回退应用私有目录，功能不受影响（此时卸载会丢数据）
 - ⚠️ **注意**：`Android/data/` 属于应用专属外部目录，**卸载应用时系统会一并清理**。需要长期保留请定期把该目录复制出来；`profiles/`（含凭证）始终留在私有目录，不随数据外置

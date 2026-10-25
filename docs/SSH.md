@@ -80,7 +80,7 @@ Android 没有桌面端的系统文件夹选择框，DSH 内核固定使用 **br
    写入应用私有目录并自动填好路径：
 
    ```text
-   /data/user/0/app.dsh.mobile/files/dsh-home/.ssh/<文件名>
+   /data/user/0/dsh.dsh.mobile/files/dsh-home/.ssh/<文件名>
    ```
 
    目录 0700、文件 0600，文件管理器看不到，也不会进共享存储。
@@ -97,9 +97,9 @@ Android 没有桌面端的系统文件夹选择框，DSH 内核固定使用 **br
 
 | 位置 | 路径示例 | 说明 |
 |---|---|---|
-| 私有目录 | `/data/user/0/app.dsh.mobile/files/dsh-home/.ssh/id_ed25519` | 推荐；普通文件管理器不可见，建议用“导入” |
+| 私有目录 | `/data/user/0/dsh.dsh.mobile/files/dsh-home/.ssh/id_ed25519` | 推荐；普通文件管理器不可见，建议用“导入” |
 | 公开数据目录 | `/storage/emulated/0/Documents/dshdata/ssh/id_ed25519` | App 会自动创建 `ssh/`；需要「所有文件访问」；卸载重装仍保留 |
-| 应用外部目录 | `/storage/emulated/0/Android/data/app.dsh.mobile/files/dshdata/ssh/id_ed25519` | 未授予「所有文件访问」时的回退位置；Android 11+ 文件管理器可能也受限 |
+| 应用外部目录 | `/storage/emulated/0/Android/data/dsh.dsh.mobile/files/dshdata/ssh/id_ed25519` | 未授予「所有文件访问」时的回退位置；Android 11+ 文件管理器可能也受限 |
 | 不建议 | `/storage/emulated/0/Download/...` | 可能读不到，且共享存储安全性差 |
 
 - 表单里的「私钥路径」填**绝对路径**；

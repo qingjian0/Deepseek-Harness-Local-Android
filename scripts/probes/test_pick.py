@@ -14,14 +14,14 @@ def adb_shell(cmd, timeout=30):
     return adb("shell", cmd, timeout=timeout).decode("utf-8", "replace")
 
 
-np_out = adb_shell("run-as app.dsh.mobile pidof node").strip()
+np_out = adb_shell("run-as dsh.dsh.mobile pidof node").strip()
 if not np_out:
     print("引擎未运行（node 不存在）")
     sys.exit(1)
 np = np_out.split()[0]
 print("node pid:", np)
 
-env = adb("shell", f"run-as app.dsh.mobile cat /proc/{np}/environ").decode("utf-8", "replace")
+env = adb("shell", f"run-as dsh.dsh.mobile cat /proc/{np}/environ").decode("utf-8", "replace")
 token = ""
 for kv in env.split("\x00"):
     if kv.startswith("DSH_BRIDGE_TOKEN="):
