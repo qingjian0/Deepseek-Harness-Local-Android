@@ -62,7 +62,7 @@ function buildRightbar({ width, height, open, mode = "fullscreen" }) {
           </div>
         </div>
       </div></body></html>`,
-    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:3080/" },
+    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:4080/" },
   );
   const win = dom.window;
   Object.defineProperty(win, "innerWidth", { value: width, writable: true, configurable: true });
@@ -199,7 +199,7 @@ console.log("\n=== ⑦ 回归：无右栏面板的主界面不受影响 ===");
         <div id="sidebarCol"><button>新会话</button><button>插件</button><button>设置</button></div>
         <div id="centerCol">对话</div>
       </div></body></html>`,
-    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:3080/" },
+    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:4080/" },
   );
   const win = dom.window;
   Object.defineProperty(win, "innerWidth", { value: 386, writable: true, configurable: true });

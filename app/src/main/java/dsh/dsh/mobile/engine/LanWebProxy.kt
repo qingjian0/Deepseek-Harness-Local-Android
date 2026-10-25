@@ -16,18 +16,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 局域网访问 WebUI 的反向代理（v1.2.160）：让同网段设备用**原生 WebUI 界面**连上手机里的引擎。
  *
  * ## 为什么需要它
- * 引擎只绑 127.0.0.1（实测 PC 连手机 3080 不可达），而改成绑 0.0.0.0 也不行——
+ * 引擎只绑 127.0.0.1（实测 PC 连手机 4080 不可达），而改成绑 0.0.0.0 也不行——
  * 浏览器访问 http://192.168.x.x 属于**非安全上下文**，会连撞四道门：
  *   ① crypto.randomUUID 不存在（仅安全上下文可用）；
  *   ② 前端 isLoopbackHostname(pageLocation.hostname) 判假 → connection.isLoopback=false
  *      → 设置页持久化降级为 memory、设置文档编辑不可用；
  *   ③ /api 的 Origin/Host 同源检查；
  *   ④ WebSocket 升级必须被转发（对话流靠它推送）。
- * 正解：app 内起反向代理，浏览器访问 http://<手机IP>:3090，代理打补丁后转发到 127.0.0.1:3080。
+ * 正解：app 内起反向代理，浏览器访问 http://<手机IP>:4090，代理打补丁后转发到 127.0.0.1:4080。
  * 界面**就是引擎原生的那份前端**，只是被打了补丁。
  *
  * ## 硬约束（不得破坏原有结构、不得导致异常重启）
- *  · 绝不监听 3080/3083（引擎 WebUI / 能力桥），只用独立端口 [PORT]；
+ *  · 绝不监听 4080/4083（引擎 WebUI / 能力桥），只用独立端口 [PORT]；
  *  · 起停完全独立于引擎生命周期；任何异常只影响本代理（catch 住、不抛出）；
  *  · 只做转发，**不修改磁盘上的任何引擎文件**（补丁只在内存里改响应体）；
  *  · 默认关闭，用户显式开启才监听；accept 循环必须在**独立线程**（见 start 注释）。
@@ -36,8 +36,8 @@ object LanWebProxy {
 
     private const val TAG = "LanWebProxy"
 
-    /** 独立端口（禁止占用 3080/3083） */
-    const val PORT = 3090
+    /** 独立端口（禁止占用 4080/4083） */
+    const val PORT = 4090
 
     /** 「已开启」常驻通知的 channel / id（v1.2.188） */
     private const val NOTIF_CHANNEL = "lan_web"
@@ -47,7 +47,7 @@ object LanWebProxy {
     const val ACTION_LAN_OFF = "dsh.dsh.mobile.action.LAN_WEB_OFF"
 
     private const val UPSTREAM_HOST = "127.0.0.1"
-    private const val UPSTREAM_PORT = 3080
+    private const val UPSTREAM_PORT = 4080
     private const val COOKIE = "dsh_lan_pw"
 
     /** HTTP 换行（源码里不写转义，避免多层转义失真） */
@@ -87,7 +87,7 @@ object LanWebProxy {
     /**
      * 读取引擎 WebUI 的访问 token（v1.2.160）。
      *
-     * 引擎自己对 WebUI 也做 token 鉴权（`http://127.0.0.1:3080/?token=…`），
+     * 引擎自己对 WebUI 也做 token 鉴权（`http://127.0.0.1:4080/?token=…`），
      * 每次启动生成新 token 并写进 engine/engine.log —— 实测带 token 访问会返回
      * `303 + set-cookie: dsh-auth-…`（引擎签发会话 Cookie）。所以代理必须：
      *   ① 首访时自动带上 token（用户不必手输），拿到引擎的会话 Cookie 并透传给浏览器；
@@ -162,7 +162,7 @@ object LanWebProxy {
                 // ⚠️ v1.2.160 实测修复（进程"起来了又消失"）：
                 // 起初用 ProcessBuilder 起 node —— 那是**强绑定的子进程**，app 被系统
                 // 回收/重启时它会一起死（实测：日志停在 listening，随后进程消失，
-                // 手机内部访问 3090 也失败）。改为与 planner-daemon **同一套做法**：
+                // 手机内部访问 4090 也失败）。改为与 planner-daemon **同一套做法**：
                 // 经 shell `nohup ... &` 脱离父进程，生命周期独立于 app。
                 val envPrefix = engineEnv.joinToString(" ") { kv ->
                     val i = kv.indexOf('=')
@@ -174,7 +174,7 @@ object LanWebProxy {
                     " DSH_LAN_PW='" + pw + "'" +
                     " nohup " + node.absolutePath + " " + scriptPath +
                     " --port " + PORT + " --pw '" + pw + "'" +
-                    // v1.5.2：引擎端口可能不是 3080（被占时顺延），代理上游必须跟随
+                    // v1.5.2：引擎端口可能不是 4080（被占时顺延），代理上游必须跟随
                     " --upstream 127.0.0.1:" + EngineConfig.lastEnginePort(ctx) +
                     " > " + logPath + " 2>&1 &"
                 val proc = ProcessBuilder("sh", "-c", sh).start()
@@ -211,8 +211,8 @@ object LanWebProxy {
      *
      * ⚠️ 根因：旧实现只有 `Privilege.runSu("pkill …")` —— 但本机是 **Shizuku 模式**，
      * su 闸门会拒绝（gate: mode=SHIZUKU, su denied），于是 pkill 从未生效 →
-     * 旧代理进程一直占着 3090、用**旧的验证码**服务 → 用户输新码永远打不开
-     * （实测症状：日志刷 "port 3090 busy, retrying"）。
+     * 旧代理进程一直占着 4090、用**旧的验证码**服务 → 用户输新码永远打不开
+     * （实测症状：日志刷 "port 4090 busy, retrying"）。
      * 现在：**Shizuku 通道优先**（adb 身份，能杀 app 自己的进程），su 兜底。
      */
     private fun killStaleProxy(ctx: android.content.Context) {
@@ -220,7 +220,7 @@ object LanWebProxy {
         // ⓪ v1.2.188（审查 P1）：**同 uid 直杀**——app 对自己 fork 的 node 进程
         // 天然有 kill 权限，不需要 Shizuku/su。旧实现只有 shizuku/su 两条通道，
         // 普通模式（无 Shizuku、无 root）下**两条都失效** → 用户点「关闭」后
-        // node 仍监听 3090，而通知已经消失（更危险：用户以为关了）。
+        // node 仍监听 4090，而通知已经消失（更危险：用户以为关了）。
         runCatching {
             val p = ProcessBuilder("/system/bin/sh", "-c", cmd).start()
             p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)

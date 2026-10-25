@@ -70,7 +70,7 @@ class EngineSupervisor(private val ctx: Context) {
     }
 
     /** 从 engine.log 提取**本次启动**的 `dsh web:` 输出（带 token 完整 URL）。
-     *  0.2.0 起 WebUI 强制认证，裸 127.0.0.1:3080 会显示认证提示页。
+     *  0.2.0 起 WebUI 强制认证，裸 127.0.0.1:4080 会显示认证提示页。
      *  引擎 stdout 由 EngineProcess 泵入 engine.log（环形 2MB，最新在末尾）。
      *  只搜 [logOffsetAtSpawn] 之后的日志段：健康探测可能早于 stdout 送达，
      *  搜全文会拿到上一次启动的旧 token（已失效 → WebView 401 白页，实测）。
@@ -114,7 +114,7 @@ class EngineSupervisor(private val ctx: Context) {
     /**
      * 本次启动使用的引擎端口（v1.5.2）。
      *
-     * 默认 3080，但同机另一个 DSH 实例（不同包名）会占用它 —— 启动前按
+     * 默认 4080，但同机另一个 DSH 实例（不同包名）会占用它 —— 启动前按
      * 「上次成功端口 → 被占则顺延」解析（见 EngineConfig.resolveEnginePort），
      * 所有 URL / 健康探测 / 状态上报都用这个字段，绝不再直接引用 DEFAULT_PORT。
      */

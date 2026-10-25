@@ -313,7 +313,7 @@
     （logcat `download enqueued`）✅；文件未落地 = 模拟器 DownloadProvider 对
     本地回环 + run-as 临时服务的环境限制，非 App 代码问题。
   · 跨域 a[download]/iframe 不触发 listener（WebView 跨域 download 属性失效 +
-    SPA 拦截），与 issue 场景无关（file-share 的下载是同源 3080）。
+    SPA 拦截），与 issue 场景无关（file-share 的下载是同源 4080）。
 - **已知限制（写进发布说明与 issue 回复）**：大文件 blob 下载占 1.3× 内存，
   低内存设备可能失败；后续可分块。插件侧 fetch→blob→a[download] 已可用（桥接住）。
 - **验证**：312 项测试全过；i18n 全过；compileDebugKotlin + assembleRelease 成功。
@@ -994,7 +994,7 @@
   | **v35 + token 注册** | **48s** | **13，零探索** | ✓ 完成（9 行文字全对）|
 - **结论**：243s 主要是**测试环境缺 token 注册**导致 AI 花 ~110s 摸索环境，不是产品性能问题；真机 web profile 由 app 注入 android-overlay.yml（token 已注册）→ 体验应接近 48s。
 - **AI 高效行为**（48s 测试）：`scr dump` 勘察 → `scr launch com.android.chrome` 一步启动 → `scr idle` 等待 → `scr shot` 截图 + 读图/OCR → 输出；最终回答正确说明「canvas 文字不在无障碍树，用截图 + 离线 OCR 读取核对」。
-- **seed v35 新增**「Environment (read once — do NOT re-verify)」：命令已在 PATH、bridge 认证内部处理、禁止找 token/curl 3083/读包装脚本/翻 `$PREFIX/bin`。
+- **seed v35 新增**「Environment (read once — do NOT re-verify)」：命令已在 PATH、bridge 认证内部处理、禁止找 token/curl 4083/读包装脚本/翻 `$PREFIX/bin`。
 
 ### 端到端 AI 测试：极难任务自主规划（1.2.129，2026-10-12）
 - **方法**：`scripts/probes/headless_task.py` —— 用 `dsh --profile headless --json`（无 Host/HTTP 层的一次性 Agent）直发任务给模型，环境变量从运行中引擎进程 `/proc/<pid>/environ` 复制（保证一致）；`--json` 输出机器可读事件流，统计工具调用特征。API key 走 `.credentials.yaml` 的 **refs 段**（PC 环境变量注入模拟器，仅测试用）。
@@ -1189,7 +1189,7 @@
 - Loader entry 指向**具体文件**（`./android-plugins/<pkg>/index.js`）—— Node ESM
   **不支持目录导入**（实测 `Directory import ... is not supported`）。
 - `nearestPackage` 会向上一直找，故 `android-plugins/` 上层不能有 package.json（已确认无）。
-- 验证方法：`curl -sL -b ck.txt "http://127.0.0.1:3080/?token=<TK>"` 的返回页里能 grep 到
+- 验证方法：`curl -sL -b ck.txt "http://127.0.0.1:4080/?token=<TK>"` 的返回页里能 grep 到
   `<pkgname>/client.js`（与官方插件并列在 preload 清单里）。
 
 ### 交付物（全部为插件，零引擎源码改动）
@@ -1445,7 +1445,7 @@ const rightbar = rightbar === 0 || available < 300 ? 0 : Math.min(available, …
 
 ### P1 — 普通模式下局域网代理杀不掉（关不掉但通知已消失）
 - 根因：`LanWebProxy.stop()` 依赖 `child` 引用（**从未赋值**）+ Shizuku/su；
-  普通模式（无 Shizuku/root）两条通道全失效 → node 仍监听 3090，而通知已撤掉。
+  普通模式（无 Shizuku/root）两条通道全失效 → node 仍监听 4090，而通知已撤掉。
 - 修复：`killStaleProxy()` 增加**同 uid 直杀**：
   `ProcessBuilder("/system/bin/sh","-c","pkill -f lan-web-proxy").start().waitFor(3s)`
   （app 杀自己 fork 的进程无需提权）。
@@ -1656,7 +1656,7 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
 `deterministicFailure?.contains("EADDRINUSE")` 分支里，而该变量是
 `failureSignature()` 的产物 = `"<退出码>:<哈希>"` —— **哈希里永远不含这个字面量**。
 后果链：Root 引擎的 node 是 `su` 的**孙进程**（`dsh_pty.c` 的 `PR_SET_PDEATHSIG`
-只挂到 su 外壳上，信号传不到 node）→ App 被强杀时 node 以 uid 0 变孤儿继续占 3080
+只挂到 su 外壳上，信号传不到 node）→ App 被强杀时 node 以 uid 0 变孤儿继续占 4080
 → 新引擎 EADDRINUSE 启动即退 → 本该「清场重试、不计罪」却落进 guardian →
 连续判罪后**回滚 profiles → SAFE MODE（归档用户配置）→ State.Failed**。
 模拟器实测孤儿 ppid 实测为 **570（adbd）而非 1**，而旧 `OrphanReaper` 只认
@@ -1690,12 +1690,12 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
 - **版本戳读取容错**：读不了等价于「版本不匹配」，走重装路径（内部会先自愈）。
 
 ### 实测（模拟器，引擎真实启动链路）
-- **安卓 16（dsh36）**：造孤儿占 3080 → 启动 App → 日志
-  `port 3080 in use — reclaiming` → 孤儿被杀（init 回收 18323）→
-  `engine healthy on :3080`；**无 guardian 判罪**（无 meta、无 rolled back、无归档）。
+- **安卓 16（dsh36）**：造孤儿占 4080 → 启动 App → 日志
+  `port 4080 in use — reclaiming` → 孤儿被杀（init 回收 18323）→
+  `engine healthy on :4080`；**无 guardian 判罪**（无 meta、无 rolled back、无归档）。
 - **安卓 11（dsh30，API 30）**：`chmod 000` 文件与目录 + 强杀 App → 二次启动 →
   `ownership check: found entries this app cannot read` → `restored permissions on 16806 entr(ies)`
-  → `engine healthy on :3080`；属性恢复为 `drwx------` / `-rw-------`。
+  → `engine healthy on :4080`；属性恢复为 `drwx------` / `-rw-------`。
 - 注意：安卓 11 AVD 自带 WebView 是 Chrome 83，会弹「WebView needs an update」
   对话框（App 的既有门槛提示，非 bug），需点 CONTINUE ANYWAY 才继续启动流程。
 
@@ -1754,7 +1754,7 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
 - `.abi` 仍为 `x86_64`，未改动 runtime ABI；`gradle assembleDebug -Pabi=x86_64 --console=plain` 两次通过，最后一次 `BUILD SUCCESSFUL in 8s`。
 - `python scripts/check-i18n.py`：三语 391 keys 同步、Kotlin CJK=0、新增文案通过。
 - `node --check app/src/main/assets/android-plugins/plugin-health.mjs` 通过；`git diff --check` 通过。
-- 模拟器 `emulator-5554`（Android 16 x86_64）安装 debug APK 后，正常启动 marker：`ok=true, missingServices=[], failedEntries=[]`；监督日志：`plugin health marker received (ok=true)`、`plugin health: ok=true missing= failed=`、`engine healthy on :3080`。
+- 模拟器 `emulator-5554`（Android 16 x86_64）安装 debug APK 后，正常启动 marker：`ok=true, missingServices=[], failedEntries=[]`；监督日志：`plugin health marker received (ok=true)`、`plugin health: ok=true missing= failed=`、`engine healthy on :4080`。
 - 可回滚重复服务插件验证：临时 `fake-bad` bundle 注入 `ctx.provide("directoryPicker")`，真实 engine.log 记录 Cordis 原始错误 `service "directoryPicker" has been registered at <BrowseDirectoryPicker>`；随后 marker `ok=false`，监督日志记录 failed entry，`PluginRecovery` 输出 `auto-disabled third-party plugin fake-bad (attempt=1/3...)`，重启后 marker 恢复 `ok=true`，profile bundles 已自动摘除 `fake-bad`；测试结束已恢复原 profile 并删除临时 node_modules。
 
 ### 未验证/遗留
@@ -1807,7 +1807,7 @@ node-pty package marker、拒绝 shim 残留），并核对 APK 内 `assets/runt
 并修复 zip 模式新条目未写回的潜在 bug。
 
 ### 行为验证（真实设备，非静态推断）
-- **x86_64 模拟器（Android 16）**：装 staged 0.2.1 debug 包 → 引擎 `engine healthy on :3080`，
+- **x86_64 模拟器（Android 16）**：装 staged 0.2.1 debug 包 → 引擎 `engine healthy on :4080`，
   plugin-health marker `ok=true, missingServices=[], failedEntries=[]`；
   终端真实链路全 PASS（`defaultShell` → 自带 bash、`resolveExecutable`、`spawnTerminal` pid 正常、
   PTY 内执行命令 `tty=/dev/pts/2`）；关闭回收 `terminate OK`（2.3s，无残留）。
@@ -1884,7 +1884,7 @@ beta 包构建于该文件修改之后，经 dex/arsc 校验确认已包含 `sta
 新增宿主机插件 `app/src/main/assets/android-plugins/open-file.mjs`，
 替换上游自己留给测试用的实例级 seam `settingsController.openTextFile`
 （源码：`this.openTextFile = internals.openTextFile ?? openNativeTextFile`），
-改为 `POST http://127.0.0.1:3083/open-file`（带 `X-DSH-Token`）。
+改为 `POST http://127.0.0.1:4083/open-file`（带 `X-DSH-Token`）。
 应用侧新增 `FileEditorActivity` 承接：读取 / 编辑 / 原子保存。
 
 - 部署：`EngineConfig.ensureAndroidOverlay()` 的单文件插件列表加入 `open-file.mjs`，
@@ -2133,7 +2133,7 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
    回调注册在 MainActivity、onDestroy 置空。用户先按 Home（Activity 被回收）
    再点通知栏退出 → 回调 null → 无人结束 App 进程。
 3. **cleanupOrphanEngine 以 portInUse() 为前提**
-   主引擎退出后 3080 已释放，但它经 su 派生 / 被 init 收养的后代仍在跑；
+   主引擎退出后 4080 已释放，但它经 su 派生 / 被 init 收养的后代仍在跑；
    端口检查看不到 → 整条清理被跳过。
 
 ### 修复

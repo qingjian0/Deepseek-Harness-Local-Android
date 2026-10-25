@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
  * 本类负责把它跑起来：
  *  1. **模型下载**：bge-small-zh-v1.5（**q4_k_m 仅 15MB**）—— 中文语义匹配，
  *     24M 参数，手机上算一次嵌入是毫秒级；
- *  2. **服务启动**：用扩展提供的 `llama-server` 在 127.0.0.1:3085 起
+ *  2. **服务启动**：用扩展提供的 `llama-server` 在 127.0.0.1:4085 起
  *     OpenAI 兼容 HTTP 服务（`/v1/embeddings`），FastPicker 直接调它；
  *  3. **生命周期**：按需启动、失败静默（FastPicker 自动回退云端，不阻塞用户）。
  *

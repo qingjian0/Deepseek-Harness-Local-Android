@@ -16,14 +16,14 @@ interfaces, a browser hitting `http://192.168.x.x` would run into four blockers:
 | ③ | `/api` Origin / Host same-origin checks | requests rejected |
 | ④ | WebSocket upgrades must be proxied | live conversation stream never arrives |
 
-## 2. Solution: an app-level reverse proxy (port 3090)
+## 2. Solution: an app-level reverse proxy (port 4090)
 
 The app ships a node reverse proxy (`assets/tools/lan-web-proxy.mjs`) that listens on its own
-port **3090**, forwards to `127.0.0.1:3080`, and patches responses **in memory**:
+port **4090**, forwards to `127.0.0.1:4080`, and patches responses **in memory**:
 
 - injects a `crypto.randomUUID` polyfill;
 - rewrites the `isLoopbackHostname(...)` call site to a truthy value;
-- normalizes upstream `Host` / `Origin` to `127.0.0.1:3080`;
+- normalizes upstream `Host` / `Origin` to `127.0.0.1:4080`;
 - forwards WebSocket upgrades (the conversation stream depends on it);
 - handles `SameSite=Strict` cookies and chunked encoding.
 
@@ -37,7 +37,7 @@ proxy failure never propagates into the engine.
 2. On the phone: **Settings → Extensions → LAN WebUI access**, read the notice, confirm;
 3. A dialog shows:
    - a **6-digit code** (large text, tap to copy; regenerated every time you enable it);
-   - the address `http://<phone-IP>:3090` (also tap-to-copy);
+   - the address `http://<phone-IP>:4090` (also tap-to-copy);
 4. Open that address in a desktop browser and enter the code.
 
 > 🔐 The code is shown **once**, when you enable it (it is not kept in the settings row
@@ -49,7 +49,7 @@ Once enabled, the proxy keeps listening — easy to forget. So a **persistent no
 in the status bar as soon as the proxy is verified:
 
 - Title: "LAN WebUI is on";
-- Text: `http://<phone-IP>:3090 · tap Stop to turn it off`;
+- Text: `http://<phone-IP>:4090 · tap Stop to turn it off`;
 - Action: **Stop**.
 
 Three ways to turn it off, all equivalent:
@@ -66,17 +66,17 @@ process there).
 
 ## 5. Security notes
 
-- Only enable on networks you trust; never expose port 3090 to the internet;
+- Only enable on networks you trust; never expose port 4090 to the internet;
 - behind the proxy sits an agent with full file and command access — the code is the only gate,
   don't share screenshots of it;
 - When done, tap **Stop** or exit the engine (which stops the proxy too);
-- The proxy does **not** listen on 3080 (engine WebUI) or 3083 (capability bridge) — only 3090.
+- The proxy does **not** listen on 4080 (engine WebUI) or 4083 (capability bridge) — only 4090.
 
 ## 6. Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| Browser can't connect | same subnet? `ping <phone-IP>`; is 3090 listening (the proxy needs ~2 s to start)? |
+| Browser can't connect | same subnet? `ping <phone-IP>`; is 4090 listening (the proxy needs ~2 s to start)? |
 | "Wrong code" | codes are case-sensitive; toggling off/on creates a new one; clear cached cookies |
 | Blank page | browser/WebView must be Chrome 85+; check `$DSH_HOME/lan-proxy.log` |
 | Still reachable after turning off | an orphan from an older build; update to the build with same-uid kill |

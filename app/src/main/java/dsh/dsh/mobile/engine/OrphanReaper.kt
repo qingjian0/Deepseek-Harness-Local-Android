@@ -9,12 +9,12 @@ import java.io.File
  *
  * ## 为什么需要（主人反馈：AI 起的进程没及时销毁 → 阻塞）
  * 引擎用 `setsid()` 脱离会话（node-pty 需要真实 tty 语义），父进程死后它和它的
- * 后代不会自动消失。而历史上这些进程**继承了 app 的监听 socket** —— 3080/3083
- * 两个 `java.net.ServerSocket` 都不带 `O_CLOEXEC`（2026-10-09 实测：3083 的
+ * 后代不会自动消失。而历史上这些进程**继承了 app 的监听 socket** —— 4080/4083
+ * 两个 `java.net.ServerSocket` 都不带 `O_CLOEXEC`（2026-10-09 实测：4083 的
  * listen fd 在引擎进程里可见，fdinfo `flags: 04002` = O_RDWR|O_NONBLOCK，
  * 没有 O_CLOEXEC）。链条是：
  *
- *     AI 起一个后台进程 → 它继承 3083 监听 fd → 它成了孤儿还活着
+ *     AI 起一个后台进程 → 它继承 4083 监听 fd → 它成了孤儿还活着
  *     → 引擎重启时新桥 bind 失败（EADDRINUSE）→ notify/scr/say 全哑
  *     → 而且旧代码只打一行 warning，用户只看到功能失灵、没有任何解释
  *
@@ -96,7 +96,7 @@ object OrphanReaper {
      * `App → (PTY fork) → su 外壳 → magiskd/ksud → node`，如果 **su 外壳或
      * magiskd 仍活着**（App 被 kill -9 时 PDEATHSIG 只挂到 su 外壳上，node 完全
      * 收不到信号），node 的 ppid 就**不等于 1**，旧实现在这里直接 continue，
-     * 于是它带着 uid 0 一直占着 3080 —— 端口清不掉 → 新引擎 EADDRINUSE → 启动失败。
+     * 于是它带着 uid 0 一直占着 4080 —— 端口清不掉 → 新引擎 EADDRINUSE → 启动失败。
      *
      * 现在改为按「**是不是我们的引擎、且不是当前正在用的那个**」判定，并额外要求
      * 「父进程不在本 app 进程树内」以排除活着的正常引擎：

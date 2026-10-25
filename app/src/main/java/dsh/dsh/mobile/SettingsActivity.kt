@@ -73,7 +73,7 @@ class SettingsActivity : Activity() {
         rikka.shizuku.Shizuku.addRequestPermissionResultListener(shizukuPermListener)
 
         // —— 扩展：局域网访问 WebUI（v1.2.160/v1.2.161）——
-        // 独立端口 3090 的反向代理，让同网段设备用原生 WebUI 连上本机引擎。
+        // 独立端口 4090 的反向代理，让同网段设备用原生 WebUI 连上本机引擎。
         // v1.2.161（用户要求）：验证码改为 **6 位数字 + 每次开启重新随机**，
         // 生成后**自动复制到剪贴板**，且**只在应用内显示一次**（退出再进设置不显示）。
         val swLan = findViewById<android.widget.Switch>(R.id.swLanWeb)

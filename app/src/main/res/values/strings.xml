@@ -8,7 +8,7 @@
     <string name="status_exiting">Exiting…</string>
     <string name="status_installing">Installing runtime…</string>
     <string name="status_starting">Starting engine…</string>
-    <string name="status_healthy">Engine ready · http://127.0.0.1:3080</string>
+    <string name="status_healthy">Engine ready · http://127.0.0.1:4080</string>
     <string name="status_plugin_recovered">Recovered: disabled broken plugin %1$s · engine ready</string>
     <string name="status_safe_mode">Safe mode: plugin configs quarantined, engine running with an empty config (workspaces and sessions unaffected)</string>
     <string name="status_backoff">Process exited unexpectedly, restarting in %1$d s (attempt %2$d)</string>

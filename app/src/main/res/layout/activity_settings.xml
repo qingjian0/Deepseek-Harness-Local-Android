@@ -980,7 +980,7 @@
                     android:layout_marginStart="66dp"
                     android:background="#22FFFFFF" />
 
-                <!-- 局域网访问 WebUI（v1.2.160）：app 内反向代理（独立端口 3090），
+                <!-- 局域网访问 WebUI（v1.2.160）：app 内反向代理（独立端口 4090），
                      让同网段设备用原生 WebUI 连上本机引擎。默认关闭。 -->
                 <LinearLayout
                     android:id="@+id/rowLanWeb"

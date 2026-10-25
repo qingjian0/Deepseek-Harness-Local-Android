@@ -100,7 +100,7 @@ DSH Mobile 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harnes
 
 ### 🌐 从电脑打开原生 WebUI（局域网）
 
-设置 → 扩展 → **局域网访问 WebUI**：开启后，同一网络下的电脑访问 `http://<手机IP>:3090`，打开的是**手机里正在运行的原生 WebUI**，不是另做一套远程界面。
+设置 → 扩展 → **局域网访问 WebUI**：开启后，同一网络下的电脑访问 `http://<手机IP>:4090`，打开的是**手机里正在运行的原生 WebUI**，不是另做一套远程界面。
 
 - 每次开启随机生成 **6 位验证码**，自动复制且只显示一次
 - 通知栏常驻「局域网 WebUI 已开启」提醒，带关闭按钮；关闭或退出引擎会真正停止代理进程，普通模式也有效
@@ -136,7 +136,7 @@ DSH Mobile 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harnes
 
 ### 🛡️ 设备能力与安全边界
 
-Agent 通过只监听 `127.0.0.1:3083` 的能力桥操作手机，所有调用都经过 token 门控：
+Agent 通过只监听 `127.0.0.1:4083` 的能力桥操作手机，所有调用都经过 token 门控：
 
 - token 每次启动随机生成，只注入引擎环境；同设备第三方 App 没有 token 时返回 `unauthorised`
 - 无障碍能力负责读屏、点击、输入、手势、按键与截图，不要求把引擎端口暴露出去

@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
  * 权限边界（privacy-first）：读屏能力由 canRetrieveWindowContent 开关（xml）授权；
  * 服务必须由用户在系统设置手动开启（Android 安全模型），关闭即所有能力失效。
  *
- * Agent 调用入口：AgentBridge (127.0.0.1:3083) 的 GET /screen、POST /tap，
+ * Agent 调用入口：AgentBridge (127.0.0.1:4083) 的 GET /screen、POST /tap，
  * 引擎内经 `scr` 包装器使用。
  */
 class DshAccessibilityService : AccessibilityService() {

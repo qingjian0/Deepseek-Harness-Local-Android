@@ -63,7 +63,7 @@ const name = "android-open-file";
 const inject = ["settingsController"];
 
 /** Bridge origin. The app listens on loopback only; see AgentBridge.kt. */
-const BRIDGE = "http://127.0.0.1:3083";
+const BRIDGE = "http://127.0.0.1:4083";
 
 /** Token environment variable exported by the app for this engine process. */
 const TOKEN_ENV = "DSH_BRIDGE_TOKEN";

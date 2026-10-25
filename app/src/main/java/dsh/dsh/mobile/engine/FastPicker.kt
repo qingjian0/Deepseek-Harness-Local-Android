@@ -203,8 +203,8 @@ object LocalEmbedder {
 
     private const val TAG = "LocalEmbedder"
 
-    /** llama-server 默认端口（避开引擎 3080 / 桥 3083） */
-    const val PORT = 3085
+    /** llama-server 默认端口（避开引擎 4080 / 桥 4083） */
+    const val PORT = 4085
 
     data class Match(val index: Int, val score: Double)
 

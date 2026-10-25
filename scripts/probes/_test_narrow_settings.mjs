@@ -76,7 +76,7 @@ function buildSettings({ width, height, open }) {
   // 因此这里给关键元素打上真实尺寸（来自真机取证），让判定逻辑可被验证。
   const dom = new JSDOM(
     `<!DOCTYPE html><html><head></head><body>${body}</body></html>`,
-    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:3080/" },
+    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:4080/" },
   );
   const win = dom.window;
   Object.defineProperty(win, "innerWidth", { value: width, writable: true, configurable: true });
@@ -203,7 +203,7 @@ console.log("\n=== ⑥ 回归：普通对话框（按钮少）不被误伤 ===")
       <div id="dlg" style="position:fixed;inset:0;display:flex">
         <div id="dlgBox" style="width:320px">确认删除？<button>取消</button><button>确定</button></div>
       </div></body></html>`,
-    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:3080/" },
+    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:4080/" },
   );
   const win = dom.window;
   Object.defineProperty(win, "innerWidth", { value: 386, writable: true, configurable: true });
@@ -251,7 +251,7 @@ console.log("\n=== ⑨ 关键回归：主界面框架（侧栏多按钮 + 大对
         </div>
         <div id="centerCol" style="position:relative">对话内容</div>
       </div></body></html>`,
-    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:3080/" },
+    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:4080/" },
   );
   const win = dom.window;
   Object.defineProperty(win, "innerWidth", { value: 386, writable: true, configurable: true });

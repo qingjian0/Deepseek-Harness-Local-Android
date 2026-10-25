@@ -136,7 +136,7 @@ class MainActivity : Activity() {
         // 直到用户在设置里动过一次或旋转设备才恢复。
         setDesktop(shouldUseDesktop())
 
-        // 热重启：用户显式动作，完整 stop→start 链路；urlLoaded 复位让 Healthy 后重载 3080。
+        // 热重启：用户显式动作，完整 stop→start 链路；urlLoaded 复位让 Healthy 后重载 4080。
         // restart() 自身立即返回（内部串行 + 先置「启动中」），无需再套线程；重复点击幂等。
         // Toast 给即时反馈：引擎优雅退出最长等 10s，期间状态栏可能来不及刷新（实测观感
         // 是「点了没反应」于是连点三下 → 触发并发 stop/start 踩踏）。

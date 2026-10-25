@@ -102,13 +102,13 @@ class EngineProcess private constructor(
         if (!graceful) Pty.nativeForceKill()
         Log.i(TAG, "engine stop: ${System.currentTimeMillis() - t0}ms (graceful=$graceful, grace=$graceMs)")
         // 【v1.2.22 事故】root 模式（su -c）下 PTY 只能杀到 su 外壳，exec node 的
-        // 孙进程成孤儿继续霸占 3080 → 普通引擎 EADDRINUSE 反复重启（「异常退出」循环
+        // 孙进程成孤儿继续霸占 4080 → 普通引擎 EADDRINUSE 反复重启（「异常退出」循环
         // 但页面/AI 正常，服务的是孤儿）。进程组 + 子进程双保险击杀。
         if (suUsed && pid > 0) {
             // v1.2.108：改走 Privilege.runSu —— 旧实现硬编码 `su -c`（toybox 风格 su 会报
             // `invalid uid/gid '-c'` 并被 runCatching 吞掉，击杀静默失败），
             // 且自带一份**不完整**的 su 路径表（漏了 /vendor/bin、/data/adb/magisk、
-            // /data/adb/ksu），Magisk/KernelSU 设备上会直接跳过击杀 → 孤儿占着 3080/3083。
+            // /data/adb/ksu），Magisk/KernelSU 设备上会直接跳过击杀 → 孤儿占着 4080/4083。
             // runSu 内部用 findSu() 覆盖全部路径，并按设备实测挑可用的 su 形式。
             Privilege.runSu("kill -9 -- -$pid 2>/dev/null; pkill -9 -P $pid 2>/dev/null; true")
         }

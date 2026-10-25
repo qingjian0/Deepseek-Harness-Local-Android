@@ -30,12 +30,12 @@ object ShizukuHttpBridge {
     private var acceptThread: Thread? = null
     private val pool = Executors.newCachedThreadPool()
 
-    /** 桥端口 = 引擎端口 + 2（默认 3080 → 3082），避开引擎 webServer。 */
+    /** 桥端口 = 引擎端口 + 2（默认 4080 → 3082），避开引擎 webServer。 */
     /**
      * shizuku 桥端口（v1.5.2）。
      *
-     * 历史公式是 enginePort + 2（3080 → 3082）。引擎端口可能因占用顺延，
-     * 而能力桥也可能顺延到同一位置（3083→3084…）—— 二者撞上就 bind 失败，
+     * 历史公式是 enginePort + 2（4080 → 3082）。引擎端口可能因占用顺延，
+     * 而能力桥也可能顺延到同一位置（4083→3084…）—— 二者撞上就 bind 失败，
      * 所以这里跳过当前能力桥端口。
      */
     fun port(enginePort: Int): Int {

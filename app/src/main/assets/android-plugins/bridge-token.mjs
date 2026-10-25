@@ -3,7 +3,7 @@
  *
  * Why this plugin exists: the app mints a per-process token and exports it as
  * DSH_BRIDGE_TOKEN into the engine's environment. The agent's shell tools then
- * call the local bridges (scr / notify / say / shz -> 127.0.0.1:3083/3082) and
+ * call the local bridges (scr / notify / say / shz -> 127.0.0.1:4083/3082) and
  * those bridges now require an `X-DSH-Token` header. Without this plugin the
  * token never reaches the agent's shell: dsh-subprocess rebuilds every child
  * environment via `scrubbedParentEnv()`, which drops anything starting with
@@ -43,7 +43,7 @@ function apply(ctx) {
     variables: {
       [TOKEN_KEY]: {
         description:
-          "Per-process token for the Android bridge on 127.0.0.1:3083 (device " +
+          "Per-process token for the Android bridge on 127.0.0.1:4083 (device " +
           "capabilities: screen reading, tapping, notifications, TTS). The gate " +
           "scripts (scr / notify / say) send it automatically; only read this " +
           "directly if you talk to the bridge yourself.",

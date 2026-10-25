@@ -20,7 +20,7 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 
 /**
- * Agent 能力桥（m1.37/v1.1.0）：监听 127.0.0.1:3083，把「通知 / 读屏 / 点击」暴露给引擎内 Agent。
+ * Agent 能力桥（m1.37/v1.1.0）：监听 127.0.0.1:4083，把「通知 / 读屏 / 点击」暴露给引擎内 Agent。
  *
  * 与 ShizukuHttpBridge 同构（原生 ServerSocket 环回 HTTP），但【不依赖任何特权模式】——
  * 通知是无障碍是 App 自身能力，普通模式即可用。
@@ -41,12 +41,12 @@ object AgentBridge {
 
     private const val TAG = "AgentBridge"
     /** 默认端口（兼容旧引用）；实际监听端口见 [currentPort]，可能因占用顺延 */
-    const val PORT = 3083
+    const val PORT = 4083
 
     /**
      * 实际监听端口（v1.5.2）。0 = 尚未启动。
      *
-     * 同机多个 DSH 实例（不同包名）会抢默认 3083；[start] 时从上次成功端口起顺延，
+     * 同机多个 DSH 实例（不同包名）会抢默认 4083；[start] 时从上次成功端口起顺延，
      * 绑定成功后写入这里并持久化。gates 脚本通过 DSH_BRIDGE_PORT 环境变量拿这个值。
      */
     @Volatile private var activePort = 0
@@ -120,7 +120,7 @@ object AgentBridge {
      * 桥访问 token（v1.2.99）。
      *
      * ## 为什么需要
-     * 桥监听 `127.0.0.1:3083`，把读屏 / 点击 / 通知 / 手势等能力暴露成 HTTP。
+     * 桥监听 `127.0.0.1:4083`，把读屏 / 点击 / 通知 / 手势等能力暴露成 HTTP。
      * 未鉴权时，**同设备上任何 App** 都能直接调用 —— 等于把无障碍能力借给第三方。
      * 加 token 门控后，只有拿到 token 的引擎内 Agent 能调。
      *
@@ -205,7 +205,7 @@ object AgentBridge {
             // 旧实现只打一行 Log.w，于是「notify / scr / say 全哑」在现场被反复
             // 误判成「无障碍没开 / 桥没就绪」，真因（端口被占）谁也看不见。
             // 现在把占用者一并查出来 —— 典型元凶是继承了桥 listen socket 的历史
-            // 孤儿（3083 无 O_CLOEXEC，见 OrphanReaper 顶部说明），并主动告知用户。
+            // 孤儿（4083 无 O_CLOEXEC，见 OrphanReaper 顶部说明），并主动告知用户。
             val triedPort = if (activePort > 0) activePort else EngineConfig.lastBridgePort(ctx)
             val holder = portHolder(triedPort)
             Log.e(
@@ -361,7 +361,7 @@ object AgentBridge {
                 val body = if (n > 0) String(bodyBytes, 0, n, StandardCharsets.UTF_8) else ""
 
                 // 桥鉴权（v1.2.99）：只允许携带本机 token 的请求。
-                // 为什么需要：桥监听 127.0.0.1:3083，**同设备上任何 App 都能访问** ——
+                // 为什么需要：桥监听 127.0.0.1:4083，**同设备上任何 App 都能访问** ——
                 // 未鉴权时第三方应用可以直接读屏、点击、发通知（等于把无障碍能力
                 // 借给任意 App）。token 每次启动随机生成、只写进引擎环境变量，
                 // 因此只有引擎内的 Agent 拿得到。
@@ -610,7 +610,7 @@ object AgentBridge {
 
     /**
      * GET /diag → HTML 自诊断页（Android 11 等老设备排障）：
-     * WebView UA 与 JS API 缺失检测、引擎状态、3080 HTTP/WS 探测、
+     * WebView UA 与 JS API 缺失检测、引擎状态、4080 HTTP/WS 探测、
      * runtime 版本、polyfill 落地、engine.log 尾部。用户在设备浏览器打开截图即可。
      */
     private fun diag(ctx: Context): Pair<Int, String> {
@@ -634,7 +634,7 @@ object AgentBridge {
             if (f.isFile) f.readText().takeLast(2500) else "(no engine.log)"
         }.getOrDefault("(log read failed)")
 
-        // HTTP 探测（v1.5.2：跟随实际引擎端口，可能不是 3080）
+        // HTTP 探测（v1.5.2：跟随实际引擎端口，可能不是 4080）
         val probePort = EngineConfig.lastEnginePort(ctx)
         val httpProbe = runCatching {
             val c = (java.net.URL("http://127.0.0.1:$probePort/").openConnection()

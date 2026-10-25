@@ -61,7 +61,7 @@ class EngineService : Service() {
         app.supervisor.start(app.appScope)
 
         // v1.2.160：按偏好恢复「局域网访问 WebUI」代理（默认关闭）。
-        // 刻意与引擎解耦：独立线程 + 独立端口 3090，失败只记日志，不抛出、不重启。
+        // 刻意与引擎解耦：独立线程 + 独立端口 4090，失败只记日志，不抛出、不重启。
         runCatching {
             // ⚠️ 先注入 context：LanWebProxy.start() 需要它推导引擎目录。
             // 原设计靠 AgentBridge 注入，但 AgentBridge 在 EngineSupervisor 启动流程里
@@ -246,7 +246,7 @@ class EngineService : Service() {
             // 释放 ~380MB（v1.2.187，用户反馈「退出不彻底、后台仍占内存耗电」）。
             runCatching { (application as DshApp).supervisor.stop(graceMs = 3_000, explicit = true) }
             // v1.2.187：这两个是**独立子进程**，不在引擎进程树里，退出时必须显式停 ——
-            //  · 局域网 WebUI 代理（node，端口 3090）：开着时退出引擎它仍在跑
+            //  · 局域网 WebUI 代理（node，端口 4090）：开着时退出引擎它仍在跑
             //  · 本地推理服务（llama-server）：/local/ensure 起过就一直驻留
             // 不停的话用户看到"引擎停了"但后台仍有进程吃内存/电。
             runCatching { dsh.dsh.mobile.engine.LanWebProxy.stop() }

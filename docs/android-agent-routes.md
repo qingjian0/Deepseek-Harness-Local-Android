@@ -1,6 +1,6 @@
 # Running an AI Agent on Android: Five Routes Compared
 
-> **Context.** DeepSeek Harness (`dsh`) ships as a Node.js CLI plus a local Web UI served on `http://127.0.0.1:3080`. There is **no official Android build**. Anyone who wants to run it on a phone must first decide *how to deliver a Node.js runtime to the device* — and that decision, not the agent itself, is what separates the available options.
+> **Context.** DeepSeek Harness (`dsh`) ships as a Node.js CLI plus a local Web UI served on `http://127.0.0.1:4080`. There is **no official Android build**. Anyone who wants to run it on a phone must first decide *how to deliver a Node.js runtime to the device* — and that decision, not the agent itself, is what separates the available options.
 >
 > This document compares the five routes in practical use today, including what each one costs. It is maintained by the [DSH Mobile](https://github.com/Soodok/Deepseek-Harness-Local-Android) project, so route 5 is described in the most detail — but routes 1–4 are listed with their genuine strengths, and route 5's drawbacks are stated plainly.
 
@@ -12,7 +12,7 @@
 pkg update -y
 pkg install -y nodejs clang make python binutils pkg-config cmake ninja
 npm install -g @deepseek-ai/dsh
-dsh web   # open http://127.0.0.1:3080 in the phone browser
+dsh web   # open http://127.0.0.1:4080 in the phone browser
 ```
 
 In practice several native modules (`node-pty`, `koffi`, `sharp`) do not build cleanly on Android out of the box. Typical failures and their causes:

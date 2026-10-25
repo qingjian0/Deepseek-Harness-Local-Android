@@ -20,24 +20,24 @@ import java.nio.file.Files
  */
 object EngineConfig {
 
-    const val DEFAULT_PORT = 3080
+    const val DEFAULT_PORT = 4080
 
     /** 能力桥默认端口；实际端口可能顺延（见 AgentBridge.currentPort） */
-    const val DEFAULT_BRIDGE_PORT = 3083
+    const val DEFAULT_BRIDGE_PORT = 4083
 
     /** 本地嵌入模型服务端口（FastPicker 语义层），端口探测必须避开 */
-    const val LOCAL_EMBED_PORT = 3085
+    const val LOCAL_EMBED_PORT = 4085
 
     private const val PORT_PREFS = "dsh_ports"
     private const val KEY_ENGINE_PORT = "engine_port"
     private const val KEY_BRIDGE_PORT = "bridge_port"
 
     /**
-     * 端口策略（v1.5.2，用户要求「3080 被占就用 3081/3082」）。
+     * 端口策略（v1.5.2，用户要求「4080 被占就用 3081/3082」）。
      *
      * 背景：包名与端口都固定的年代，同一台手机装两个 DSH（旧包 app.dsh.mobile +
-     * 新包 dsh.dsh.mobile）必然抢 3080/3083 —— 后启动的那个 bind 失败、启动报错
-     * （实测新包日志：`[bridge] bind FAILED on 127.0.0.1:3083: EADDRINUSE`）。
+     * 新包 dsh.dsh.mobile）必然抢 4080/4083 —— 后启动的那个 bind 失败、启动报错
+     * （实测新包日志：`[bridge] bind FAILED on 127.0.0.1:4083: EADDRINUSE`）。
      *
      * 策略 = **优先上次成功端口 → 被占则 +1 顺延（最多 20 个）**。
      *  · 记住上次端口：正常重启时端口稳定，用户收藏的 WebUI 地址不会乱跳；
@@ -1181,7 +1181,7 @@ object EngineConfig {
             |  disabled: false
             |  config:
             |    host: !!js ctx.webStartup.host ?? '127.0.0.1'
-            |    port: !!js ctx.webStartup.port ?? 3080
+            |    port: !!js ctx.webStartup.port ?? 4080
             |    compression: gzip
             |    compressionLevel: 1
             |    compressionThresholdBytes: 1024
@@ -1377,7 +1377,7 @@ object EngineConfig {
         // 其他模式删除，AI 调 shz 将无命令。
         applyShzGate(root, privMode, port)
         // v1.1.0：notify/scr 包装器（所有模式可用——通知与无障碍是 App 自身能力，
-        // 经 AgentBridge 127.0.0.1:3083 转发）。
+        // 经 AgentBridge 127.0.0.1:4083 转发）。
         applyAgentGates(ctx, root)
         // v1.2.0 扩展环境：已激活扩展的 bin/lib 并入 PATH/LD_LIBRARY_PATH
         // （顺序：engine 自带 → 扩展 → 系统，保证 su/notify/scr 闸门优先级不被扩展覆盖）
@@ -1614,7 +1614,7 @@ object EngineConfig {
 
     /**
      * Agent 能力包装器（v1.1.0）：notify / scr，全模式注入。
-     * 二者都是 node fetch 到 AgentBridge (127.0.0.1:3083) 的薄包装：
+     * 二者都是 node fetch 到 AgentBridge (127.0.0.1:4083) 的薄包装：
      *  - notify [message]        → POST /notify（任务完成系统通知；AGENTS.md 约定任务完成必调）
      *  - scr dump                → GET  /screen（读屏：可见文本+坐标 JSON）
      *  - scr tap <x> <y>         → POST /tap 坐标点击
@@ -1701,7 +1701,7 @@ object EngineConfig {
             if (broken.isNotEmpty()) {
                 Log.w(TAG, "agent gates BROKEN: ${broken.joinToString("; ")}")
             } else {
-                Log.i(TAG, "agent gates: notify/scr/say/_dsh_http.sh deployed (bridge :3083)")
+                Log.i(TAG, "agent gates: notify/scr/say/_dsh_http.sh deployed (bridge :4083)")
             }
 
             // ── Android 编译桩 jar 预置（v1.2.107）────────────────────────────
