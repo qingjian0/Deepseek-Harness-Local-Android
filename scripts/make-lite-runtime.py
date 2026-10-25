@@ -54,13 +54,22 @@ STRIP_PREFIXES = [
     "lib/node_modules/@deepseek-ai/libreoffice-kit/",
     # 开发者工具面板：22MB
     "lib/node_modules/@deepseek-ai/dsh-experimental-inspector/",
+    # Office 插件本体（v1.5.4）：它们 require 已剥离的 libreoffice-kit。
+    # 只删依赖不删包会留下「包在、依赖不在」的半残状态 → 引擎启动时
+    # failed to import → plugin health degraded → 插件恢复逻辑重启引擎
+    # （1.5.3 真机实测：office-to-pdf 报 ERR_MODULE_NOT_FOUND 并触发重启）。
+    # 整包剥离 + 从宿主 package.json 摘掉声明，才是自洽的精简。
+    "lib/node_modules/@deepseek-ai/dsh-office-to-pdf/",
+    "lib/node_modules/@deepseek-ai/dsh-skill-office/",
 ]
 
 # 从这些 package.json 里移除对被剥离包的依赖声明
 DEPENDENCY_HOSTS = [
-    "lib/node_modules/@deepseek-ai/dsh-office-to-pdf/package.json",
-    "lib/node_modules/@deepseek-ai/dsh-skill-office/package.json",
     "lib/node_modules/@deepseek-ai/dsh-experimental-inspector-profile/package.json",
+    # v1.5.4：这两个 bundle 的 dependencies 里声明了 office-to-pdf / skill-office，
+    # 包被整包剥离后必须同步摘掉，否则引擎仍会尝试 import（实测 degraded 根因）。
+    "lib/node_modules/@deepseek-ai/dsh-web-app/package.json",
+    "lib/node_modules/@deepseek-ai/dsh-api-remotes/package.json",
 ]
 
 # 被剥离的包名（用于清理 dependencies 字段）
@@ -68,6 +77,9 @@ STRIPPED_PACKAGES = [
     "@deepseek-ai/libreoffice-kit-wasm",
     "@deepseek-ai/libreoffice-kit",
     "@deepseek-ai/dsh-experimental-inspector",
+    # v1.5.4：随 LibreOffice 一起剥离的 Office 插件（见 STRIP_PREFIXES 注释）
+    "@deepseek-ai/dsh-office-to-pdf",
+    "@deepseek-ai/dsh-skill-office",
 ]
 
 
