@@ -153,7 +153,7 @@ object LanWebProxy {
                 val workDir: java.io.File = EngineConfig.engineRoot(ctx)
                 // 复用引擎的环境构造（正确处理 Termux 硬编码 OpenSSL 路径 / LD_LIBRARY_PATH /
                 // PREFIX / TMPDIR 等；手写会漏，实测漏 OPENSSL_CONF 导致 node exit=13）
-                val engineEnv: Array<String> = EngineConfig.buildEnv(ctx, EngineConfig.lastEnginePort(ctx))
+                val engineEnv: Array<String> = EngineConfig.buildEnv(ctx, EngineConfig.DEFAULT_PORT)
                 // 清掉上一次可能残留的代理进程：否则新进程会撞 EADDRINUSE。
                 // 自己拉起的子进程优先用 destroy（不需要提权），su 兜底覆盖"换进程后残留"。
                 killStaleProxy(ctx)
@@ -174,8 +174,7 @@ object LanWebProxy {
                     " DSH_LAN_PW='" + pw + "'" +
                     " nohup " + node.absolutePath + " " + scriptPath +
                     " --port " + PORT + " --pw '" + pw + "'" +
-                    // v1.5.2：引擎端口可能不是 4080（被占时顺延），代理上游必须跟随
-                    " --upstream 127.0.0.1:" + EngineConfig.lastEnginePort(ctx) +
+                    " --upstream 127.0.0.1:" + EngineConfig.DEFAULT_PORT +
                     " > " + logPath + " 2>&1 &"
                 val proc = ProcessBuilder("sh", "-c", sh).start()
                 val exit = proc.waitFor()

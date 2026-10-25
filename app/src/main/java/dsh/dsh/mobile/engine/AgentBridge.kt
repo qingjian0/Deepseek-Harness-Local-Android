@@ -40,22 +40,13 @@ import java.nio.charset.StandardCharsets
 object AgentBridge {
 
     private const val TAG = "AgentBridge"
-    /** 默认端口（兼容旧引用）；实际监听端口见 [currentPort]，可能因占用顺延 */
-    const val PORT = 4083
-
     /**
-     * 实际监听端口（v1.5.2）。0 = 尚未启动。
+     * 能力桥端口（v1.5.3：固定 4083）。
      *
-     * 同机多个 DSH 实例（不同包名）会抢默认 4083；[start] 时从上次成功端口起顺延，
-     * 绑定成功后写入这里并持久化。gates 脚本通过 DSH_BRIDGE_PORT 环境变量拿这个值。
+     * 旧包 app.dsh.mobile 仍占 3083，新包用 4083 —— 两个实例可同时运行。
+     * gates 脚本通过 DSH_BRIDGE_PORT 环境变量拿到这个值（EngineConfig.buildEnv）。
      */
-    @Volatile private var activePort = 0
-
-    fun currentPort(ctx: Context): Int =
-        if (activePort > 0) activePort else EngineConfig.lastBridgePort(ctx)
-
-    /** 无 Context 版本（已启动时才有意义；0 = 尚未启动） */
-    fun currentPortNow(): Int = activePort
+    const val PORT = 4083
     private const val CHANNEL_ID = "agent_notify"
 
     @Volatile private var server: ServerSocket? = null
@@ -162,27 +153,7 @@ object AgentBridge {
         // 同设备第三方 App 拿不到 → 无法调用读屏/点击/通知等能力。
         ensureToken(ctx)
         try {
-            // v1.5.2：默认端口被占用时顺延（最多 20 个），避免同机多实例直接起不来
-            val base = EngineConfig.pickPort(
-                EngineConfig.lastBridgePort(ctx),
-                skip = setOf(EngineConfig.LOCAL_EMBED_PORT, EngineConfig.lastEnginePort(ctx)),
-            )
-            var found: ServerSocket? = null
-            var boundPort = base
-            for (i in 0..20) {
-                val p = base + i
-                if (p > 65_535 || p == EngineConfig.LOCAL_EMBED_PORT) continue
-                try {
-                    found = ServerSocket(p, 16, java.net.InetAddress.getByName("127.0.0.1"))
-                    boundPort = p
-                    break
-                } catch (e: Exception) {
-                    Log.w(TAG, "bridge bind :$p failed (${e.message}); trying next port")
-                }
-            }
-            val ss = found ?: throw java.io.IOException("no free bridge port near $base")
-            activePort = boundPort
-            EngineConfig.rememberBridgePort(ctx, boundPort)
+            val ss = ServerSocket(PORT, 16, java.net.InetAddress.getByName("127.0.0.1"))
             server = ss
             thread = Thread({
                 while (!ss.isClosed) {
@@ -194,7 +165,7 @@ object AgentBridge {
                     }
                 }
             }, "AgentBridge").apply { isDaemon = true; start() }
-            Log.i(TAG, "agent bridge started on 127.0.0.1:$boundPort")
+            Log.i(TAG, "agent bridge started on 127.0.0.1:$PORT")
             // 对话完成监听（v1.2.57）：不依赖 AI 主动调 notify —— 只要会话写入
             // turn/end 事件就提示用户（用户反馈「任务完成后通知栏没有任何信息」）。
             TurnWatcher.start(ctx.applicationContext) { session ->
@@ -206,17 +177,16 @@ object AgentBridge {
             // 误判成「无障碍没开 / 桥没就绪」，真因（端口被占）谁也看不见。
             // 现在把占用者一并查出来 —— 典型元凶是继承了桥 listen socket 的历史
             // 孤儿（4083 无 O_CLOEXEC，见 OrphanReaper 顶部说明），并主动告知用户。
-            val triedPort = if (activePort > 0) activePort else EngineConfig.lastBridgePort(ctx)
-            val holder = portHolder(triedPort)
+            val holder = portHolder(PORT)
             Log.e(
                 TAG,
-                "bridge bind FAILED on 127.0.0.1:$triedPort: ${e.message}" +
+                "bridge bind FAILED on 127.0.0.1:$PORT: ${e.message}" +
                     (holder?.let { "; holder=$it" } ?: ""),
             )
             // 也落 engine.log：用户/支持要把这个文件发出来，logcat 抓不到历史
             runCatching {
                 java.io.File(EngineConfig.engineRoot(ctx), "engine.log")
-                    .appendText("[bridge] bind FAILED on 127.0.0.1:$triedPort: ${e.message}; holder=${holder ?: "?"}\n")
+                    .appendText("[bridge] bind FAILED on 127.0.0.1:$PORT: ${e.message}; holder=${holder ?: "?"}\n")
             }
             runCatching {
                 notify(
@@ -227,7 +197,7 @@ object AgentBridge {
                             "body",
                             ctx.getString(
                                 R.string.bridge_down_body,
-                                triedPort,
+                                PORT,
                                 holder ?: e.message.orEmpty(),
                             ),
                         )
@@ -634,8 +604,8 @@ object AgentBridge {
             if (f.isFile) f.readText().takeLast(2500) else "(no engine.log)"
         }.getOrDefault("(log read failed)")
 
-        // HTTP 探测（v1.5.2：跟随实际引擎端口，可能不是 4080）
-        val probePort = EngineConfig.lastEnginePort(ctx)
+        // HTTP 探测（v1.5.3：固定引擎端口 4080）
+        val probePort = EngineConfig.DEFAULT_PORT
         val httpProbe = runCatching {
             val c = (java.net.URL("http://127.0.0.1:$probePort/").openConnection()
                     as java.net.HttpURLConnection).apply { connectTimeout = 4000; readTimeout = 4000 }

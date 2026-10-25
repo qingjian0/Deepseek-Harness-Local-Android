@@ -112,11 +112,10 @@ class EngineSupervisor(private val ctx: Context) {
     @Volatile private var process: EngineProcess? = null
 
     /**
-     * 本次启动使用的引擎端口（v1.5.2）。
+     * 本次启动使用的引擎端口（v1.5.3：**固定 4080**，不做探测/顺延）。
      *
-     * 默认 4080，但同机另一个 DSH 实例（不同包名）会占用它 —— 启动前按
-     * 「上次成功端口 → 被占则顺延」解析（见 EngineConfig.resolveEnginePort），
-     * 所有 URL / 健康探测 / 状态上报都用这个字段，绝不再直接引用 DEFAULT_PORT。
+     * 旧包 app.dsh.mobile 用 3080 段、新包用 4080 段，两者可同时运行。
+     * URL / 健康探测 / 状态上报统一走这个字段，避免散落引用默认常量。
      */
     @Volatile private var activePort: Int = EngineConfig.DEFAULT_PORT
     @Volatile private var recoveredPlugin: String? = null
@@ -311,11 +310,7 @@ class EngineSupervisor(private val ctx: Context) {
                 withContext(Dispatchers.IO) { AgentBridge.start(ctx) }
                 step("bridge")
 
-                // v1.5.2（用户要求）：同机多实例/端口被占时不再直接启动失败 ——
-                // 按「上次成功端口 → 被占则顺延」选一个引擎端口，避开能力桥与嵌入服务。
-                activePort = withContext(Dispatchers.IO) { EngineConfig.resolveEnginePort(ctx) }
-                step("port")
-                Log.i(TAG, "engine port: $activePort (bridge :${AgentBridge.currentPort(ctx)})")
+                Log.i(TAG, "engine port: $activePort (bridge :${AgentBridge.PORT})")
 
                 // 本地快速决策层预热（v1.4.22）：模型已下载时后台拉起 llama-server，
                 // 让 FastPicker 语义匹配在每次引擎启动后即可用（服务不随重启恢复，
@@ -487,14 +482,6 @@ class EngineSupervisor(private val ctx: Context) {
                     withContext(Dispatchers.IO) { reclaimPort() }
                     deterministicFailure = null
                     delay(1_200)
-                    // v1.5.2：回收只对「同 uid 的孤儿」有效；如果占用者是另一个 DSH
-                    // 实例（不同包名，杀不掉），就顺延一个端口再启动，而不是红脸失败。
-                    if (withContext(Dispatchers.IO) { portInUse() }) {
-                        val next = EngineConfig.lastEnginePort(ctx) + 1
-                        EngineConfig.rememberEnginePort(ctx, next)
-                        activePort = withContext(Dispatchers.IO) { EngineConfig.resolveEnginePort(ctx) }
-                        Log.w(TAG, "port still held after reclaim — switching engine port to $activePort")
-                    }
                 } else {
                     Log.e(
                         TAG,
