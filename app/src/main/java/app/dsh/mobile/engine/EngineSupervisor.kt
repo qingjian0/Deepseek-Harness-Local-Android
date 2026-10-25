@@ -288,12 +288,24 @@ class EngineSupervisor(private val ctx: Context) {
                 step("guardian-restore")
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
 
+                // AGENTS.md 旧种子清理（v1.4.22）：升级前写入的「dsh-android AGENTS seed」
+                // 段不会自动消失，会作为 user-global 指令注入每次会话。这里只剥旧种子、
+                // 保留用户段；无标记的文件不动，也不创建文件。
+                val seedStripped = withContext(Dispatchers.IO) { AgentContextSeed.stripLegacySeedOnBoot(ctx) }
+                step("agents-seed")
+                if (seedStripped) Log.i(TAG, "AGENTS.md: stripped legacy app seed, user section preserved")
+
                 // 孤儿进程回收（v1.2.104）：必须早于桥 bind 与引擎 fork
                 withContext(Dispatchers.IO) { OrphanReaper.reap(ctx) }
                 step("orphan-reap")
 
                 withContext(Dispatchers.IO) { AgentBridge.start(ctx) }
                 step("bridge")
+
+                // 本地快速决策层预热（v1.4.22）：模型已下载时后台拉起 llama-server，
+                // 让 FastPicker 语义匹配在每次引擎启动后即可用（服务不随重启恢复，
+                // 不预热就会整段退化到云端，每步多几秒）。不触发模型下载，失败静默。
+                scopeRef?.launch(Dispatchers.IO) { LocalModel.warmUpIfReady(ctx) }
 
                 val needFix = withContext(Dispatchers.IO) { Privilege.dshHomeNeedsOwnershipFix(ctx) }
                 if (needFix) {

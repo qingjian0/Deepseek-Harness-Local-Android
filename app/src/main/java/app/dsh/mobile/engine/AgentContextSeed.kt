@@ -68,6 +68,33 @@ object AgentContextSeed {
         Log.i(TAG, "legacy AGENTS.md stripped to user section")
     }
 
+    /**
+     * 启动时清理旧版 App 注入的默认种子（v1.4.22）。
+     *
+     * 背景：旧版本把整份 Android 环境说明以「dsh-android AGENTS seed vNN」的形式写进
+     * `$DSH_HOME/AGENTS.md`，而引擎会把该文件当作 user-global 指令注入**每一次会话**。
+     * 新版已在启动流程中移除写入调用，但**旧文件不会被自动清理** —— 升级后它仍会
+     * 继续出现在每个会话的系统提示里，用户无法通过界面去掉。
+     *
+     * 本函数只做一件事：文件里若仍带旧版种子标记，就把 App 段剥掉、**只保留用户段**
+     * （与 [writeUserSection] 的清理逻辑一致）。没有标记的文件一律不动，也不会创建新文件。
+     *
+     * 调用点：EngineSupervisor 启动流程早期（IO 线程），见 `agents-seed` 步骤。
+     *
+     * @return true 表示确实改写（清掉了旧种子）
+     */
+    fun stripLegacySeedOnBoot(ctx: Context): Boolean {
+        val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
+        if (!file.isFile) return false
+        val existing = runCatching { file.readText() }.getOrNull() ?: return false
+        if (!existing.contains(LEGACY_APP_MARKER_PREFIX)) return false
+        // 已无 App 段的用户文件不应被再次改写（幂等：只剩用户段的文件不再匹配上面的标记）
+        val next = userSection(parseUserSection(existing))
+        write(file, next)
+        Log.i(TAG, "startup: legacy app seed stripped, user section preserved")
+        return true
+    }
+
     private fun parseUserSection(text: String): String? {
         val begin = text.indexOf(USER_SECTION_BEGIN)
         if (begin < 0) return null

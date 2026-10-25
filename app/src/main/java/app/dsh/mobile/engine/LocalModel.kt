@@ -82,6 +82,30 @@ object LocalModel {
         return startServer(ctx, server, model)
     }
 
+    /**
+     * 启动预热（v1.4.22）—— 模型文件已在本地时，后台把 llama-server 拉起来。
+     *
+     * 背景：语义匹配层依赖这个常驻服务，而服务**不会随引擎重启自动恢复**。
+     * 实测用户重启后 /local/status 显示 modelReady=true 但 serverRunning=false，
+     * FastPicker 第二层整段失效 → loop 只能精确匹配，匹配不上就升级回云端（每步多几秒）。
+     *
+     * 与 [ensureReady] 的区别：**模型不存在时直接返回，绝不触发下载**
+     * （避免用户没主动开启时偷跑流量）；只有「模型已在 + 服务不在」才起服务。
+     * 幂等、失败静默（语义层只是优化，不可用不影响任何功能）。
+     */
+    fun warmUpIfReady(ctx: Context) {
+        if (isServerRunning()) return
+        if (!isModelReady(ctx)) return
+        runCatching {
+            val server = llamaServer(ctx) ?: run {
+                Log.i(TAG, "warm-up skipped: llama-server binary not installed")
+                return
+            }
+            val ok = startServer(ctx, server, modelFile(ctx))
+            Log.i(TAG, "warm-up: local embedding server ${if (ok) "started" else "unavailable"}")
+        }.onFailure { Log.w(TAG, "warm-up failed: ${it.message}") }
+    }
+
     /** 下载模型（多镜像 failover；写到 .part 再改名，避免半截文件被当成完整模型） */
     private fun downloadModel(target: File, onProgress: (Float, String) -> Unit): Boolean {
         val part = File(target.absolutePath + ".part")

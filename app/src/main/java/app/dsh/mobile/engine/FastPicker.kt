@@ -236,6 +236,20 @@ object LocalEmbedder {
     }
 
     /**
+     * 文本 → 向量缓存（v1.4.22 性能）。
+     *
+     * 实测语义 pick 单次 763–1096ms，而 15MB 嵌入模型热态本身是毫秒级 ——
+     * 慢在**每次动作都把整屏 N+1 条文本重新嵌入**。连续动作之间屏幕文本高度重复
+     * （同屏多次 pick、verify 的语义兜底），因此按文本缓存向量：
+     * 热态只请求新出现的文本，通常 0–3 条 → 毫秒级。
+     *
+     * 上限 [VEC_CACHE_MAX] 条；bge-small 512 维 Double ≈ 4KB/条 → 最多约 2MB。
+     * 超限时整体清空（屏幕文本集变化后旧条目热度很低，简单清空比 LRU 划算）。
+     */
+    private val vecCache = java.util.concurrent.ConcurrentHashMap<String, DoubleArray>()
+    private const val VEC_CACHE_MAX = 512
+
+    /**
      * 在候选文本里找与目标最相关的一个。
      * @return null = 服务不可用（调用方回退云端）
      */
@@ -243,35 +257,54 @@ object LocalEmbedder {
         if (candidates.isEmpty() || target.isBlank()) return null
         if (!isReady()) return null
         return runCatching {
-            val inputs = (listOf(target) + candidates)
-            val body = JSONObject().apply {
-                put("model", "local")
-                put("input", JSONArray(inputs))
-            }.toString()
-            val conn = java.net.URL("http://127.0.0.1:$PORT/v1/embeddings").openConnection()
-            conn.doOutput = true
-            conn.connectTimeout = 2000
-            // v1.2.152：4s→2.5s。15MB 模型**热态**是毫秒级；冷加载应在 llama-server
-            // 启动时完成（LocalModel 有预热），不该让 verify 的预算替它买单——
-            // 实测一次冷调用吃掉 8s，把 timeoutMs=6000 的验证拖成 14s。
-            conn.readTimeout = 2500
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.outputStream.use { it.write(body.toByteArray()) }
-            val resp = conn.getInputStream().bufferedReader().use { it.readText() }
-            val vecs = parseEmbeddings(resp, inputs.size) ?: return@runCatching null
-            if (vecs.size < 2) return@runCatching null
-            val targetVec = vecs[0]
+            val want = target.trim()
+            // 去重后只请求缓存里没有的文本（v1.4.22）
+            val needed = LinkedHashSet<String>(candidates.size + 1)
+            needed.add(want)
+            for (c in candidates) needed.add(c)
+            val missing = needed.filter { vecCache[it] == null }
+            if (missing.isNotEmpty()) {
+                val vecs = fetchEmbeddings(missing) ?: return@runCatching null
+                // 数量不符 → 不写入缓存，避免文本与向量错配
+                if (vecs.size != missing.size) return@runCatching null
+                if (vecCache.size + missing.size > VEC_CACHE_MAX) vecCache.clear()
+                for (i in missing.indices) vecCache[missing[i]] = vecs[i]
+            }
+            val targetVec = vecCache[want] ?: return@runCatching null
             var bestIdx = -1
             var bestScore = -1.0
-            for (i in 1 until vecs.size) {
-                val s = cosine(targetVec, vecs[i])
-                if (s > bestScore) { bestScore = s; bestIdx = i - 1 }
+            for (i in candidates.indices) {
+                val v = vecCache[candidates[i]] ?: continue
+                val s = cosine(targetVec, v)
+                if (s > bestScore) { bestScore = s; bestIdx = i }
             }
             if (bestIdx < 0) null else Match(bestIdx, bestScore)
         }.getOrElse {
             Log.w(TAG, "embedding failed: ${it.message}")
             null
         }
+    }
+
+    /** POST /v1/embeddings（从 bestMatch 抽出，v1.4.22） */
+    private fun fetchEmbeddings(texts: List<String>): List<DoubleArray>? = runCatching {
+        val body = JSONObject().apply {
+            put("model", "local")
+            put("input", JSONArray(texts))
+        }.toString()
+        val conn = java.net.URL("http://127.0.0.1:$PORT/v1/embeddings").openConnection()
+        conn.doOutput = true
+        conn.connectTimeout = 2000
+        // v1.2.152：4s→2.5s。15MB 模型**热态**是毫秒级；冷加载应在 llama-server
+        // 启动时完成（LocalModel 有预热），不该让 verify 的预算替它买单——
+        // 实测一次冷调用吃掉 8s，把 timeoutMs=6000 的验证拖成 14s。
+        conn.readTimeout = 2500
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.outputStream.use { it.write(body.toByteArray()) }
+        val resp = conn.getInputStream().bufferedReader().use { it.readText() }
+        parseEmbeddings(resp, texts.size)
+    }.getOrElse {
+        Log.w(TAG, "embedding request failed: ${it.message}")
+        null
     }
 
     private fun parseEmbeddings(json: String, expect: Int): List<DoubleArray>? = runCatching {
