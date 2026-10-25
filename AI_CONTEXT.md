@@ -1,5 +1,23 @@
 # AI_CONTEXT
 
+## 2026-10-26 PR #48 复审结论（未合并，等作者处理 P1-1）
+- **作者已按上轮意见修复**（head f972136 → 35570dc，rebase 到含 v1.4.21 的 main）：
+  - P0 MANIFEST.json modify/delete 冲突：**已解**（`git merge-tree main pr-48-v2` 干净）
+  - P1 PetBridgeServer 无鉴权：**已修**（eace5c1，fail-closed + 头精确匹配 + token 经
+    DSH_PET_BRIDGE_TOKEN 注入引擎 env，照抄 AgentBridge 先例）
+  - 额外修了运行时安装并发（544a90c，INSTALL_LOCK 串行化，无死锁——两入口均在后台线程）
+  - 新增下载代理（默认 gh-proxy.org，纯前缀拼接，**完整性链不降级**：sha256 pin 硬前置
+    + 每 URL 校验 + 索引验签；可留空直连）
+  - CI: publish-preview 仅 schedule 触发、固定 tag + overwrite，不会回归刷包
+- **新发现 P1（发布协调缺口，合并前置）**：`docs/PET_OVERLAY.md` 声称桥插件需 ≥0.2.0，
+  但 **npm 上 dsh-pet-bridge 只有 0.1.0**（2026-08-21 发布，tarball 全文无 token 头）。
+  门控 fail-closed → 装 0.1.0 的用户每个 /bubble 得 403 → 插件静默丢弃 → **桌宠气泡
+  全用户静默失效**。已在 PR 评论给出三个选项 + 可直接粘贴的 PetPluginDetector 版本校验
+  实现（bridgeTooOld 判定 + 设置页提示）。
+- 探针实测：pr-48-v2 快照上 responsive 58 项 + pet 94 项 全 PASS。
+- P2 待后续：token 非常量时间比较、首启弹窗隐私披露、orderUrls opt-out 不对称。
+- **状态**：等作者发 0.2.0 或加版本兜底后合并。
+
 ## v1.4.21 已发布（2026-10-25，插件中心重写，tag run 40206163982，7 分钟全绿）
 - **参考对象**：开源 DSHA（DSH-APP/DSHA，Apache 2.0）的 PluginFragment / PluginRepository /
   PluginSource / PluginSort——源码经 GitHub contents API 取（raw.githubusercontent 被墙）。
