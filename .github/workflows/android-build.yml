@@ -130,6 +130,25 @@ jobs:
           chmod +x scripts/collect-termux-runtime.sh
           ./scripts/collect-termux-runtime.sh runtime.zip ${{ matrix.termux_arch }}
 
+      # v1.5.1（用户反馈「安装包太大」）：完整 runtime 里 145MB 是 LibreOffice
+      # WASM（soffice.wasm 121.9MB + soffice.data 22MB，仅用于 Office→PDF 预览），
+      # 另有 22MB 实验性 inspector。仓库自带 scripts/make-lite-runtime.py 负责
+      # 安全剥离（同步删除 package.json 依赖声明；不动核心包 / bin / lib*.so），
+      # 此前只手工用、没接进 CI —— 于是每次发布都是 228MB 完整包。
+      # 失败时回退完整运行时：宁可包大，也不让「精简」把构建搞红。
+      - name: 生成轻量运行时（剥离 LibreOffice 145MB + inspector 22MB）
+        run: |
+          set -euo pipefail
+          du -h runtime.zip
+          if python3 scripts/make-lite-runtime.py runtime.zip runtime-lite.zip; then
+            ls -lh runtime-lite.zip
+            mv runtime-lite.zip runtime.zip
+            echo "::notice::lite runtime in use: $(du -h runtime.zip | cut -f1)"
+          else
+            echo "::warning::lite 运行时生成失败，回退完整运行时（APK 会大 ~167MB）"
+            rm -f runtime-lite.zip
+          fi
+
       - name: 校验运行时命令闭包（${{ matrix.abi }}）
         run: |
           rm -rf runtime-check && mkdir runtime-check
