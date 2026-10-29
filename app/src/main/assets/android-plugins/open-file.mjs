@@ -28,7 +28,7 @@
  *
  * ## Why the app and not a terminal editor
  * The document lives inside the app's private directory
- * (`/data/data/app.dsh.mobile/files/dsh-home/...`). No terminal editor shipped
+ * (`/data/data/dsh.dsh.mobile/files/dsh-home/...`). No terminal editor shipped
  * in the runtime (`vi`, `nano`) is reachable from the WebUI's click, and the
  * user is looking at the browser — bouncing them to a terminal would be worse
  * than the current failure. The in-app editor also gives a save path that
@@ -63,7 +63,7 @@ const name = "android-open-file";
 const inject = ["settingsController"];
 
 /** Bridge origin. The app listens on loopback only; see AgentBridge.kt. */
-const BRIDGE = "http://127.0.0.1:3083";
+const BRIDGE = "http://127.0.0.1:4083";
 
 /** Token environment variable exported by the app for this engine process. */
 const TOKEN_ENV = "DSH_BRIDGE_TOKEN";

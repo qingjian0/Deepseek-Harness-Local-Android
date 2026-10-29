@@ -83,7 +83,7 @@ static void close_inherited_fds(void) {
  * 成功返回 master fd，失败返回负的 errno 取反（Java 层取 abs 得 errno）。
  */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeForkPty(
+Java_dsh_dsh_mobile_engine_Pty_nativeForkPty(
         JNIEnv *env, jclass clazz,
         jstring jCmd, jobjectArray jArgs, jstring jCwd,
         jobjectArray jEnv, jint rows, jint cols) {
@@ -168,13 +168,13 @@ fail_errno:
 
 /* 当前跟踪的子进程 PID（供 Java 层进程组/树级清理） */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeChildPid(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeChildPid(JNIEnv *env, jclass clazz) {
     return (g_child > 0) ? (jint)g_child : -1;
 }
 
 /* 阻塞等待子进程退出，返回原始 waitpid status（Java 层解析） */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
     if (g_child <= 0) return -1;
     int status = 0;
     if (waitpid(g_child, &status, 0) < 0) return -errno;
@@ -184,12 +184,12 @@ Java_app_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
 
 /* 向子进程发送信号（SIGTERM=15 / SIGKILL=9） */
 JNIEXPORT void JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeSignalChild(JNIEnv *env, jclass clazz, jint sig) {
+Java_dsh_dsh_mobile_engine_Pty_nativeSignalChild(JNIEnv *env, jclass clazz, jint sig) {
     if (g_child > 0) kill(g_child, sig);
 }
 
 /* Java 层关闭 master fd 后子进程收到 SIGHUP 会自然退出，此处兜底强杀 */
 JNIEXPORT void JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeForceKill(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeForceKill(JNIEnv *env, jclass clazz) {
     if (g_child > 0) kill(g_child, SIGKILL);
 }

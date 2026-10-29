@@ -36,8 +36,8 @@ fun hasCommand(cmd: String): Boolean = runCatching {
 val pythonCmd = if (hasCommand("python3")) "python3" else "python"
 
 val generateRepoConfig by tasks.registering {
-    val template = file("src/main/java/app/dsh/mobile/engine/RepoConfig.kt.tmpl")
-    val outFile = File(repoConfigDir, "app/dsh/mobile/engine/RepoConfig.kt")
+    val template = file("src/main/java/dsh/dsh/mobile/engine/RepoConfig.kt.tmpl")
+    val outFile = File(repoConfigDir, "dsh/dsh/mobile/engine/RepoConfig.kt")
     inputs.file(template)
     inputs.property("updateRepo", updateRepo)
     outputs.file(outFile)
@@ -161,19 +161,19 @@ tasks.matching { it.name.startsWith("process") && it.name.endsWith("Resources") 
     .configureEach { dependsOn(generateIndexPubKey) }
 
 android {
-    namespace = "app.dsh.mobile"
+    namespace = "dsh.dsh.mobile"
     // CI 上 compileSdk=35；本地 SDK 只有 33/36/36.1 时可临时降/升到此值，
     // compileSdk 仅决定编译期 API 可见性，不影响运行时行为（targetSdk=28 才是生效阈值）。
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.dsh.mobile"
+        applicationId = "dsh.dsh.mobile"
         minSdk = 26
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
         targetSdk = 28
-        versionCode = 291
-        versionName = "1.4.41"
+        versionCode = 292
+        versionName = "1.5.5"
 
         ndk {
             abiFilters += listOf(targetAbi)

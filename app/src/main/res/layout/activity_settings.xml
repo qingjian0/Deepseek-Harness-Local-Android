@@ -43,7 +43,7 @@
              把 settingsColumns 改成水平，左列「显示+权限中心」、右列「扩展+其他」；
              窄窗保持单列，顺序不变。不要改成 layout-land —— 这些 Activity 声明了
              configChanges，转屏不会重新 inflate。 -->
-        <app.dsh.mobile.MaxWidthLinearLayout
+        <dsh.dsh.mobile.MaxWidthLinearLayout
             android:id="@+id/settingsContentWidth"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -2028,6 +2028,6 @@
 
             </LinearLayout>
         </LinearLayout>
-        </app.dsh.mobile.MaxWidthLinearLayout>
+        </dsh.dsh.mobile.MaxWidthLinearLayout>
     </ScrollView>
 </LinearLayout>

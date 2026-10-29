@@ -26,12 +26,12 @@ WebUI 里，连"进插件中心卸载"都点不到。
 
 ### 路径 B · 本地 HTTP（界面点不动时）
 
-AgentBridge 只监听 `127.0.0.1:3083`，**且和其他端点一样要鉴权**（`X-DSH-Token`，
+AgentBridge 只监听 `127.0.0.1:4083`，**且和其他端点一样要鉴权**（`X-DSH-Token`，
 token 每进程随机生成、只通过环境变量交给引擎 —— 这是防同机第三方 App 调用读屏/
 点击能力的既有设计，本端点不破例）。所以这条路面向**调试 / 有 root 的用户**：
 
 ```bash
-adb forward tcp:3083 tcp:3083
+adb forward tcp:4083 tcp:4083
 
 # 取 token（debug 包用 run-as；release 包需要 root）
 TOKEN=$(adb shell "run-as <包名> sh -c 'PID=\$(pidof node); \
@@ -39,25 +39,25 @@ TOKEN=$(adb shell "run-as <包名> sh -c 'PID=\$(pidof node); \
   | tr -d '\r' | cut -d= -f2)
 
 # 查状态
-curl -s -H "X-DSH-Token: $TOKEN" http://127.0.0.1:3083/plugin/killswitch
+curl -s -H "X-DSH-Token: $TOKEN" http://127.0.0.1:4083/plugin/killswitch
 
 # 停用全部第三方插件（202 = 已受理，引擎随后重启）
 curl -s -X POST -H "X-DSH-Token: $TOKEN" -d '{"action":"disable"}' \
-  http://127.0.0.1:3083/plugin/killswitch
+  http://127.0.0.1:4083/plugin/killswitch
 
 # 恢复
 curl -s -X POST -H "X-DSH-Token: $TOKEN" -d '{"action":"enable"}' \
-  http://127.0.0.1:3083/plugin/killswitch
+  http://127.0.0.1:4083/plugin/killswitch
 
 # 单独启用一个第三方插件（仅停用期间有效；白名单，重启后加载）
 curl -s -X POST -H "X-DSH-Token: $TOKEN" \
   -d '{"action":"enable-one","package":"dsh-cost-meter"}' \
-  http://127.0.0.1:3083/plugin/killswitch
+  http://127.0.0.1:4083/plugin/killswitch
 
 # 再摘回去
 curl -s -X POST -H "X-DSH-Token: $TOKEN" \
   -d '{"action":"disable-one","package":"dsh-cost-meter"}' \
-  http://127.0.0.1:3083/plugin/killswitch
+  http://127.0.0.1:4083/plugin/killswitch
 ```
 
 不带 token 一律 `403 {"ok":false,"error":"unauthorised"}`（fail-closed，实测）。

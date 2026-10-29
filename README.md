@@ -86,7 +86,7 @@ DSH Mobile 走的是另一条路：**没有中间层**。
 ```mermaid
 graph LR
     A["APK<br/>assets/runtime.zip"] --> B["bionic Node.js<br/>dsh 引擎 + 工具链"]
-    B -->|"execve 直接启动"| C["dsh 引擎进程<br/>127.0.0.1:3080"]
+    B -->|"execve 直接启动"| C["dsh 引擎进程<br/>127.0.0.1:4080"]
     C --> D["WebView<br/>原生 App 壳"]
     C --> E["Agent 工具链<br/>文件 / 终端 / 无障碍"]
     D -.->|"localhost"| C

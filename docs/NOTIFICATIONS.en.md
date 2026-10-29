@@ -55,7 +55,7 @@ it in the same breath.
 from "engine crashed / reclaimed by the system":
 
 1. stop the engine (graceful, up to 3 s);
-2. stop **independent child processes**: the LAN proxy (node, port 3090) and the local inference
+2. stop **independent child processes**: the LAN proxy (node, port 4090) and the local inference
    service (llama-server);
 3. finish the main task (`finishAndRemoveTask`) → `onDestroy` → **destroy the WebView**;
 4. tear down the floating overlay, periodic refreshes and timers;
