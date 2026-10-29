@@ -117,7 +117,7 @@ object AgentContextSeed {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         if (!file.isFile) return false
         val existing = runCatching { file.readText() }.getOrNull() ?: return false
-        if (!existing.contains(LEGACY_APP_MARKER_PREFIX)) return false
+        if (!existing.contains(MARKER_PREFIX)) return false
         // 已无 App 段的用户文件不应被再次改写（幂等：只剩用户段的文件不再匹配上面的标记）
         val next = userSection(extractUserSection(existing))
         write(file, next)
