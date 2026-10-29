@@ -438,7 +438,10 @@ jobs:
           ACTUAL=$("$APKSIGNER" verify --print-certs "$APK" \
             | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1 | tr -d '[:space:]:' | tr 'A-Z' 'a-z')
           EXPECTED=$(printf '%s' "${{ vars.RELEASE_CERT_SHA256 }}" | tr -d ':' | tr 'A-Z' 'a-z')
-          if [ -n "$EXPECTED" ] && [ "$ACTUAL" != "$EXPECTED" ]; then
+          if [ -z "$EXPECTED" ]; then
+            echo "::warning::未设置 vars.RELEASE_CERT_SHA256 —— 本次只记录指纹 $ACTUAL，未做发布者连续性校验"
+            echo "- release 证书指纹: `$ACTUAL`(未 pin，建议设为仓库 Variable)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::release certificate mismatch: expected $EXPECTED, got $ACTUAL"
             exit 1
           fi
@@ -730,10 +733,47 @@ jobs:
           done <<< "$ASSETS"
 
   # ---------------------------------------------------------------------------
+  # P0 · 签名材料预检：只回答一个问题 —— 本仓库是否配齐了 RELEASE_*。
+  #   job 级 if 里读不到 secrets 上下文，所以必须由前置 job 探出来往下传。
+  #   这样「fork 没配 secrets」表现为 publish-edge = skipped（原因写进 Step
+  #   Summary），而不是一个假装成功的绿勾，也不是把整条流水线拖红的失败。
+  # ---------------------------------------------------------------------------
+  preflight:
+    runs-on: ubuntu-24.04
+    outputs:
+      release_signing: ${{ steps.probe.outputs.release_signing }}
+    steps:
+      - id: probe
+        env:
+          KS: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          SP: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KP: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "$KS" ]    || missing="$missing RELEASE_KEYSTORE_BASE64"
+          [ -n "$SP" ]    || missing="$missing RELEASE_STORE_PASSWORD"
+          [ -n "$ALIAS" ] || missing="$missing RELEASE_KEY_ALIAS"
+          [ -n "$KP" ]    || missing="$missing RELEASE_KEY_PASSWORD"
+          if [ -z "$missing" ]; then
+            echo "release_signing=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::RELEASE_* 齐全，release 签名通道启用"
+          else
+            echo "release_signing=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::缺 RELEASE_* secrets($missing )，签名通道关闭：只产 debug 包，publish-edge / publish-release 将跳过"
+            {
+              echo "## 签名通道：关闭(缺 secrets)"
+              echo ""
+              echo "缺失:`$missing`。本次只产 debug APK，不发布正式签名包(见 `docs/RELEASE.md`)。"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ---------------------------------------------------------------------------
   # Edge（每次 push main）：把最新 debug + release 发到 pre-release "edge"，
   # 用户不必等正式 tag 就能拿到包；tag v* 仍走上面的正式发布。
-  # 只发布 main（避免 feature 分支覆盖 edge）；缺签名 secrets 时 release 构建
-  # 会被跳过，本 job 直接失败并提示配置，避免发布「只有 debug」的半套。
+  # 只发布 main（避免 feature 分支覆盖 edge）；签名材料不齐时本 job 直接跳过
+  # （原因由 preflight 写进 Step Summary），不再因「没 secrets」把流水线拖红。
   # ---------------------------------------------------------------------------
   publish-edge:
     if: >-
@@ -742,7 +782,8 @@ jobs:
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       && github.ref == 'refs/heads/main'
       && needs.build-apk.result == 'success'
-    needs: [build-apk]
+      && needs.preflight.outputs.release_signing == 'true'
+    needs: [build-apk, preflight]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -821,7 +862,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-monitor:
     name: Build monitor (Zusammenfassung)
-    needs: [build-hardssh, fetch-runtime, build-apk, publish-preview, publish-edge, publish-release]
+    needs: [build-hardssh, fetch-runtime, build-apk, preflight, publish-preview, publish-edge, publish-release]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -837,6 +878,10 @@ jobs:
             echo "| publish-preview (每日定时) | ${{ needs.publish-preview.result }} |"
             echo "| publish-release (tag v*) | ${{ needs.publish-release.result }} |"
             echo "| publish-edge (push main) | ${{ needs.publish-edge.result }} |"
+            if [ "${{ needs.publish-edge.result }}" = "skipped" ]; then
+              echo ""
+              echo "> publish-edge 已跳过：签名材料不齐(`preflight` 显示 `${{ needs.preflight.outputs.release_signing }}`)，属预期行为，非失败。"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fehlschlag durchstellen
