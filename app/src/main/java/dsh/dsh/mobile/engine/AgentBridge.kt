@@ -409,6 +409,7 @@ object AgentBridge {
             method == "GET" && path == "/say" -> sayGet(ctx, query)
             method == "POST" && path == "/open-file" -> openFile(ctx, body)
             method == "POST" && path == "/ext/install" -> extInstall(ctx, body)
+            method == "POST" && path == "/ocr/threshold" -> ocrThreshold(body)
             else -> 404 to """{"ok":false,"error":"unknown route"}"""
         }
     }
@@ -703,6 +704,38 @@ document.getElementById('api').textContent = checks.map(function(c){
             }
         }, "ext-install-$id").apply { isDaemon = true; start() }
         return 202 to """{"ok":true,"state":"installing","message":"download started; poll GET /ext/list until state=green, then remind user to restart engine"}"""
+    }
+
+    /**
+     * POST /ocr/threshold body {"package":"com.foo","chars":N} → 调 OCR 兜底触发阈值。
+     *
+     * 不带 chars 时只读当前生效值。pkg 省略或 "*" 改全局默认；chars <= 0 清除该包覆盖。
+     *
+     * 为什么需要：OCR 兜底原本用编译期常量 40 判断「节点树文本够不够用」。但应用差异
+     * 极大——系统浏览器/WebView 常整屏 0 个文本节点（必须 OCR），聊天/列表类几十个
+     * 字符就足够定位（此时 OCR 是纯白等 300ms）。让 AI 针对具体应用调，比全局猜一个数准。
+     */
+    private fun ocrThreshold(body: String): Pair<Int, String> {
+        val svc = DshAccessibilityService.instance
+            ?: return 503 to """{"ok":false,"error":"accessibility service not enabled"}"""
+        return try {
+            val obj = if (body.isBlank()) JSONObject() else JSONObject(body)
+            val pkg = obj.optString("package").takeIf { it.isNotBlank() }
+            val effective = if (obj.has("chars")) {
+                svc.setOcrThreshold(pkg, obj.getInt("chars"))
+            } else {
+                svc.ocrMinTextChars(pkg)
+            }
+            200 to JSONObject().apply {
+                put("ok", true)
+                put("package", pkg ?: "*")
+                put("effective", effective)
+                put("changed", obj.has("chars"))
+            }.toString()
+        } catch (e: Exception) {
+            Log.w(TAG, "ocr threshold: ${e.message}")
+            400 to """{"ok":false,"error":"bad request","detail":${JSONObject.quote(e.message ?: "unknown")}}"""
+        }
     }
 
     // ---------- v1.2.182：长串无障碍操作的系统通知 ----------

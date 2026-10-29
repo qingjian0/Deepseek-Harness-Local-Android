@@ -1010,7 +1010,7 @@ class DshAccessibilityService : AccessibilityService() {
         // 都能"看见"这些界面。结果缓存与节流冷却在 ScreenOcr 内部
         // （takeScreenshot 有系统节流，不能每帧调用）。
         var ocrInfo = ""
-        if (ocrFallback && filter == "all" && contentChars < OCR_MIN_TEXT_CHARS) {
+        if (ocrFallback && filter == "all" && contentChars < ocrMinTextChars(foregroundPackage())) {
             val ocr = ScreenOcr.recognize(this, topSkip = OCR_TOP_SKIP)
             if (ocr.blocks.isNotEmpty()) {
                 lines.addAll(ScreenOcr.toDumpLines(ocr.blocks, count))
@@ -1024,9 +1024,33 @@ class DshAccessibilityService : AccessibilityService() {
         return sb.toString()
     }
 
-    /** OCR 兜底触发阈值：**内容区**（屏幕 25% 高度以下）文本总字符低于此值
-     *  视为「节点树没有可用内容」——顶部 UI 壳的文字不计入（见 dumpScreenCompact）。 */
-    private val OCR_MIN_TEXT_CHARS = 40
+    /** OCR 兜底触发阈值默认值：**内容区**（屏幕 25% 高度以下）文本总字符低于此值
+     *  视为「节点树没有可用内容」——顶部 UI 壳的文字不计入（见 dumpScreenCompact）。
+     *
+     *  v1.5.6：这个值不再是编译期常量。不同应用差异极大——系统自带浏览器、部分
+     *  WebView、自绘界面经常整屏 0 个文本节点（必须 OCR），而聊天/列表类应用
+     *  30 来个字符就足够定位（此时 OCR 纯属白等 300ms）。所以改成按**前台包名**
+     *  可覆盖，AI 通过 POST /ocr/threshold 针对具体应用调，而不是全局猜一个数。 */
+    private val OCR_MIN_TEXT_CHARS_DEFAULT = 40
+
+    /** 阈值覆盖存储：key 为 "default" 或 "pkg:<包名>"。 */
+    private val ocrPrefs by lazy { getSharedPreferences("dsh_ocr", MODE_PRIVATE) }
+
+    /** 取当前生效阈值：优先按包名覆盖，其次全局默认。 */
+    internal fun ocrMinTextChars(pkg: String? = null): Int {
+        val base = ocrPrefs.getInt("default", OCR_MIN_TEXT_CHARS_DEFAULT)
+        if (pkg.isNullOrBlank()) return base
+        return ocrPrefs.getInt("pkg:$pkg", base)
+    }
+
+    /** 设置阈值。pkg 为空或 "*" 改全局默认；chars <= 0 表示清除覆盖。返回生效值。 */
+    internal fun setOcrThreshold(pkg: String?, chars: Int): Int {
+        val e = ocrPrefs.edit()
+        val key = if (pkg.isNullOrBlank() || pkg == "*") "default" else "pkg:$pkg"
+        if (chars <= 0) e.remove(key) else e.putInt(key, chars)
+        e.apply()
+        return ocrMinTextChars(pkg)
+    }
 
     /**
      * 遍历活跃窗口可见节点，输出 JSON：
@@ -1110,7 +1134,7 @@ class DshAccessibilityService : AccessibilityService() {
         // verify 的 anyText/checkedText 用本函数读屏；若只有 compact 版带 OCR，
         // 会出现「pick 能用 OCR 文本、verify 却永远匹配不到」——实测 canvas
         // 场景点击成功但验证必然失败（无节点树应用同理）。
-        if (ocrFallback && filter == "all" && contentChars < OCR_MIN_TEXT_CHARS) {
+        if (ocrFallback && filter == "all" && contentChars < ocrMinTextChars(foregroundPackage())) {
             val ocr = ScreenOcr.recognize(this, topSkip = OCR_TOP_SKIP)
             for (b in ocr.blocks) {
                 arr.put(JSONObject().apply {
