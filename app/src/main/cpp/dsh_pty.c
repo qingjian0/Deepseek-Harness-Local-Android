@@ -28,20 +28,42 @@
 
 static pid_t g_child = -1;
 
-/* 从 jobjectArray 读出 char**（UTF-8），失败返回 NULL */
+/* 从 jobjectArray 读出 char**（UTF-8），失败返回 NULL。
+ *
+ * ⚠️ 绝对不要把 NULL 交给 ReleaseStringUTFChars —— JNI 规范下这是 UB，
+ * 会崩在 native 层，日志里连 Java 堆栈都没有（只剩一个 SIGSEGV）。
+ * GetStringUTFChars 返回 NULL 只有两种可能：OOM 或已有待处理异常，
+ * 两种都不该继续往下走，所以这里清理已分配内容后返回 NULL，由调用方兜底。 */
 static char **read_string_array(JNIEnv *env, jobjectArray arr, jsize *outLen) {
     jsize len = (*env)->GetArrayLength(env, arr);
     char **vec = (char **) calloc((size_t) len + 1, sizeof(char *));
     if (!vec) return NULL;
-    for (jsize i = 0; i < len; i++) {
+    jsize i = 0;
+    for (; i < len; i++) {
         jstring js = (jstring) (*env)->GetObjectArrayElement(env, arr, i);
+        if (!js) {                       /* 取不到元素（异常/越界）→ 视作空串 */
+            if ((*env)->ExceptionCheck(env)) goto fail;
+            vec[i] = strdup("");
+            if (!vec[i]) goto fail;
+            continue;
+        }
         const char *utf = (*env)->GetStringUTFChars(env, js, NULL);
-        vec[i] = strdup(utf ? utf : "");
-        (*env)->ReleaseStringUTFChars(env, js, utf);
+        if (!utf) {                      /* OOM 或待处理异常 → 停止 */
+            (*env)->DeleteLocalRef(env, js);
+            goto fail;
+        }
+        vec[i] = strdup(utf);
+        (*env)->ReleaseStringUTFChars(env, js, utf);   /* utf 非 NULL 才走到这 */
         (*env)->DeleteLocalRef(env, js);
+        if (!vec[i]) goto fail;
     }
     *outLen = len;
     return vec;
+fail:
+    for (jsize k = 0; k <= i; k++) free(vec[k]);       /* vec 全 NULL 初始化，free(NULL) 安全 */
+    free(vec);
+    *outLen = 0;
+    return NULL;
 }
 
 static void free_string_array(char **vec) {
@@ -88,20 +110,34 @@ Java_dsh_dsh_mobile_engine_Pty_nativeForkPty(
         jstring jCmd, jobjectArray jArgs, jstring jCwd,
         jobjectArray jEnv, jint rows, jint cols) {
 
-    const char *cmd = (*env)->GetStringUTFChars(env, jCmd, NULL);
-    const char *cwd = (*env)->GetStringUTFChars(env, jCwd, NULL);
-
+    const char *cmd = NULL;
+    const char *cwd = NULL;
     jsize argc = 0, envc = 0;
-    char **argv = read_string_array(env, jArgs, &argc);
-    char **envp = read_string_array(env, jEnv, &envc);
+    char **argv = NULL;
+    char **envp = NULL;
+    char **fullArgv = NULL;
+    int master = -1;
+
+    cmd = (*env)->GetStringUTFChars(env, jCmd, NULL);
+    cwd = (*env)->GetStringUTFChars(env, jCwd, NULL);
+    /* 同上：NULL 意味着 OOM / 待处理异常，不能 strdup(NULL) 也不能往下走 */
+    if (!cmd || !cwd) { errno = ENOMEM; goto fail_errno; }
+
+    argv = read_string_array(env, jArgs, &argc);
+    envp = read_string_array(env, jEnv, &envc);
+    /* 原来这里没查返回值：失败时 argv==NULL，fullArgv[i+1]=argv[i] 直接解引用崩溃 */
+    if (!argv || !envp) { errno = ENOMEM; goto fail_errno; }
+
     /* argv[0] 必须是程序名本身 */
-    char **fullArgv = (char **) calloc((size_t) argc + 2, sizeof(char *));
+    fullArgv = (char **) calloc((size_t) argc + 2, sizeof(char *));
+    if (!fullArgv) { errno = ENOMEM; goto fail_errno; }
     fullArgv[0] = strdup(cmd);
+    if (!fullArgv[0]) { errno = ENOMEM; goto fail_errno; }
     for (jsize i = 0; i < argc; i++) fullArgv[i + 1] = argv[i];
 
     signal(SIGPIPE, SIG_IGN);
 
-    int master = posix_openpt(O_RDWR | O_NOCTTY);
+    master = posix_openpt(O_RDWR | O_NOCTTY);
     if (master < 0) goto fail_errno;
     if (grantpt(master) != 0 || unlockpt(master) != 0) {
         close(master); master = -1;
@@ -158,6 +194,8 @@ Java_dsh_dsh_mobile_engine_Pty_nativeForkPty(
     return master;
 
 fail_errno:
+    /* 调用方按「负 errno」判定失败：errno 意外为 0 时会给 Java 层回 0 = 假成功 */
+    if (errno == 0) errno = EINVAL;
     LOGE("nativeForkPty failed: %s", strerror(errno));
     if (fullArgv) { free(fullArgv[0]); free(fullArgv); }
     free_string_array(argv); free_string_array(envp);
