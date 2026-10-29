@@ -96,8 +96,8 @@
         <string name="setting_files_dir">文件保存目录</string>
     <string name="setting_files_dir_sub">AI 生成的文件保存在这里，文件管理器直接可见</string>
     <string name="files_dir_copied">路径已复制</string>
-<string name="setting_immersive">隐藏状态栏</string>
-    <string name="setting_immersive_sub">隐藏状态栏让网页铺满全屏；从屏幕顶部下滑可临时唤出。默认关闭，避免遮住摄像头挖孔</string>
+<string name="setting_immersive">全屏模式（隐藏状态栏）</string>
+    <string name="setting_immersive_sub">隐藏系统状态栏让网页铺满全屏，顶部工具栏自动避开摄像头挖孔；从屏幕顶部下滑可临时唤出状态栏</string>
     <string name="setting_scale_sub">调节网页显示比例（浏览器缩放）</string>
     <string name="setting_theme">外观主题</string>
     <string name="setting_theme_sub">深色、浅色，或跟随系统</string>
@@ -651,6 +651,8 @@
     <string name="self_check_issues">发现 %1$d 个问题，已修复 %2$d 个</string>
     <string name="recover_confirm_yes">恢复</string>
     <string name="setting_export_data">导出数据</string>
+    <string name="setting_view_log">查看日志</string>
+    <string name="setting_view_log_sub">引擎日志尾部（engine.log / boot.log），排查崩溃与无限重启时用。</string>
     <string name="setting_export_data_sub">把对话、工作区和工作区列表打包成 .zip。不包含 API 密钥与登录态。</string>
     <string name="export_preparing">正在准备导出…</string>
     <string name="export_progress">正在导出… %1$d / %2$d 个文件</string>
@@ -676,7 +678,6 @@
     <string name="terminal_close_failed">关闭失败，会话仍保留：%1$s</string>
     <string name="terminal_session_ended_hint">会话已结束，请点击「新建」</string>
     <!-- 日志查看器 -->
-    <string name="btn_log">日志</string>
     <string name="log_viewer_title">日志</string>
     <string name="log_viewer_refresh">刷新</string>
     <string name="log_viewer_empty">暂无日志\n引擎启动后这里会显示 engine.log / boot.log 的尾部</string>

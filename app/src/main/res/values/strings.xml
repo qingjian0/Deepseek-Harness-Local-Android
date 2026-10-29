@@ -96,8 +96,8 @@
         <string name="setting_files_dir">Files folder</string>
     <string name="setting_files_dir_sub">Files created by the AI are saved here (visible in your file manager)</string>
     <string name="files_dir_copied">Path copied</string>
-<string name="setting_immersive">Hide status bar</string>
-    <string name="setting_immersive_sub">Hide the status bar so pages fill the screen; swipe down from the top to reveal it temporarily. Off by default to keep the camera cutout clear</string>
+<string name="setting_immersive">Fullscreen (hide status bar)</string>
+    <string name="setting_immersive_sub">Hide the system status bar so pages fill the screen. The top toolbar automatically clears the camera cutout. Swipe down from the top to reveal the status bar temporarily.</string>
     <string name="setting_scale_sub">Adjust how web pages are scaled (browser zoom)</string>
     <string name="setting_theme">Appearance</string>
     <string name="setting_theme_sub">Dark, light, or follow the system</string>
@@ -652,6 +652,8 @@ You can still continue without updating, but the interface will not display.</st
     <string name="self_check_issues">%1$d issue(s) found, %2$d repaired</string>
     <string name="recover_confirm_yes">Recover</string>
     <string name="setting_export_data">Export data</string>
+    <string name="setting_view_log">View logs</string>
+    <string name="setting_view_log_sub">Engine log tail (engine.log / boot.log) for troubleshooting crashes and restarts.</string>
     <string name="setting_export_data_sub">Save conversations, workspaces and the workspace list as a .zip. API keys and logins are not included.</string>
     <string name="export_preparing">Preparing export…</string>
     <string name="export_progress">Exporting… %1$d / %2$d files</string>
@@ -677,7 +679,6 @@ You can still continue without updating, but the interface will not display.</st
     <string name="terminal_close_failed">Close failed, session kept: %1$s</string>
     <string name="terminal_session_ended_hint">Session has ended — tap “New”</string>
     <!-- 日志查看器 -->
-    <string name="btn_log">Logs</string>
     <string name="log_viewer_title">Logs</string>
     <string name="log_viewer_refresh">Refresh</string>
     <string name="log_viewer_empty">No log yet\nThe tail of engine.log / boot.log will show here once the engine has started.</string>

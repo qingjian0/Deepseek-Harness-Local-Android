@@ -172,10 +172,6 @@ class MainActivity : ThemedActivity() {
         }
         // 隐藏工具栏：一键收起让网页全屏（点顶部小把手唤回）
         findViewById<View>(R.id.btnHide).setOnClickListener { toggleToolbar() }
-        // 日志查看器：engine.log / boot.log 尾部（排查引擎无限重启等问题）
-        findViewById<View>(R.id.btnLog).setOnClickListener {
-            startActivity(Intent(this, LogViewerActivity::class.java))
-        }
         // 原生终端入口：跳转独立终端页（真 PTY，自带 bash）
         findViewById<View>(R.id.btnTerminal).setOnClickListener {
             startActivity(Intent(this, TerminalActivity::class.java))
@@ -295,6 +291,7 @@ class MainActivity : ThemedActivity() {
         val oldMode = orientationMode
         readUiPrefs()
         applyStatusBarImmersive()
+        applyIslandInsets()
         if (oldMode != orientationMode) {
             setDesktop(shouldUseDesktop())
             applyOrientation(orientationMode)
@@ -1300,24 +1297,124 @@ class MainActivity : ThemedActivity() {
         val w = window ?: return
         runCatching {
             val hide = immersiveEnabled(this)
+            // 状态栏可见性变了 → 岛的位置要跟着重新算
+            applyIslandInsets()
             if (hide) {
-                // 老式 immersive flag：LAYOUT_FULLSCREEN 让内容真正铺进状态栏区域，
-                // 比单纯 hide(statusBars) 可靠——部分 HyperOS/新安卓上只 hide 会留黑边。
+                // ⚠️ 关键（v1.4.44，用户实测「岛不在最上面，还是往下了一点」）：
+                // 只设 immersive flag 不够 —— 窗口本身仍从状态栏下方开始
+                // （dumpsys 实测 topActivityAppBounds=Rect(0,128-1080,2337)），
+                // 所以岛再贴顶也只是贴到 y=128。
+                //
+                // 必须让 decorView **不再为系统栏预留空间**：
+                //   · API 30+：setDecorFitsSystemWindows(false)
+                //   · 更早：SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN（配合 hide 真正铺满）
+                // 两者都做，覆盖所有版本；关掉时再恢复。
                 @Suppress("DEPRECATION")
                 w.statusBarColor = android.graphics.Color.TRANSPARENT
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    w.setDecorFitsSystemWindows(false)
+                    val c = WindowInsetsControllerCompat(w, w.decorView)
+                    c.hide(WindowInsetsCompat.Type.statusBars())
+                    c.systemBarsBehavior =
+                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
                 @Suppress("DEPRECATION")
                 w.decorView.systemUiVisibility =
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                         .or(View.SYSTEM_UI_FLAG_FULLSCREEN)
                         .or(View.SYSTEM_UI_FLAG_LAYOUT_STABLE)
                         .or(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+                WindowInsetsControllerCompat(w, w.decorView)
+                    .hide(WindowInsetsCompat.Type.statusBars())
             } else {
+                // 恢复窗口为系统栏预留空间
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    w.setDecorFitsSystemWindows(true)
+                }
                 // 交给 ThemeManager.applyBars 恢复「主题背景色 + 正确的图标明暗」。
                 ThemeManager.applyBars(this)
                 WindowInsetsControllerCompat(w, w.decorView)
                     .show(WindowInsetsCompat.Type.statusBars())
             }
         }
+    }
+
+    /**
+     * 顶部安全内边距：让灵动岛避开**状态栏与挖孔**（v1.4.43）。
+     *
+     * ## 为什么需要
+     * 灵动岛（`statusBarRow` / `handleBar`）在布局里是 `layout_gravity="top"` +
+     * `marginTop=10dp`，固定在窗口绝对顶部。开启全屏（隐藏状态栏）后：
+     *   · 若不做处理，岛直接压在系统状态栏/挖孔上 —— 用户点不动它；
+     *   · 若按「状态栏高度」下移，挖孔屏上会留一条无意义黑边。
+     *
+     * ## 做法
+     * 监听 window insets，取 **statusBars ∪ displayCutout** 的 top 作为岛的下移量：
+     *   · 显示状态栏 → top = 状态栏高度（含挖孔安全区），岛在下方；
+     *   · 全屏 + 无挖孔 → top = 0，岛贴顶；
+     *   · 全屏 + 挖孔屏 → top = 挖孔下沿高度，岛避开摄像头。
+     *
+     * `displayCutout` 的 insets 天然覆盖各种位置（中心孔 / 左孔 / 右孔 / 刘海）——
+     * 系统给的是「该边被遮挡的最大深度」，与孔在哪一侧无关，所以我们不需要
+     * 自己判断孔位，取 top 即可。
+     *
+     * 横屏时挖孔通常在左侧或右侧，此时 `displayCutout` 的 left/right 会大于 0、
+     * top 可能为 0；岛是水平居中的，因此只需保证 top 安全，横向由居中布局自行避开。
+     */
+    private fun applyIslandInsets() {
+        val root = findViewById<android.view.View>(android.R.id.content) ?: return
+        val row = findViewById<android.view.View>(R.id.statusBarRow) ?: return
+        val handle = findViewById<android.view.View>(R.id.handleBar) ?: return
+        val d = resources.displayMetrics.density
+        val baseTop = (10 * d).toInt()
+        val rowH = (44 * d).toInt()
+        val handleH = (26 * d).toInt()
+
+        root.setOnApplyWindowInsetsListener { _, insets ->
+            val immersive = immersiveEnabled(this@MainActivity)
+            // 竖屏取 top：中心孔 / 刘海 / 左孔 / 右孔，系统给的 top 都是「顶边被
+            // 遮挡的最大深度」；横屏挖孔落在左右两侧，岛在顶部不会与它重叠，加侧
+            // 边距反而把居中的岛推偏，故不处理左右。
+            val cutTop = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                insets.getInsets(android.view.WindowInsets.Type.displayCutout()).top
+            } else 0
+
+            // 全屏：岛贴屏幕最顶端（top=0），高度至少盖过挖孔 —— 黑色胶囊正好
+            // 把摄像头罩住，这才是灵动岛该有的样子。非全屏：常规 10dp 边距。
+            val wantTop = if (immersive) 0 else baseTop
+            val wantRowH = if (immersive) maxOf(rowH, cutTop) else rowH
+            // 收起态是正圆，宽高必须一致。全屏时直径要盖过镜头可见区，否则圆心
+            // 正对着摄像头孔，圆被物理开孔吃掉、用户看不见也点不到。
+            //
+            // 注意 cutTop 是「顶边被遮挡的最大深度」（本机 128px），比镜头本身大：
+            // 镜头真实直径约 66px、中心在 y≈64。按 cutTop 取满会做成一个大黑饼，
+            // 取 0.85 既能罩住镜头，视觉上又不臃肿。
+            val wantDot = if (immersive) {
+                maxOf(handleH, ((cutTop * 0.85f).toInt() / 2) * 2)
+            } else handleH
+
+            row.layoutParams?.let { lp ->
+                val m = lp as? android.view.ViewGroup.MarginLayoutParams
+                if (m != null && (m.topMargin != wantTop || lp.height != wantRowH)) {
+                    m.topMargin = wantTop
+                    lp.height = wantRowH
+                    row.layoutParams = lp
+                }
+            }
+            handle.layoutParams?.let { lp ->
+                val m = lp as? android.view.ViewGroup.MarginLayoutParams
+                if (m != null &&
+                    (m.topMargin != wantTop || lp.height != wantDot || lp.width != wantDot)
+                ) {
+                    m.topMargin = wantTop
+                    lp.height = wantDot
+                    lp.width = wantDot
+                    handle.layoutParams = lp
+                }
+            }
+            insets
+        }
+        root.requestApplyInsets()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

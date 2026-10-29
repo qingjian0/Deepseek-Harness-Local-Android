@@ -206,21 +206,19 @@ object LocalEmbedder {
     /** llama-server 默认端口（避开引擎 4080 / 桥 4083） */
     const val PORT = 4085
 
+    data class Match(val index: Int, val score: Double)
+
     /**
-     * 文本 → 向量缓存（v1.4.22 性能）。
+     * 文本 → 向量缓存（本 fork 定制）。
      *
      * 实测语义 pick 单次 763–1096ms，而 15MB 嵌入模型热态本身是毫秒级 ——
      * 慢在**每次动作都把整屏 N+1 条文本重新嵌入**。连续动作之间屏幕文本高度重复
-     * （同屏多次 pick、verify 的语义兜底），因此按文本缓存向量：
-     * 热态只请求新出现的文本，通常 0–3 条 → 毫秒级。
+     * （同屏多次 pick、verify 的语义兜底），因此按文本缓存向量：热态只请求新出现的文本。
      *
-     * 上限 [VEC_CACHE_MAX] 条；bge-small 512 维 Double ≈ 4KB/条 → 最多约 2MB。
-     * 超限时整体清空（屏幕文本集变化后旧条目热度很低，简单清空比 LRU 划算）。
+     * 上限 512 条（512 维 Double ≈ 4KB/条，最多约 2MB）；超限整体清空。
      */
     private val vecCache = java.util.concurrent.ConcurrentHashMap<String, DoubleArray>()
     private const val VEC_CACHE_MAX = 512
-
-    data class Match(val index: Int, val score: Double)
 
     /** 服务是否就绪（缓存，避免每次都探测） */
     @Volatile private var ready: Boolean? = null
@@ -258,15 +256,14 @@ object LocalEmbedder {
         if (!isReady()) return null
         return runCatching {
             val want = target.trim()
-            // 去重后只请求缓存里没有的文本（v1.4.22）
+            // 去重后只请求缓存里没有的文本
             val needed = LinkedHashSet<String>(candidates.size + 1)
             needed.add(want)
             for (c in candidates) needed.add(c)
             val missing = needed.filter { vecCache[it] == null }
             if (missing.isNotEmpty()) {
                 val vecs = fetchEmbeddings(missing) ?: return@runCatching null
-                // 数量不符 → 不写入缓存，避免文本与向量错配
-                if (vecs.size != missing.size) return@runCatching null
+                if (vecs.size != missing.size) return@runCatching null   // 数量不符不写缓存
                 if (vecCache.size + missing.size > VEC_CACHE_MAX) vecCache.clear()
                 for (i in missing.indices) vecCache[missing[i]] = vecs[i]
             }
@@ -285,7 +282,7 @@ object LocalEmbedder {
         }
     }
 
-    /** POST /v1/embeddings（从 bestMatch 抽出，v1.4.22） */
+    /** POST /v1/embeddings（从 bestMatch 抽出） */
     private fun fetchEmbeddings(texts: List<String>): List<DoubleArray>? = runCatching {
         val body = JSONObject().apply {
             put("model", "local")
@@ -294,9 +291,7 @@ object LocalEmbedder {
         val conn = java.net.URL("http://127.0.0.1:$PORT/v1/embeddings").openConnection()
         conn.doOutput = true
         conn.connectTimeout = 2000
-        // v1.2.152：4s→2.5s。15MB 模型**热态**是毫秒级；冷加载应在 llama-server
-        // 启动时完成（LocalModel 有预热），不该让 verify 的预算替它买单——
-        // 实测一次冷调用吃掉 8s，把 timeoutMs=6000 的验证拖成 14s。
+        // 冷加载不该让 verify 的预算替它买单（实测一次冷调用吃掉 8s）
         conn.readTimeout = 2500
         conn.setRequestProperty("Content-Type", "application/json")
         conn.outputStream.use { it.write(body.toByteArray()) }
