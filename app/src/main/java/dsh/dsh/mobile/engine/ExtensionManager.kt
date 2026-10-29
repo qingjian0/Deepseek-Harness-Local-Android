@@ -30,6 +30,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -136,6 +139,18 @@ class ExtensionManager(private val ctx: Context) {
 
     /** 并发上限：网络段允许 3 个扩展同时下载；解包/发布按扩展分锁（v1.2.41 起可并行） */
     private val dlSemaphore = Semaphore(3)
+
+    /**
+     * 单个扩展的**依赖闭包内部**并发下载上限。
+     *
+     * 与 [dlSemaphore] 相互独立，不能复用：installTask 已经持有一个 dlSemaphore permit，
+     * 闭包内再抢同一个信号量会互等（下载段外面那一层永远等不到 release）。
+     *
+     * 为什么值得并发：装 python 这类扩展时闭包有 20+ 个 .deb，逐包串行意味着
+     * 20 次「建连 → TLS → 首字节」的延迟全部相加；镜像在境外/弱网时这一段能占到
+     * 整个安装时间的大头。解包仍然串行（有磁盘顺序与 rename 语义），只并行下载段。
+     */
+    private val pkgSemaphore = Semaphore(4)
 
     private fun updateTask(id: String, f: (ExtTask) -> ExtTask) {
         _tasks.update { cur -> cur[id]?.let { cur + (id to f(it)) } ?: cur }
@@ -493,9 +508,9 @@ class ExtensionManager(private val ctx: Context) {
 
     /** 阶段 1：仓库索引 → 依赖闭包 → 逐包 .deb 下载（SHA256 强校验）。
      *  纯网络段，可多扩展并发（每扩展独立 cacheDir，互不干扰）；
-     *  解包/发布在 [installPhase]。
+     *  v1.5.6 起**闭包内的包也并发下载**（[pkgSemaphore]），解包/发布仍串行，见 [installPhase]。
      *  @param rotatePreferred 索引源改用 mirrors[1]（自愈重试：规避 CDN 陈旧索引） */
-    private fun downloadPhase(
+    private suspend fun downloadPhase(
         ext: Extension, rotatePreferred: Boolean = false, report: (Float?, String) -> Unit,
     ): DownloadedDebs {
         val cacheDir = File(ctx.cacheDir, "ext-${ext.id}").apply { mkdirs() }
@@ -523,23 +538,40 @@ class ExtensionManager(private val ctx: Context) {
         Log.i(TAG, "download ${ext.id} closure: " + closure.joinToString(",") { it.name })
 
         // 逐包下载 + SHA256 强校验（进度按字节累计，占 0~0.95）
+        //
+        // v1.5.6：闭包内**并发下载**。原来是 forEachIndexed 串行，装 python 这类
+        // 20+ 依赖的扩展时，每个包的「建连 → TLS → 首字节」延迟全部相加，弱网/境外
+        // 镜像下这一段几乎就是全部安装耗时。解包仍严格串行（磁盘顺序 + rename 语义）。
+        // 失败语义不变：任一包失败 → coroutineScope 取消兄弟协程 → 整次安装失败。
         val totalBytes = closure.sumOf { it.size }.coerceAtLeast(1)
-        var done = 0L
-        val debs = mutableListOf<File>()
-        closure.forEachIndexed { idx, p ->
-            val f = File(cacheDir, "${p.name}_${p.version}.deb")
-            val label = "${ext.name} package ${idx + 1}/${closure.size}"
-            downloadDebWithFailover(allMirrors, p.filename, f, label, { s -> report(null, s) }) { frac ->
-                report(((done + p.size * frac).toDouble() / totalBytes).toFloat() * 0.95f, "")
-            }
-            check(p.sha256.isEmpty() || RuntimeInstaller.sha256(f) == p.sha256.lowercase()) {
-                // 校验失败必须顺手删掉这个坏文件：否则它以正式文件名留在 cacheDir，
-                // 后续重试/自愈若命中故障路径，会把「已存在的坏文件」当成可用产物。
-                runCatching { f.delete() }
-                "SHA-256 verification failed: ${p.name} (corrupt mirror data?)"
-            }
-            done += p.size
-            debs.add(f)
+        // 每包已下载字节（下标对应 closure），汇报时求和 —— 进度单调、不因并发回跳
+        val progressBytes = java.util.concurrent.atomic.AtomicLongArray(closure.size)
+        val debs: List<File> = coroutineScope {
+            closure.mapIndexed { idx, p ->
+                async(Dispatchers.IO) {
+                    pkgSemaphore.acquire()
+                    try {
+                        val f = File(cacheDir, "${p.name}_${p.version}.deb")
+                        val label = "${ext.name} package ${idx + 1}/${closure.size}"
+                        downloadDebWithFailover(allMirrors, p.filename, f, label, { s -> report(null, s) }) { frac ->
+                            progressBytes.set(idx, (p.size * frac).toLong())
+                            var sum = 0L
+                            for (k in 0 until closure.size) sum += progressBytes.get(k)
+                            report((sum.toDouble() / totalBytes).toFloat() * 0.95f, "")
+                        }
+                        check(p.sha256.isEmpty() || RuntimeInstaller.sha256(f) == p.sha256.lowercase()) {
+                            // 校验失败必须顺手删掉这个坏文件：否则它以正式文件名留在 cacheDir，
+                            // 后续重试/自愈若命中故障路径，会把「已存在的坏文件」当成可用产物。
+                            runCatching { f.delete() }
+                            "SHA-256 verification failed: ${p.name} (corrupt mirror data?)"
+                        }
+                        progressBytes.set(idx, p.size)
+                        f
+                    } finally {
+                        pkgSemaphore.release()
+                    }
+                }
+            }.awaitAll()
         }
         return DownloadedDebs(debs, mainPkg.version, cacheDir, closure)
     }
