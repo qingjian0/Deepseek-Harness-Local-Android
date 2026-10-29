@@ -537,9 +537,7 @@ class EngineSupervisor(private val ctx: Context) {
                 step("guardian-restore")
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
 
-                // Agent 上下文种子（m1.35）：幂等预写 $HOME/AGENTS.md（dsh 原生 user-global
-                // 指令），让 Agent 首轮就带 Android 世界观，省掉环境探索 token
-                // 本 fork 定制：不再注入默认 AGENTS.md 种子；旧版本写过的种子段在启动时剥掉
+                // Agent 上下文种子（m1.35）：幂等预写 $HOME/AGENTS.md（dsh 原生 user-global                // 本 fork 定制：不再注入默认 AGENTS.md 种子；旧种子段启动时剥掉
                 val seedStripped = withContext(Dispatchers.IO) { AgentContextSeed.stripLegacySeedOnBoot(ctx) }
                 step("agent-seed")
                 if (seedStripped) Log.i(TAG, "AGENTS.md: legacy seed stripped, user section preserved")

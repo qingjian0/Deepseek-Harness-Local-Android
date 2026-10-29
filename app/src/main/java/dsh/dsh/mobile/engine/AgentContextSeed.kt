@@ -88,10 +88,10 @@ object AgentContextSeed {
     /**
      * 启动时清理旧版注入的默认种子（本 fork 定制）。
      *
-     * 上游会在每次启动预写一份「Android 环境说明书」到 `$DSH_HOME/AGENTS.md`，
+     * 上游每次启动会预写一份「Android 环境说明书」到 `$DSH_HOME/AGENTS.md`，
      * 引擎把它当作 user-global 指令注入**每一次会话**。本 fork 不要这份种子。
      *
-     * 本函数只做一件事：文件若带旧种子标记，剥掉 App 段、**只保留用户段**。
+     * 只做一件事：文件若带旧种子标记，剥掉 App 段、只保留用户段。
      *  · 文件不存在 → false（不创建）
      *  · 无种子标记（用户自写）→ false（不动）
      *  · 有标记 → 只留用户段，返回 true
