@@ -63,7 +63,7 @@ MATERIALS.md 仍是集中数字清单。v4 新数字目前分散在产品文档�
 | ELF 架构断言 | `RuntimeInstaller.kt` 的 `assertAssetArch` / `isRootCompleteAt` | 仅表述运行时入口 node 的架构断言；当前未找到扩展逐二进制安装前ELF断言，不混为一谈 |
 | WebUI 4090 / 每次开启6位码 / 同局域网 | `docs/LAN_WEBUI.md` §2–§4 | 应用层代理、不改引擎文件；电脑UI用代码示意；不暴露真实验证码 |
 | 桌宠权限/资源包/桥插件/状态响应 | `docs/pet/PET_GUIDE.md` §1、§2、§7 | 三条件齐备才启用；素材不随APK；示意角色不宣传为内置默认素材 |
-| 桌宠24个Kotlin文件 | 本次统计 `app/src/main/java/dsh/dsh/mobile/pet/*.kt=24` | 与v3的“7个桌宠领域核心模块”是不同统计口径；不替换旧54模块快照 |
+| 桌宠24个Kotlin文件 | 本次统计 `app/src/main/java/app/dsh/mobile/pet/*.kt=24` | 与v3的“7个桌宠领域核心模块”是不同统计口径；不替换旧54模块快照 |
 | 社区贡献与805键 | 项目根 `AI_CONTEXT.md` 的 PR #61/#68/#69/#70/#52/#62 记录、当前 git 历史 | @XiaoPb桌宠/复用，@Masspedro回调/pt-BR覆盖，@xiaoming132887工具栏/PTY；不捏造贡献行数 |
 | 体积三口径与功能下界 | `MATERIALS.md` A/A2/A3；v3 `src/data.ts` | 所有柱子/数值/较小产品/未知口径限定完整继承 |
 

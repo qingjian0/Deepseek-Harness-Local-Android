@@ -1,6 +1,6 @@
 # 桌宠：架构与内部逻辑
 
-> 面向维护者。代码在 `app/src/main/java/dsh/dsh/mobile/pet/`（23 个 Kotlin 文件，约 7800 行），
+> 面向维护者。代码在 `app/src/main/java/app/dsh/mobile/pet/`（23 个 Kotlin 文件，约 7800 行），
 > 资源与字符串在 `app/src/main/assets/pet/`、`app/src/main/res/values*/strings.xml`。
 >
 > 安装与使用见 [PET_GUIDE.md](PET_GUIDE.md)，功能现状与待办见 [PET_ROADMAP.md](PET_ROADMAP.md)。

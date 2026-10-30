@@ -1,7 +1,7 @@
 # 运行时换装：意图日志与恢复
 
 > 适用版本：v1.4.26 起。对应 issue #49（PR #48 审查 P1-2 的跟进）。
-> 代码位置：`app/src/main/java/dsh/dsh/mobile/engine/RuntimeInstaller.kt`。
+> 代码位置：`app/src/main/java/app/dsh/mobile/engine/RuntimeInstaller.kt`。
 
 ## 1. 换装到底做了什么
 

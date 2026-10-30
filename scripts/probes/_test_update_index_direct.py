@@ -22,8 +22,8 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SIGNED = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/SignedIndex.kt")
-CHECKER = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdateChecker.kt")
+SIGNED = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/SignedIndex.kt")
+CHECKER = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdateChecker.kt")
 WRITER = os.path.join(ROOT, "scripts/write-update-index.py")
 
 failures: list[str] = []
@@ -78,7 +78,7 @@ def main() -> int:
     w = read(WRITER)
     check("资产包含 sha256 字段", '"sha256": sha256_of(path)' in w)
     check("缺 sha 的资产被丢弃（App 侧亦拒绝）", "if (name.isBlank() || sha.isBlank()) return null" in read(
-        os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdate.kt"),
+        os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdate.kt"),
     ))
     check("重复 (variant,abi,package) 直接失败", "duplicate asset for" in w)
 

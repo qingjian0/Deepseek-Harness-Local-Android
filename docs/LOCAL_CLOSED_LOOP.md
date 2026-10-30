@@ -316,7 +316,7 @@ dump 不输出），点击后场景指纹不变 → 记忆反复命中同一动�
 
 ### 10.4 交付物
 
-- `app/src/main/java/dsh/dsh/mobile/engine/LocalLoopExecutor.kt`（新增，决策程序执行引擎）
+- `app/src/main/java/app/dsh/mobile/engine/LocalLoopExecutor.kt`（新增，决策程序执行引擎）
 - `AgentBridge.kt`：`/loop/run` 端点；`/local/status` JSON 格式修复（此前多一个引号，非法 JSON）
 - `DshAccessibilityService.kt`：`pressEnter()`（ACTION_IME_ENTER）
 - `scripts/probes/`：`loop_common.py`（桥连接库）、`plan_dark_theme.json`、`plan_browser_research.json`、

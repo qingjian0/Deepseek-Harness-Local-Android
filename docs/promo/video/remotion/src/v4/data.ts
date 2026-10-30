@@ -72,7 +72,7 @@ export const extensionEvidence = {
 } as const;
 
 export const webuiEvidence = {
-  port: 3090,
+  port: 4090,
   codeDigits: 6,
   title: '大屏编辑，小屏执行。',
 } as const;

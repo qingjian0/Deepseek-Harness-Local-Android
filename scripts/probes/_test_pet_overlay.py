@@ -21,7 +21,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.path.join(ROOT, "app", "src", "main")
-JAVA = os.path.join(APP, "java", "dsh", "dsh", "mobile")
+JAVA = os.path.join(APP, "java", "app", "dsh", "mobile")
 PET = os.path.join(JAVA, "pet")
 RES = os.path.join(APP, "res")
 PET_DOCS = os.path.join(ROOT, "docs", "pet")
@@ -122,7 +122,7 @@ check("receiver: token header defined", '"X-DSH-Pet-Token"' in protocol)
 check("receiver: /bubble token gate", "authorised(headerLines)" in server)
 check("receiver: token fail-closed 403", 'respond(output, 403, "Forbidden")' in server)
 check("receiver: per-process token", "currentToken(): String" in server)
-engine_cfg = read(os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/engine/EngineConfig.kt"))
+engine_cfg = read(os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine/EngineConfig.kt"))
 check("receiver: token to engine env", "DSH_PET_BRIDGE_TOKEN=${PetBridgeServer.currentToken()}" in engine_cfg)
 
 # ---------------------------------------------------------------- controller/mapping

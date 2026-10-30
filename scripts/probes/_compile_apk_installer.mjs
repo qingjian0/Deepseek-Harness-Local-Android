@@ -20,9 +20,9 @@ function run(program,args) {
 }
 const classes = path.join(work,'classes');
 run(process.env.JAVAC ?? 'javac',['--release','17','-cp',androidJar,'-d',classes,
-  path.join(javaRoot,'dsh/dsh/mobile/engine/ApkInstallStatus.java'),
-  path.join(javaRoot,'dsh/dsh/mobile/ExtensionApkInstallActivity.java')]);
-const manager = fs.readFileSync(path.join(javaRoot,'dsh/dsh/mobile/engine/ExtensionManager.kt'),'utf8');
+  path.join(javaRoot,'app/dsh/mobile/engine/ApkInstallStatus.java'),
+  path.join(javaRoot,'app/dsh/mobile/ExtensionApkInstallActivity.java')]);
+const manager = fs.readFileSync(path.join(javaRoot,'app/dsh/mobile/engine/ExtensionManager.kt'),'utf8');
 const start = manager.indexOf('    private suspend fun installApkTask(');
 const end = manager.indexOf('    private fun urllibRequest(',start);
 if (start < 0 || end < 0) throw new Error('Kotlin source contract drift: exact method not found');

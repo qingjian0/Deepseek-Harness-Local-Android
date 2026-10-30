@@ -81,7 +81,7 @@ fun hasCommand(cmd: String): Boolean = runCatching {
 val pythonCmd = if (hasCommand("python3")) "python3" else "python"
 
 val generateRepoConfig by tasks.registering {
-    val template = file("src/main/java/dsh/dsh/mobile/engine/RepoConfig.kt.tmpl")
+    val template = file("src/main/java/app/dsh/mobile/engine/RepoConfig.kt.tmpl")
     val outFile = File(repoConfigDir, "dsh/dsh/mobile/engine/RepoConfig.kt")
     inputs.file(template)
     inputs.property("updateRepo", updateRepo)
@@ -241,8 +241,8 @@ android {
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
         targetSdk = 28
-        versionCode = 305
-        versionName = "1.5.7"
+        versionCode = 306
+        versionName = "1.4.53-custom.2"
 
         ndk {
             abiFilters += listOf(targetAbi)

@@ -30,7 +30,7 @@ fi
 DIR=$(cd "$(dirname "$0")" && pwd)
 . "$DIR/_dsh_http.sh"
 
-DSH_HOME="${DSH_HOME:-/data/user/0/app.dsh.mobile/files/dsh-home}"
+DSH_HOME="${DSH_HOME:-/data/user/0/dsh.dsh.mobile/files/dsh-home}"
 TASKS="$DSH_HOME/tasks"
 QUEUE="$TASKS/queue"
 DAEMON="$DSH_HOME/tools/planner-daemon.mjs"
@@ -54,7 +54,7 @@ case "$1" in
     # 写入 $DSH_HOME/.credentials.yaml 的 refs 段）。若 max+ 没开，这里**明确拒绝**，
     # 而不是让任务悄悄派出去、daemon 拿不到 key 后空转/静默失败——
     # 那样 AI 会以为任务在跑，用户等半天没结果。
-    if ! grep -q "DEEPSEEK_API_KEY" "${DSH_HOME:-/data/user/0/app.dsh.mobile/files/dsh-home}/.credentials.yaml" 2>/dev/null; then
+    if ! grep -q "DEEPSEEK_API_KEY" "${DSH_HOME:-/data/user/0/dsh.dsh.mobile/files/dsh-home}/.credentials.yaml" 2>/dev/null; then
       echo '{"ok":false,"error":"accessibility max+ is OFF — the daemon needs an API key it cannot get. Ask the user to enable Settings -> Extensions -> Accessibility max+ (one sentence), then delegate again; meanwhile do the task yourself with short `loop run` plans."}'
       exit 3
     fi

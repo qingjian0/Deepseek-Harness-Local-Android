@@ -26,9 +26,9 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INSTALLER = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/engine/RuntimeInstaller.kt")
-PICKER = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/UpdateAssetPicker.kt")
-SERVICE = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdateDownloadService.kt")
+INSTALLER = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine/RuntimeInstaller.kt")
+PICKER = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/UpdateAssetPicker.kt")
+SERVICE = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdateDownloadService.kt")
 
 failures: list[str] = []
 
