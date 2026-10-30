@@ -35,7 +35,7 @@ const OLD_DIR = path.join(SRC, A, "dsh", "mobile");
 const NEW_DIR = path.join(SRC, "dsh", "dsh", "mobile");
 
 const EXTS = new Set([".kt", ".java", ".xml", ".pro", ".mjs", ".js", ".py", ".sh", ".yml",
-  ".yaml", ".json", ".md", ".gradle", ".kts", ".properties", ".txt", ".c", ".h", ".cpp"]);
+  ".yaml", ".json", ".md", ".gradle", ".kts", ".properties", ".txt", ".c", ".h", ".cpp", ".tmpl"]);
 const SKIP_DIRS = new Set([".git", "build", ".gradle", "node_modules", "dist", "artifacts", ".idea", ".kotlin"]);
 // 文档目录描述的是历史与上游原值，重放时不改写
 const SKIP_PATHS = ["docs/fork"];
