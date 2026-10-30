@@ -89,3 +89,28 @@ node scripts/fork/set_version.mjs 1.5.7 305
 
 > 本机无 `python3`，`scripts/fork/*.py` 已改写为等价的 `*.mjs`（`rebrand` / `port_shift` /
 > `set_version`），行为与旧脚本一致（幂等、dry-run、JNI 残留校验）。
+
+---
+
+## 七、本轮重建的实际差异（相对上游，已落地）
+
+| 类别 | 文件数 | 说明 |
+| --- | --- | --- |
+| 包名迁移（重命名 + 内容） | ~194 | 含 4 个 JNI 导出符号、脚本里的分段路径 |
+| 端口 +1000 | 53 | 运行时代码 + gates + 插件 + 文档 |
+| 手动代码项 | 4 | `AgentContextSeed` / `EngineSupervisor` / `FastPicker` / `LocalModel` |
+| CI 体积 | 1 | `android-build.yml` 插入 lite runtime 步骤 |
+| 新增文档与工具 | 7 | `docs/fork/*` + `scripts/fork/*.mjs` |
+
+### 本轮踩到并修掉的两个坑
+
+1. **probes 里的分段路径**：`os.path.join(..., "app", "dsh", "mobile")` 不是连续字符串，
+   文本替换抓不到 → `i18n-check` 里两个 probe 读不到文件（run 41018080387 红）。
+   已批量修正 12 个脚本，并把该规则写进 `rebrand.mjs`。
+2. **`RepoConfig.kt.tmpl` 的 package 行**：`.tmpl` 不在替换扩展名列表里，
+   生成的 `RepoConfig.kt` 包声明仍是旧包 → `Unresolved reference: RepoConfig`
+   引发 AboutActivity / MainActivity / RuntimeIndexClient / AppUpdate* / UpdateDialogs
+   全线编译失败（run 41018080316 红）。已修的首行 + 把 `.tmpl` 加入扩展名列表。
+
+> 判据：`node scripts/fork/rebrand.mjs --dry-run` 必须输出「文本替换 0 个文件」，
+> `node scripts/fork/port_shift.mjs --dry-run` 必须输出「修改 0 个文件」。
