@@ -7,7 +7,7 @@
  * node 的 http 模块 + 流式 pipe 天然正确处理这些，代码短得多、也稳得多。
  *
  * ## 做什么
- *   浏览器 http://<手机IP>:3090  →  本代理  →  http://127.0.0.1:3080（引擎 WebUI）
+ *   浏览器 http://<手机IP>:4090  →  本代理  →  http://127.0.0.1:4080（引擎 WebUI）
  * 四件事：
  *   ① 密码鉴权（Cookie，首访 ?pw= 换票）；
  *   ② 自动补引擎 token（从 engine.log 读，用户零输入）；
@@ -16,11 +16,11 @@
  *   ④ WebSocket 升级原样转发（对话流靠它）。
  *
  * ## 硬约束
- *   · 只监听 3090（绝不碰 3080/3083）；
+ *   · 只监听 4090（绝不碰 4080/4083）；
  *   · 起停独立于引擎；任何异常只记日志，不退出、不影响 app；
  *   · 只在内存里改响应体，**不修改磁盘上的任何引擎文件**。
  *
- * 用法: node lan-web-proxy.mjs --port 3090 --pw <密码> [--upstream 127.0.0.1:3080]
+ * 用法: node lan-web-proxy.mjs --port 4090 --pw <密码> [--upstream 127.0.0.1:4080]
  * 环境: DSH_LAN_PW 亦可提供密码（优先命令行）
  */
 import http from 'node:http';
@@ -35,11 +35,11 @@ const argOf = (name, dflt) => {
   const i = argv.indexOf('--' + name);
   return i >= 0 && argv[i + 1] ? argv[i + 1] : dflt;
 };
-const PORT = Number(argOf('port', '3090'));
+const PORT = Number(argOf('port', '4090'));
 const PW = argOf('pw', process.env.DSH_LAN_PW || '');
-const UPSTREAM = argOf('upstream', '127.0.0.1:3080');
+const UPSTREAM = argOf('upstream', '127.0.0.1:4080');
 const [UP_HOST, UP_PORT] = UPSTREAM.split(':');
-const HOME = process.env.DSH_HOME || '/data/user/0/app.dsh.mobile/files/dsh-home';
+const HOME = process.env.DSH_HOME || '/data/user/0/dsh.dsh.mobile/files/dsh-home';
 const ENGINE_DIR = path.resolve(HOME, '..', 'engine');
 const LOG = (...a) => console.log(`[lan-proxy ${new Date().toISOString()}]`, ...a);
 
@@ -127,7 +127,7 @@ function parseCookies(req) {
 
 // ---------- 登录失败退避（v1.4.46 安全审查 H1）----------
 // 旧实现错误密码一律立刻回 200，攻击者可无限并发爆破（同 WiFi 或同机 App
-// 走 127.0.0.1:3090 都能打，破译即拿到完整引擎会话）。
+// 走 127.0.0.1:4090 都能打，破译即拿到完整引擎会话）。
 // 现在：同一来源连续失败按指数退避 + 抖动；达到上限后锁定一段时间。
 // 全部失败响应固定延迟到与成功路径接近，避免用耗时侧信道区分对错。
 const FAIL_WINDOW_MS = 10 * 60 * 1000;
@@ -379,7 +379,7 @@ const server = http.createServer((req, res) => {
     o['cache-control'] = 'no-store';
     // ⚠️ v1.2.168 实测修复（303 无限重定向的最后一环）：
     // 引擎签发的会话 Cookie 带 `SameSite=Strict`。而经代理访问时，浏览器把
-    // `http://<手机IP>:3090` 视为**非安全上下文**，跨站重定向链里 Strict Cookie
+    // `http://<手机IP>:4090` 视为**非安全上下文**，跨站重定向链里 Strict Cookie
     // 会被浏览器丢弃 → 每次请求都没有会话 Cookie → 引擎又回 303 + 新 Cookie
     // → **无限循环**（实测 redirects=50；设备内直连引擎无此问题，因为那是 loopback
     // 安全上下文）。
@@ -453,11 +453,11 @@ server.on('error', (e) => {
     // 旧实现只退避重试 —— 但占用端口的**正是上一次遗留的代理进程**（它用旧验证码），
     // 重试永远失败；而 app 的 stop() 在某些路径下没杀掉它（换进程/换包后 child 引用失效）。
     // 结果：浏览器连的是旧进程（旧码），用户输的是新码 → 永远不匹配。
-    // 正确做法：**先把占用 3090 的旧代理杀掉**（只杀命令行含本脚本名的进程，不误伤别的服务），
+    // 正确做法：**先把占用 4090 的旧代理杀掉**（只杀命令行含本脚本名的进程，不误伤别的服务），
     // 再重试监听。
     LOG(`port ${PORT} busy (attempt ${attempts}) — killing stale proxy and retrying`);
     try {
-      // 只匹配本脚本名，避免误杀引擎（3080）或桥（3083）
+      // 只匹配本脚本名，避免误杀引擎（4080）或桥（4083）
       execSync(`pkill -f lan-web-proxy 2>/dev/null || true`, { stdio: "ignore" });
     } catch {}
     setTimeout(listen, 1200);

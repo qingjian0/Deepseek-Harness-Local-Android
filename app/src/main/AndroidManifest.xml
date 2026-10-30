@@ -77,7 +77,7 @@
             android:name=".LanWebOffReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="app.dsh.mobile.action.LAN_WEB_OFF" />
+                <action android:name="dsh.dsh.mobile.action.LAN_WEB_OFF" />
             </intent-filter>
         </receiver>
 
@@ -226,7 +226,7 @@
             android:name=".update.InstallResultReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="app.dsh.mobile.update.INSTALL_RESULT" />
+                <action android:name="dsh.dsh.mobile.update.INSTALL_RESULT" />
             </intent-filter>
         </receiver>
 

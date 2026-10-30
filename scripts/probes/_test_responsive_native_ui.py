@@ -149,7 +149,7 @@ if "columnPrimary" in by_id and "columnSecondary" in by_id:
           order == ["rowLandscape", "rowPriv", "rowExt", "rowAbout"], str(order))
 
 check("settings layout: uses MaxWidthLinearLayout",
-      "app.dsh.mobile.MaxWidthLinearLayout" in read(os.path.join(RES, "layout", "activity_settings.xml")))
+      "dsh.dsh.mobile.MaxWidthLinearLayout" in read(os.path.join(RES, "layout", "activity_settings.xml")))
 check("no layout-land settings variant (configChanges would never inflate it)",
       not os.path.exists(os.path.join(RES, "layout-land", "activity_settings.xml")))
 
@@ -158,7 +158,7 @@ for layout in ("activity_about.xml", "activity_plugin_store.xml",
                "activity_extension_store.xml", "activity_asr_app.xml",
                "activity_voice_service.xml", "activity_onboarding.xml"):
     check(layout + ": uses MaxWidthLinearLayout",
-          "app.dsh.mobile.MaxWidthLinearLayout" in read(os.path.join(RES, "layout", layout)))
+          "dsh.dsh.mobile.MaxWidthLinearLayout" in read(os.path.join(RES, "layout", layout)))
 
 plugin = read(os.path.join(JAVA, "PluginStoreActivity.kt"))
 ext = read(os.path.join(JAVA, "ExtensionStoreActivity.kt"))

@@ -25,10 +25,10 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PREFS = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdatePrefs.kt")
-SCHED = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdateScheduler.kt")
-SERVICE = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdateDownloadService.kt")
-SETTINGS = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/SettingsActivity.kt")
+PREFS = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdatePrefs.kt")
+SCHED = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdateScheduler.kt")
+SERVICE = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdateDownloadService.kt")
+SETTINGS = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/SettingsActivity.kt")
 
 MIN_GAP_MS = 10 * 60 * 1000
 COLD_START_MS = 20 * 1000
@@ -130,7 +130,7 @@ def main() -> int:
         ("AppUpdatePrefs.packageStrategy(ctx)", "update_package_mode_strategy"),
     ]:
         src = prefs + sched + open(
-            os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdateChecker.kt"),
+            os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdateChecker.kt"),
             encoding="utf-8",
         ).read()
         check(f"有消费者读 {key}", consumer in src, True)

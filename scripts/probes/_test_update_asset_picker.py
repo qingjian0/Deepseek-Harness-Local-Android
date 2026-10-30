@@ -25,7 +25,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PICKER = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/UpdateAssetPicker.kt")
+PICKER = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/UpdateAssetPicker.kt")
 
 FULL, NORT = "full", "noruntime"
 AUTO, KEEP = "auto", "keep"

@@ -75,7 +75,7 @@ tap coordinates carry a small random offset instead of a fixed signature.
 
 ## 6. Security boundaries
 
-- **Token-gated local bridge**: it listens on `127.0.0.1:3083` only; the token is random per start and
+- **Token-gated local bridge**: it listens on `127.0.0.1:4083` only; the token is random per start and
   injected into the engine env only. Third-party apps on the same device can't call it (no token →
   `unauthorised`, verified);
 - **Three privilege tiers**: Normal (sandbox) / Shizuku (adb-level) / Root (full disk); options whose

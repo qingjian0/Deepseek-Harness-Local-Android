@@ -292,7 +292,7 @@ def main():
     rounded(canvas, (badge_x, badge_y, badge_x + 161, badge_y + 65), 12, (10, 24, 46, 246), (59, 92, 135), .8)
     ImageDraw.Draw(canvas).ellipse(box((badge_x + 16, badge_y + 16, badge_x + 22, badge_y + 22)), fill=(82, 215, 173))
     text(canvas, (badge_x + 30, badge_y + 13), "ENGINE READY", 10.5, (141, 204, 196), "medium", tracking=1)
-    text(canvas, (badge_x + 16, badge_y + 35), "127.0.0.1:3080", 14, (204, 223, 249), "mono")
+    text(canvas, (badge_x + 16, badge_y + 35), "127.0.0.1:4080", 14, (204, 223, 249), "mono")
     text(canvas, (1050, 812), "REAL APP. REAL CAPABILITY.", 10, (86, 120, 166), "medium", tracking=1.5)
     line(canvas, [(100, 770), (720, 770)], (34, 49, 71), .7)
     text(canvas, (100, 798), "github.com / Soodok / Deepseek-Harness-Local-Android", 12, (116, 139, 172), "regular")

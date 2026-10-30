@@ -30,8 +30,8 @@ const sources = {
     public Intent getIntent(){ return intent; } public void setIntent(Intent value){intent=value;}
     public void finish(){finished=true;} public void startActivity(Intent value){if(failLaunch)throw new IllegalStateException("synthetic launch denied");started=value;}
   }`,
-  'app/dsh/mobile/CallbackTest.java': `package app.dsh.mobile;
-    import android.content.Intent; import android.content.pm.PackageInstaller; import app.dsh.mobile.engine.ApkInstallStatus;
+  'dsh/dsh/mobile/CallbackTest.java': `package dsh.dsh.mobile;
+    import android.content.Intent; import android.content.pm.PackageInstaller; import dsh.dsh.mobile.engine.ApkInstallStatus;
     public class CallbackTest {
       static void check(boolean condition,String why){if(!condition)throw new AssertionError(why);}
       static void await(java.util.concurrent.CountDownLatch gate){try{gate.await();}catch(InterruptedException e){throw new AssertionError(e);}}
@@ -99,16 +99,16 @@ before(() => {
   for (const [name, text] of Object.entries(sources)) {
     const file = path.join(work, 'fixtures', name); fs.mkdirSync(path.dirname(file), { recursive:true }); fs.writeFileSync(file,text); files.push(file);
   }
-  files.push(path.join(javaRoot,'app/dsh/mobile/ExtensionApkInstallActivity.java'), path.join(javaRoot,'app/dsh/mobile/engine/ApkInstallStatus.java'));
+  files.push(path.join(javaRoot,'dsh/dsh/mobile/ExtensionApkInstallActivity.java'), path.join(javaRoot,'dsh/dsh/mobile/engine/ApkInstallStatus.java'));
   command(process.env.JAVAC ?? 'javac', ['--release', '17', '-d', path.join(work,'classes'), ...files]);
 });
 for (const mode of ['pending','missing-confirmation','launch-denied','success','cancelled','unknown-status','missing-status','missing-session','null-intent','isolation','duplicate','late','late-pending','terminal-then-pending','new-intent','invalid-session','untracked-pending','untracked-terminal','duplicate-begin','invalid-begin','concurrent-terminal','concurrent-clear']) {
   test(`actual Java callback with synthetic Android lifecycle: ${mode}`, () => {
-    const result = command(process.env.JAVA ?? 'java', ['-cp',path.join(work,'classes'),'app.dsh.mobile.CallbackTest',mode]);
+    const result = command(process.env.JAVA ?? 'java', ['-cp',path.join(work,'classes'),'dsh.dsh.mobile.CallbackTest',mode]);
     assert.match(result.stdout,new RegExp(`PASS ${mode}`));
   });
 }
-const manager = fs.readFileSync(path.join(javaRoot,'app/dsh/mobile/engine/ExtensionManager.kt'),'utf8');
+const manager = fs.readFileSync(path.join(javaRoot,'dsh/dsh/mobile/engine/ExtensionManager.kt'),'utf8');
 const manifest = fs.readFileSync(path.join(root,'app/src/main/AndroidManifest.xml'),'utf8');
 test('callback is non-exported and not the generic launcher', () => {
   assert.match(manifest, /android:name="\.ExtensionApkInstallActivity"\s+android:exported="false"/);

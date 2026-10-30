@@ -1,6 +1,6 @@
 # 在 Android 上跑 AI Agent：五条路线对比
 
-> **背景**。DeepSeek Harness（`dsh`）以 Node.js CLI + 本地 Web UI（`http://127.0.0.1:3080`）的形式发布，**没有官方 Android 版本**。想把它搬到手机上，第一件要决定的事不是「用哪个 Agent」，而是「**怎么把 Node.js 运行时送到设备上**」——路线之间的差别，基本都来自这个决定。
+> **背景**。DeepSeek Harness（`dsh`）以 Node.js CLI + 本地 Web UI（`http://127.0.0.1:4080`）的形式发布，**没有官方 Android 版本**。想把它搬到手机上，第一件要决定的事不是「用哪个 Agent」，而是「**怎么把 Node.js 运行时送到设备上**」——路线之间的差别，基本都来自这个决定。
 >
 > 本文对比当前实际在用的五条路线，包含各自的代价。文档由 [DSH Mobile](https://github.com/Soodok/Deepseek-Harness-Local-Android) 项目维护，所以第 5 条写得最细；但 1–4 条的真实优势如实列出，第 5 条的短板也直说。
 
@@ -12,7 +12,7 @@
 pkg update -y
 pkg install -y nodejs clang make python binutils pkg-config cmake ninja
 npm install -g @deepseek-ai/dsh
-dsh web   # 手机浏览器打开 http://127.0.0.1:3080
+dsh web   # 手机浏览器打开 http://127.0.0.1:4080
 ```
 
 实际上有几个原生模块在 Android 上装不干净，常见失败与成因：

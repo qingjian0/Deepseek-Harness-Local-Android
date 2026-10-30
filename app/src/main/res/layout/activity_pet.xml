@@ -38,7 +38,7 @@
         android:layout_height="match_parent"
         android:fillViewport="true">
 
-        <app.dsh.mobile.MaxWidthLinearLayout
+        <dsh.dsh.mobile.MaxWidthLinearLayout
             android:id="@+id/petContentWidth"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -62,6 +62,6 @@
                 android:text="@string/pet_pack_license"
                 android:textColor="@color/text_muted"
                 android:textSize="11sp" />
-        </app.dsh.mobile.MaxWidthLinearLayout>
+        </dsh.dsh.mobile.MaxWidthLinearLayout>
     </ScrollView>
 </LinearLayout>

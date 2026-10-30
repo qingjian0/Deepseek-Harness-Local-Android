@@ -9,7 +9,7 @@
 | 编号 | 问题 | 修法 |
 |---|---|---|
 | H1 | LAN WebUI 6 位纯数字验证码、登录无速率限制 → 爆破即接管引擎会话 | 8 位字母数字口令 + 失败指数退避 + 锁定 + 防开放重定向 |
-| H2 | 健康检查只认「3080 有 200」，端口被抢占则 WebView 加载攻击者页面 | 必须同时能从 engine.log 取到带 token 的 URL；拿不到不加载 |
+| H2 | 健康检查只认「4080 有 200」，端口被抢占则 WebView 加载攻击者页面 | 必须同时能从 engine.log 取到带 token 的 URL；拿不到不加载 |
 | M1 | /vision/crop 的 id 直接拼路径 → 路径穿越写/读任意文件 | id 白名单 + canonical 前缀校验 |
 | M2 | JS 桥/麦克风不校验来源，任意回环页面可静默拿麦克风 | onPermissionRequest 只放行 loopback origin |
 | M3 | .npmrc 的 onlyBuiltDependencies 可被包名换行注入 | npm 包名正则校验 + lambda 形式 replace |
@@ -82,7 +82,7 @@ check("H2: 健康判定要求同时拿到带 token 的 URL",
 check("H2: 拿不到 tokenUrl 时 webUrl() 返回空而不是裸地址",
       'is State.Healthy -> s.tokenUrl.orEmpty()' in sup
       and 'is State.SafeMode -> s.tokenUrl.orEmpty()' in sup,
-      "回退裸 http://127.0.0.1:3080/ 会加载攻击者页面")
+      "回退裸 http://127.0.0.1:4080/ 会加载攻击者页面")
 check("H2: 提供 hasLoadableUrl() 供 UI 判断",
       "fun hasLoadableUrl()" in sup)
 

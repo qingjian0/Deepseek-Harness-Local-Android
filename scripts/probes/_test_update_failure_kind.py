@@ -27,13 +27,13 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-UPDATE = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update")
+UPDATE = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update")
 MODEL = os.path.join(UPDATE, "AppUpdate.kt")
 CHECKER = os.path.join(UPDATE, "AppUpdateChecker.kt")
 SCHED = os.path.join(UPDATE, "AppUpdateScheduler.kt")
 TEXTMAP = os.path.join(UPDATE, "UpdateFailureText.kt")
-ABOUT = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/AboutActivity.kt")
-TMPL = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine/RepoConfig.kt.tmpl")
+ABOUT = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/AboutActivity.kt")
+TMPL = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/engine/RepoConfig.kt.tmpl")
 RES = os.path.join(ROOT, "app/src/main/res")
 
 FAIL_KEYS = [

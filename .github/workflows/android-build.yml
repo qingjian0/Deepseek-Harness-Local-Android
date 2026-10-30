@@ -149,6 +149,19 @@ jobs:
           echo "--- runtime-meta ---"
           cat runtime-meta.json
 
+      - name: 生成轻量运行时（本 fork 定制：剥离 LibreOffice + inspector）
+        run: |
+          set -euo pipefail
+          du -h runtime.zip
+          if python3 scripts/make-lite-runtime.py runtime.zip runtime-lite.zip; then
+            ls -lh runtime-lite.zip
+            mv runtime-lite.zip runtime.zip
+            echo "::notice::lite runtime in use: $(du -h runtime.zip | cut -f1)"
+          else
+            echo "::warning::lite 运行时生成失败，回退完整运行时"
+            rm -f runtime-lite.zip
+          fi
+
       - name: 校验运行时命令闭包（${{ matrix.abi }}）
         run: |
           rm -rf runtime-check && mkdir runtime-check

@@ -49,7 +49,7 @@
 │    · 计划 = {goal, steps[{id, target, action, verify, onFail}]}
 │    · 本地闭环执行，AI 只在升级（escalate）时介入
 │
-├─ AgentBridge（HTTP 桥，127.0.0.1:3083，token 鉴权）
+├─ AgentBridge（HTTP 桥，127.0.0.1:4083，token 鉴权）
 │    · scr dump/tap/swipe/key/launch/...  感知与手势原语
 │    · loop run/pick/status               闭环执行器
 │    · notify/say                         通知与 TTS

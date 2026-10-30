@@ -61,7 +61,7 @@ window.__ModuleLoader__.load({
     // ---- 宿主识别（桌面端默认不激活移动布局） ----
     /** 宿主形态：桌面端 DeepSeek Harness（Electron 壳）。 */
     const HOST_DESKTOP = 'desktop';
-    /** 宿主形态：Android WebView 壳（app.dsh.mobile）。 */
+    /** 宿主形态：Android WebView 壳（dsh.dsh.mobile）。 */
     const HOST_ANDROID = 'android';
     /** 宿主形态：普通浏览器（web 服务的 http(s) 页面）。 */
     const HOST_WEB = 'web';

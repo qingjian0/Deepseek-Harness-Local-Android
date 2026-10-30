@@ -1,0 +1,329 @@
+package dsh.dsh.mobile.engine
+
+import android.util.Log
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * 本地快速决策层（v1.2.120）—— 主人设计的「非黑即白判断题」架构。
+ *
+ * ## 架构意图（主人原话）
+ * 本地跑一个**极小**模型，**只做判断题**：给定屏幕文本 + 目标描述，
+ * 立刻回答「该点哪个节点」。**不输出坐标**（坐标由无障碍层从节点直接取），
+ * **不看图片**（不做视觉推理）—— 因此模型可以极小、延迟可以毫秒级。
+ * 云端模型负责高层规划与异常兜底。
+ *
+ * ## 为什么这样能快
+ * 传统路径：截图 → 上传 → 大模型视觉推理 → 返回坐标 → 点击，一次 2-5 秒。
+ * 本路径：屏幕文本（本地已有）→ 极小模型选节点（**毫秒级**）→ 无障碍层取坐标
+ * → 点击。**省掉了图片编码、上传、大模型推理三段时间**。
+ *
+ * ## 三层回退（保证永不失败）
+ * ① **精确匹配**（零延迟）：目标文本与节点文本完全相同/包含 → 直接用
+ * ② **语义匹配**（毫秒级，需 llama-server + 嵌入模型）：余弦相似度选最相关节点
+ * ③ **云端兜底**：本地判断不了 → 交回给 AI（AI 用 scr dump 自己决定）
+ *
+ * 前三层都在本地，只有 ③ 才走模型往返 —— 绝大多数常见操作会命中 ①②。
+ */
+object FastPicker {
+
+    private const val TAG = "FastPicker"
+
+    /**
+     * 命中统计（v1.2.124）——「本地判决 AI 到底用了多少」的可量化诊断。
+     * 真机反馈「装起来也很少用」后加的：没有数据就只能猜。
+     * 统计维度：pick 三层各自命中次数 + verify 语义救场次数。
+     * 进程内累计（不持久化），/local/status 输出。
+     */
+    object stats {
+        val exact = java.util.concurrent.atomic.AtomicInteger()
+        val semantic = java.util.concurrent.atomic.AtomicInteger()
+        val none = java.util.concurrent.atomic.AtomicInteger()
+        val verifySemantic = java.util.concurrent.atomic.AtomicInteger()
+
+        fun reset() {
+            exact.set(0); semantic.set(0); none.set(0); verifySemantic.set(0)
+        }
+
+        fun snapshot(): org.json.JSONObject = org.json.JSONObject().apply {
+            put("pickExact", exact.get())
+            put("pickSemantic", semantic.get())
+            put("pickNone", none.get())
+            put("verifySemanticHits", verifySemantic.get())
+        }
+    }
+
+    /** 候选节点（来自无障碍层的紧凑 dump） */
+    data class Candidate(
+        val index: Int,
+        val text: String,
+        val x: Int,
+        val y: Int,
+        val clickable: Boolean,
+        /** 可编辑（v1.2.153）：`[edit]` 节点 —— pick 的同档优先判据之一 */
+        val editable: Boolean = false,
+        /** 勾选状态（v1.2.126）：true=选中(v) false=未选中(o) null=不可勾选 */
+        val checked: Boolean? = null,
+        /** 控件角色（v1.2.131 行尾 [role]）：switch/row/button/edit/slider/list/scroll，"" = 未标 */
+        val role: String = "",
+    )
+
+    /** 选择结果 */
+    data class Pick(
+        val candidate: Candidate?,
+        /** 命中方式：exact | semantic | none */
+        val via: String,
+        /** 置信度 0..1（semantic 时为余弦相似度） */
+        val score: Double,
+    )
+
+    /**
+     * 从紧凑 dump 文本解析候选节点。
+     * 格式（见 DshAccessibilityService.dumpScreenCompact）：
+     * `序号 文本 @x,y [标志]`，标志含 c=clickable
+     */
+    fun parseCompact(dump: String): List<Candidate> {
+        val out = ArrayList<Candidate>()
+        dump.lineSequence().forEach { line ->
+            val l = line.trim()
+            if (l.isEmpty()) return@forEach
+            // 形如: `3 设置 @540,1232 c`  或  `0 - @540,243 c`
+            val at = l.lastIndexOf('@')
+            if (at < 0) return@forEach
+            val head = l.substring(0, at).trim()
+            val tail = l.substring(at + 1).trim()
+            val sp = head.indexOf(' ')
+            if (sp < 0) return@forEach
+            // 序号前缀 `o` = OCR 来源行（ScreenOcr 输出，见 dumpScreenCompact 兜底）；
+            // 纯数字 = 无障碍节点。两类都参与匹配与点击。
+            val idx = head.substring(0, sp).trim().removePrefix("o").toIntOrNull() ?: return@forEach
+            val text = head.substring(sp + 1).trim()
+            val comma = tail.indexOf(',')
+            if (comma < 0) return@forEach
+            val x = tail.substring(0, comma).trim().split(' ')[0].toIntOrNull() ?: return@forEach
+            val y = tail.substring(comma + 1).trim().split(' ')[0].toIntOrNull() ?: return@forEach
+            val clickable = tail.contains(" c") || tail.endsWith("c")
+            // [edit] 角色或标志位里的 e（v1.2.153）
+            val editable = tail.contains("e") && (tail.contains(" e") || tail.contains("ce") ||
+                tail.contains("ec") || tail.contains("[edit]"))
+            // v1.2.131：角色标记（行尾 `[switch]`/`[row]`…）。⚠️ 必须先剥离再判
+            // flags —— `[row]` 含字母 o，混进 flagPart 会被误判成「未勾选」。
+            val role = Regex("\\[([a-z]+)\\]\\s*$").find(tail)?.groupValues?.get(1) ?: ""
+            // v1.2.126：勾选标记（flags 末尾的 v/o；坐标段是数字不含字母，安全）
+            val flagPart = tail.substringAfter(' ', "").substringBefore('[').trim()
+            val checked = when {
+                flagPart.contains('v') -> true
+                flagPart.contains('o') -> false
+                else -> null
+            }
+            out.add(Candidate(idx, text, x, y, clickable, editable, checked, role))
+        }
+        return out
+    }
+
+    /**
+     * 挑一个最该点的节点（本地、无网络）。
+     *
+     * @param dump 紧凑 dump 文本
+     * @param target 目标描述（用户/模型给的，如「WLAN 开关」）
+     * @param preferClickable 是否只考虑可点击节点（默认 true —— 自动化点击的目标
+     *   绝大多数是 clickable，过滤能显著降噪）
+     * @return 选择结果；candidate 为 null 表示本地判断不了（应交云端兜底）
+     */
+    fun pick(dump: String, target: String, preferClickable: Boolean = true): Pick {
+        val all = parseCompact(dump)
+        if (all.isEmpty()) return Pick(null, "none", 0.0)
+        // ⚠️ v1.2.120 实测修正：紧凑 dump 里**可点击的是容器节点、其文本是 `-`**，
+        // 真正的文本在子节点上（如 `6 网络和互联网`，无 c 标记）。旧实现只挑
+        // clickable → 候选全是 "-"，永远选不中（实测 pick 全部 via=none）。
+        // 正确语义：**文本节点是目标**，点它的坐标（事件冒泡到可点击祖先 ——
+        // 与 tap-text 同一原理）。故这里优先用「有文本」的节点，
+        // preferClickable 仅用于**优先排序**（可点击的排前面）而非过滤。
+        val candidates = all.filter { it.text.isNotBlank() && it.text != "-" }
+        if (candidates.isEmpty()) return Pick(null, "none", 0.0)
+        val want = target.trim()
+        if (want.isEmpty()) return Pick(null, "none", 0.0)
+
+        // 可点击的节点排前面（同分优先），但不排除文本节点
+        val ordered = if (preferClickable) {
+            candidates.sortedByDescending { it.clickable }
+        } else candidates
+
+        // ① 精确匹配（零延迟）：完全相同 → 包含 → 被包含
+        // v1.2.153 实测修复（靶场发现）：**同档质量里优先「可交互」节点**。
+        // 反例：目标「搜索商品」同时命中 <label>搜索商品</label>（不可点，精确=1.0）
+        // 与空输入框 `p:搜索商品 输入商品名称… ce [edit]`（可点可编辑，包含=0.95）。
+        // 旧逻辑在精确档直接返回 label → 点击落到死标签上**静默无反应**，
+        // 而 AI 只看到"点了但没生效"，只能反复重试——真实世界里的表单标签
+        // 与输入框并排就是这种结构，命中率极低。
+        fun actable(c: Candidate) = c.clickable || c.editable
+        fun tier(pred: (Candidate) -> Boolean, score: Double): Pick? {
+            val hits = ordered.filter(pred)
+            if (hits.isEmpty()) return null
+            val pick = hits.firstOrNull(::actable) ?: hits.first()
+            stats.exact.incrementAndGet()
+            return Pick(pick, "exact", if (actable(pick)) score else score - 0.05)
+        }
+        tier({ it.text == want }, 1.0)?.let { return it }
+        tier({ it.text.contains(want, ignoreCase = true) }, 0.95)?.let { return it }
+        tier({ it.text.isNotBlank() && want.contains(it.text, ignoreCase = true) && it.text.length >= 2 }, 0.9)
+            ?.let { return it }
+
+        // ② 语义匹配（需本地嵌入服务；不可用时返回 none → 云端兜底）
+        val emb = LocalEmbedder.bestMatch(ordered.map { it.text }, want)
+        if (emb != null && emb.score >= SEMANTIC_MIN_SCORE) {
+            stats.semantic.incrementAndGet()
+            return Pick(ordered[emb.index], "semantic", emb.score)
+        }
+        stats.none.incrementAndGet()
+        return Pick(null, "none", emb?.score ?: 0.0)
+    }
+
+    /** 语义命中阈值：低于此值宁可交云端，也不要瞎点（误点比慢更糟） */
+    private const val SEMANTIC_MIN_SCORE = 0.62
+}
+
+/**
+ * 本地嵌入服务客户端（v1.2.120）。
+ *
+ * 与 `llama-server`（扩展 llama-cpp 提供）通信：它在本地起一个 OpenAI 兼容
+ * HTTP 服务，`POST /v1/embeddings` 返回向量。我们用最小模型
+ * （bge-small-zh-v1.5-q4，**15MB**，24M 参数）算「目标描述 vs 各节点文本」的
+ * 余弦相似度，取最高者 —— 这是**毫秒级**的判断，无网络往返。
+ *
+ * ## 为什么用嵌入而不是生成
+ * 生成式模型要逐 token 解码（几百毫秒到秒级）；嵌入是一次前向传播，
+ * 15MB 模型在手机上**几毫秒**就能算完。而且我们的任务本质是「排序选优」，
+ * 嵌入天然适合。
+ *
+ * ## 不可用时的行为
+ * 服务没起 / 模型没下 → 返回 null，FastPicker 回退到云端兜底（不阻塞、不报错）。
+ */
+object LocalEmbedder {
+
+    private const val TAG = "LocalEmbedder"
+
+    /** llama-server 默认端口（避开引擎 4080 / 桥 4083） */
+    const val PORT = 4085
+
+    data class Match(val index: Int, val score: Double)
+
+    /**
+     * 文本 → 向量缓存（本 fork 定制）。
+     *
+     * 实测语义 pick 单次 763–1096ms，而 15MB 嵌入模型热态本身是毫秒级 ——
+     * 慢在**每次动作都把整屏 N+1 条文本重新嵌入**。连续动作之间屏幕文本高度重复
+     * （同屏多次 pick、verify 的语义兜底），因此按文本缓存向量：热态只请求新出现的文本。
+     *
+     * 上限 512 条（512 维 Double ≈ 4KB/条，最多约 2MB）；超限整体清空。
+     */
+    private val vecCache = java.util.concurrent.ConcurrentHashMap<String, DoubleArray>()
+    private const val VEC_CACHE_MAX = 512
+
+    /** 服务是否就绪（缓存，避免每次都探测） */
+    @Volatile private var ready: Boolean? = null
+    @Volatile private var lastProbe = 0L
+
+    /** 清空探测缓存（服务刚启动/停止后调用，避免 30 秒缓存挡住状态变化） */
+    fun resetProbe() {
+        ready = null
+        lastProbe = 0L
+    }
+
+    /** 探测本地嵌入服务（带 30 秒缓存，避免高频轮询） */
+    fun isReady(): Boolean {
+        val now = System.currentTimeMillis()
+        val cached = ready
+        if (cached != null && now - lastProbe < 30_000) return cached
+        val ok = runCatching {
+            val conn = java.net.URL("http://127.0.0.1:$PORT/health").openConnection()
+            conn.connectTimeout = 400
+            conn.readTimeout = 400
+            conn.getInputStream().close()
+            true
+        }.getOrDefault(false)
+        ready = ok
+        lastProbe = now
+        return ok
+    }
+
+    /**
+     * 在候选文本里找与目标最相关的一个。
+     * @return null = 服务不可用（调用方回退云端）
+     */
+    fun bestMatch(candidates: List<String>, target: String): Match? {
+        if (candidates.isEmpty() || target.isBlank()) return null
+        if (!isReady()) return null
+        return runCatching {
+            val want = target.trim()
+            // 去重后只请求缓存里没有的文本
+            val needed = LinkedHashSet<String>(candidates.size + 1)
+            needed.add(want)
+            for (c in candidates) needed.add(c)
+            val missing = needed.filter { vecCache[it] == null }
+            if (missing.isNotEmpty()) {
+                val vecs = fetchEmbeddings(missing) ?: return@runCatching null
+                if (vecs.size != missing.size) return@runCatching null   // 数量不符不写缓存
+                if (vecCache.size + missing.size > VEC_CACHE_MAX) vecCache.clear()
+                for (i in missing.indices) vecCache[missing[i]] = vecs[i]
+            }
+            val targetVec = vecCache[want] ?: return@runCatching null
+            var bestIdx = -1
+            var bestScore = -1.0
+            for (i in candidates.indices) {
+                val v = vecCache[candidates[i]] ?: continue
+                val s = cosine(targetVec, v)
+                if (s > bestScore) { bestScore = s; bestIdx = i }
+            }
+            if (bestIdx < 0) null else Match(bestIdx, bestScore)
+        }.getOrElse {
+            Log.w(TAG, "embedding failed: ${it.message}")
+            null
+        }
+    }
+
+    /**
+     * POST /v1/embeddings（从 bestMatch 抽出，本 fork 定制：只请求缓存缺失的文本）。
+     *
+     * 超时沿用上游 2.5s：15MB 模型热态是毫秒级，冷加载应在 llama-server 启动时完成
+     * （LocalModel 有预热），不该让 verify 的预算替它买单。
+     */
+    private fun fetchEmbeddings(texts: List<String>): List<DoubleArray>? = runCatching {
+        val body = JSONObject().apply {
+            put("model", "local")
+            put("input", JSONArray(texts))
+        }.toString()
+        val conn = java.net.URL("http://127.0.0.1:$PORT/v1/embeddings").openConnection()
+        conn.doOutput = true
+        conn.connectTimeout = 2000
+        conn.readTimeout = 2500
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.outputStream.use { it.write(body.toByteArray()) }
+        val resp = conn.getInputStream().bufferedReader().use { it.readText() }
+        parseEmbeddings(resp, texts.size)
+    }.getOrElse {
+        Log.w(TAG, "embedding request failed: ${it.message}")
+        null
+    }
+
+    private fun parseEmbeddings(json: String, expect: Int): List<DoubleArray>? = runCatching {
+        val arr = JSONObject(json).getJSONArray("data")
+        val out = ArrayList<DoubleArray>(arr.length())
+        for (i in 0 until arr.length()) {
+            val e = arr.getJSONObject(i).getJSONArray("embedding")
+            val v = DoubleArray(e.length()) { e.getDouble(it) }
+            out.add(v)
+        }
+        out
+    }.getOrNull()
+
+    private fun cosine(a: DoubleArray, b: DoubleArray): Double {
+        if (a.size != b.size) return 0.0
+        var dot = 0.0; var na = 0.0; var nb = 0.0
+        for (i in a.indices) {
+            dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]
+        }
+        val d = kotlin.math.sqrt(na) * kotlin.math.sqrt(nb)
+        return if (d == 0.0) 0.0 else dot / d
+    }
+}
