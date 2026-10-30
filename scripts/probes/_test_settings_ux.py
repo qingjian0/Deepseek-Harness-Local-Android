@@ -17,7 +17,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.path.join(ROOT, "app", "src", "main")
-JAVA = os.path.join(APP, "java", "app", "dsh", "mobile")
+JAVA = os.path.join(APP, "java", "dsh", "dsh", "mobile")
 RES = os.path.join(APP, "res")
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 

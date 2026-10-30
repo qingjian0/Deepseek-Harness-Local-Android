@@ -45,7 +45,7 @@ def check(name, ok, detail=""):
 # ══════════════════════════════════════════════════════════════════
 # H1：LAN 验证码强度 + 登录限速
 # ══════════════════════════════════════════════════════════════════
-app = read("app", "src", "main", "java", "app", "dsh", "mobile", "DshApp.kt")
+app = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "DshApp.kt")
 proxy = read("app", "src", "main", "assets", "tools", "lan-web-proxy.mjs")
 
 check("H1: 验证码不再是 6 位纯数字",
@@ -74,7 +74,7 @@ check("H1: next 参数防开放重定向",
 # ══════════════════════════════════════════════════════════════════
 # H2：健康检查必须验证引擎身份
 # ══════════════════════════════════════════════════════════════════
-sup = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "EngineSupervisor.kt")
+sup = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "engine", "EngineSupervisor.kt")
 
 check("H2: 健康判定要求同时拿到带 token 的 URL",
       re.search(r"code in 200\.\.499[\s\S]{0,400}?extractTokenUrl\(\)", sup) is not None,
@@ -86,7 +86,7 @@ check("H2: 拿不到 tokenUrl 时 webUrl() 返回空而不是裸地址",
 check("H2: 提供 hasLoadableUrl() 供 UI 判断",
       "fun hasLoadableUrl()" in sup)
 
-main_act = read("app", "src", "main", "java", "app", "dsh", "mobile", "MainActivity.kt")
+main_act = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "MainActivity.kt")
 check("H2: UI 加载前判空（不把空 URL 交给 WebView）",
       main_act.count("if (u.isNotEmpty()) loadLocalUrl(u)") >= 2,
       "加载空 URL 会让 WebView 停在 about:blank 且 urlLoaded 卡死")
@@ -94,7 +94,7 @@ check("H2: UI 加载前判空（不把空 URL 交给 WebView）",
 # ══════════════════════════════════════════════════════════════════
 # M1：/vision/crop 路径穿越
 # ══════════════════════════════════════════════════════════════════
-bridge = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "AgentBridge.kt")
+bridge = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "engine", "AgentBridge.kt")
 
 check("M1: crop 的 id 做了白名单校验",
       r'rawId.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))' in bridge,
@@ -113,7 +113,7 @@ check("M2: onPermissionRequest 校验 origin 是回环",
 # ══════════════════════════════════════════════════════════════════
 # M3：.npmrc 包名注入
 # ══════════════════════════════════════════════════════════════════
-plugin = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "PluginCenter.kt")
+plugin = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "engine", "PluginCenter.kt")
 
 check("M3: 写 .npmrc 前校验 npm 包名",
       "NPM_PACKAGE_NAME" in plugin and "matches(NPM_PACKAGE_NAME)" in plugin,
@@ -126,7 +126,7 @@ check("M3: 合并走 lambda replace（防 $ 被当分组引用）",
 # ══════════════════════════════════════════════════════════════════
 # 群友 dsh-root-doctor 的实测经验（susfs 隐藏挂载）
 # ══════════════════════════════════════════════════════════════════
-priv = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "Privilege.kt")
+priv = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "engine", "Privilege.kt")
 
 check("susfs: 属主修复的 find 带 -xdev",
       "append(\"-xdev \")" in priv,

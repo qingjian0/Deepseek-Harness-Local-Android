@@ -20,6 +20,8 @@ const MAP = [["4080", "4080"], ["4083", "4083"], ["4085", "4085"], ["4090", "409
 const EXTS = new Set([".kt", ".kts", ".java", ".xml", ".pro", ".mjs", ".js", ".py", ".sh",
   ".yml", ".yaml", ".json", ".md", ".gradle", ".properties", ".txt", ".c", ".h"]);
 const SKIP_DIRS = new Set([".git", "build", ".gradle", "node_modules", "dist", "artifacts", ".idea", ".kotlin"]);
+// 文档目录描述的是历史与上游原值，重放时不改写
+const SKIP_PATHS = ["docs/fork"];
 const DRY = process.argv.includes("--dry-run");
 
 function walk(dir, out = []) {
@@ -36,6 +38,7 @@ const changed = [];
 let skipped = 0;
 for (const p of walk(ROOT)) {
   if (!EXTS.has(path.extname(p))) continue;
+    if (SKIP_PATHS.some((s) => path.relative(ROOT, p).startsWith(s))) continue;
   let text;
   try { text = fs.readFileSync(p, "utf8"); } catch { continue; }
   if (!MAP.some(([old]) => text.includes(old))) { skipped++; continue; }

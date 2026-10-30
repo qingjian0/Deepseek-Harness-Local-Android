@@ -30,7 +30,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ASSETS = os.path.join(ROOT, "app", "src", "main", "assets", "android-plugins")
-CONFIG = os.path.join(ROOT, "app", "src", "main", "java", "app", "dsh", "mobile",
+CONFIG = os.path.join(ROOT, "app", "src", "main", "java", "dsh", "dsh", "mobile",
                       "engine", "EngineConfig.kt")
 
 passed = 0

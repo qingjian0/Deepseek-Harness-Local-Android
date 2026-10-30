@@ -21,7 +21,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.path.join(ROOT, "app", "src", "main")
-JAVA = os.path.join(APP, "java", "app", "dsh", "mobile")
+JAVA = os.path.join(APP, "java", "dsh", "dsh", "mobile")
 PET = os.path.join(JAVA, "pet")
 RES = os.path.join(APP, "res")
 PET_DOCS = os.path.join(ROOT, "docs", "pet")

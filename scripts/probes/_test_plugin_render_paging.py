@@ -17,7 +17,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-KT = os.path.join(ROOT, "app", "src", "main", "java", "app", "dsh", "mobile",
+KT = os.path.join(ROOT, "app", "src", "main", "java", "dsh", "dsh", "mobile",
                   "PluginStoreActivity.kt")
 LAYOUT = os.path.join(ROOT, "app", "src", "main", "res", "layout",
                       "activity_plugin_store.xml")

@@ -31,7 +31,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PRIV = os.path.join(ROOT, "app", "src", "main", "java", "app", "dsh", "mobile",
+PRIV = os.path.join(ROOT, "app", "src", "main", "java", "dsh", "dsh", "mobile",
                     "engine", "Privilege.kt")
 
 passed = 0
