@@ -82,6 +82,25 @@ object LocalModel {
         return startServer(ctx, server, model)
     }
 
+    /**
+     * 启动预热（本 fork 定制）—— 模型已在本地时，后台把 llama-server 拉起来。
+     *
+     * llama-server 不随引擎重启恢复；不预热则语义匹配整段失效，loop 匹配不上就
+     * 升级回云端（每步多几秒）。**模型不存在时直接返回，绝不触发下载**。
+     */
+    fun warmUpIfReady(ctx: Context) {
+        if (isServerRunning()) return
+        if (!isModelReady(ctx)) return
+        runCatching {
+            val server = llamaServer(ctx) ?: run {
+                Log.i(TAG, "warm-up skipped: llama-server not installed")
+                return
+            }
+            val ok = startServer(ctx, server, modelFile(ctx))
+            Log.i(TAG, "warm-up: embedding server ${if (ok) "started" else "unavailable"}")
+        }.onFailure { Log.w(TAG, "warm-up failed: ${it.message}") }
+    }
+
     /** 下载模型（多镜像 failover；写到 .part 再改名，避免半截文件被当成完整模型） */
     private fun downloadModel(target: File, onProgress: (Float, String) -> Unit): Boolean {
         val part = File(target.absolutePath + ".part")

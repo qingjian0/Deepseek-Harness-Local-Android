@@ -600,10 +600,10 @@ class EngineSupervisor(private val ctx: Context) {
                 step("guardian-restore")
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
 
-                // Agent 上下文种子（m1.35）：幂等预写 $HOME/AGENTS.md（dsh 原生 user-global
-                // 指令），让 Agent 首轮就带 Android 世界观，省掉环境探索 token
-                withContext(Dispatchers.IO) { AgentContextSeed.ensure(ctx) }
-                step("agent-seed")
+                // 本 fork 定制：不再注入默认 AGENTS.md 种子；旧种子段启动时剥掉
+                val seedStripped = withContext(Dispatchers.IO) { AgentContextSeed.stripLegacySeedOnBoot(ctx) }
+                step("agents-seed")
+                if (seedStripped) Log.i(TAG, "AGENTS.md: legacy seed stripped, user section preserved")
 
                 // 孤儿进程回收（v1.2.104）：**必须早于桥 bind 与引擎 fork** ——
                 // 历史孤儿会攥着继承来的 4080/4083 监听 socket 不撒手（无 CLOEXEC，
@@ -614,6 +614,9 @@ class EngineSupervisor(private val ctx: Context) {
                 // Agent 能力桥（v1.1.0）：notify/scr 的 HTTP 后端，全模式启动
                 withContext(Dispatchers.IO) { AgentBridge.start(ctx) }
                 step("bridge")
+
+                // 本 fork 定制：本地快速决策层预热（模型已下载时后台拉起 llama-server）
+                scopeRef?.launch(Dispatchers.IO) { LocalModel.warmUpIfReady(ctx) }
 
                 // 属性自愈（v1.3.1 扩展到**所有模式**，含 Root）。
                 //

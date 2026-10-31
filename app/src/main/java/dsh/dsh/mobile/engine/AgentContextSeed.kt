@@ -85,6 +85,27 @@ object AgentContextSeed {
         Log.i(TAG, "AGENTS.md upgraded to v$SEED_VERSION (user section preserved, ${userContent?.length ?: 0} chars)")
     }
 
+    /**
+     * 启动时清理旧版注入的默认种子（本 fork 定制）。
+     *
+     * 上游每次启动会预写一份「Android 环境说明书」到 `$DSH_HOME/AGENTS.md`，
+     * 引擎把它当作 user-global 指令注入**每一次会话**。本 fork 不要这份种子。
+     *
+     * 只做一件事：文件若带旧种子标记，剥掉 App 段、只保留用户段。
+     *  · 文件不存在 → false（不创建）
+     *  · 无种子标记（用户自写）→ false（不动）
+     *  · 有标记 → 只留用户段，返回 true
+     */
+    fun stripLegacySeedOnBoot(ctx: Context): Boolean {
+        val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
+        if (!file.isFile) return false
+        val existing = runCatching { file.readText() }.getOrNull() ?: return false
+        if (!existing.contains(MARKER_PREFIX)) return false
+        write(file, userSection(extractUserSection(existing)))
+        Log.i(TAG, "startup: legacy app seed stripped, user section preserved")
+        return true
+    }
+
     /** 读取用户段（供设置页编辑）。返回 null 表示尚未有用户内容。 */
     fun readUserSection(ctx: Context): String? {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
