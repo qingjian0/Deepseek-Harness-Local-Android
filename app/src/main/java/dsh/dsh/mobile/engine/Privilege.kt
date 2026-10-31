@@ -34,6 +34,9 @@ object Privilege {
     private const val PREFS = "dsh_priv"
     private const val KEY_MODE = "priv_mode"
     private const val KEY_ONBOARDED = "onboarded"
+    private const val KEY_OWNERSHIP_AUDIT_UID = "ownership_audit_uid"
+    private const val KEY_OWNERSHIP_AUDIT_AT = "ownership_audit_at"
+    private const val OWNERSHIP_AUDIT_TTL_MS = 7L * 24 * 60 * 60 * 1000
 
     // 常见 su 路径（存在其一即视为具备 Root 能力）
     private val SU_PATHS = listOf(
@@ -432,6 +435,17 @@ object Privilege {
         val home = EngineConfig.dshHome(ctx)
         if (!home.exists() || home.listFiles()?.isEmpty() == true) return null
         val outDir = java.io.File(ctx.filesDir, "root-backup").apply { mkdirs() }
+        // Root-mode cold starts used to synchronously tar the entire dsh-home on every launch.
+        // Large session/workspace trees made this consume 60s (the hard timeout) before node
+        // could even spawn. Reuse a recent complete snapshot; the app's normal export/backup
+        // remains available for an immediate fresh backup when the user needs one.
+        val recent = outDir.listFiles()
+            ?.filter { it.name.startsWith("dsh-home.") && it.name.endsWith(".tar") && it.length() > 0L }
+            ?.maxByOrNull { it.lastModified() }
+        if (recent != null && System.currentTimeMillis() - recent.lastModified() < 24L * 60 * 60 * 1000) {
+            Log.i(TAG, "backupHome: reusing recent snapshot ${recent.name}; skipping boot-blocking tar")
+            return recent.absolutePath
+        }
         val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
             .format(java.util.Date())
         val out = java.io.File(outDir, "dsh-home.$stamp.tar")
@@ -505,22 +519,19 @@ object Privilege {
         val home = EngineConfig.dshHome(ctx)
         return runCatching {
             val engine = java.io.File(home.parentFile, "engine")
-            // ① 自己就能判定的部分：实际尝试读取，读不了就是要修
-            // 只探 home 树：engine 由 RuntimeInstaller 自管，且引擎正在其中运行
-            if (hasUnreadableEntries(ctx, listOf(home))) {
+            // 每次启动只探关键目录/文件；完整属主审计只在引擎 UID 改变或每 7 天执行。
+            if (hasUnreadableEntries(ctx, listOf(home, engine))) {
                 Log.w(TAG, "ownership check: found entries this app cannot read (mode/owner damage)")
                 return true
             }
-            // ② 需要特权才能判定的部分：属主是否属于别的 uid。
-            //    v1.4.45（issue #74）：pnpm 运行时状态（按 uid 加后缀的锁目录、
-            //    metadata 缓存）是**自管理**的，不参与 chown——把它们 prune 掉，
-            //    否则另一 uid 留下的锁每轮都命中 `-not -user`、每轮检出、修复却
-            //    跳过，永不收敛（用户实测「每次重启都复发」）。
-            //    注意 prune 必须用**正向** `-path`：`-not -path L -prune -o X` 里
-            //    L 命中时左侧为假、直接落到 `-o` 右侧，prune 形同虚设。
-            //    它们要不要清理由 ③（pnpmForeignStateProbe）单独判定。
-            val uid = android.os.Process.myUid()
             val euid = engineUid(ctx)
+            val audit = prefs(ctx)
+            val auditedUid = audit.getInt(KEY_OWNERSHIP_AUDIT_UID, Int.MIN_VALUE)
+            val auditedAt = audit.getLong(KEY_OWNERSHIP_AUDIT_AT, 0L)
+            if (auditedUid == euid && System.currentTimeMillis() - auditedAt in 0..OWNERSHIP_AUDIT_TTL_MS) {
+                return false
+            }
+            val uid = android.os.Process.myUid()
             val out = runPrivileged(
                 ctx,
                 "find " + shellQuote(home.absolutePath) + " -xdev " +
@@ -533,6 +544,7 @@ object Privilege {
             }
             val bad = out.isNotBlank()
             if (bad) Log.w(TAG, "ownership check: found files not owned by $uid → will chown")
+            else recordOwnershipAudit(ctx)
             bad
         }.getOrDefault(false)
     }
@@ -540,6 +552,14 @@ object Privilege {
     /** 当前**引擎**的有效 uid：root 模式引擎以 0 跑，其余以 app uid 跑。 */
     private fun engineUid(ctx: Context): Int =
         if (getMode(ctx) == PrivMode.ROOT) 0 else android.os.Process.myUid()
+
+    /** Record a completed full ownership audit; UID changes force the next boot to re-audit. */
+    fun recordOwnershipAudit(ctx: Context) {
+        prefs(ctx).edit()
+            .putInt(KEY_OWNERSHIP_AUDIT_UID, engineUid(ctx))
+            .putLong(KEY_OWNERSHIP_AUDIT_AT, System.currentTimeMillis())
+            .apply()
+    }
 
     private val pnpmLockBases = listOf(
         "pnpm-store-operation-locks", "pnpm-dir-locks", "pnpm-modules-swaps",
@@ -593,8 +613,9 @@ object Privilege {
             probes += root
         }
         // 关键文件（被启动链路直接读取的）
-        probes += java.io.File(roots[1], ".runtime-version")          // engine/.runtime-version
-        probes += java.io.File(roots[0], "AGENTS.md")                // dsh-home/AGENTS.md
+        val home = roots.firstOrNull() ?: return false
+        probes += java.io.File(home.parentFile, "engine/.runtime-version") // engine/.runtime-version
+        probes += java.io.File(home, "AGENTS.md")                         // dsh-home/AGENTS.md
         probes += java.io.File(ctx.filesDir, "profile-guardian.meta") // guardian 元数据
         for (p in probes) {
             if (!p.exists()) continue
@@ -784,6 +805,7 @@ object Privilege {
             //   ISLAND-ROOT-LEFTOVER=<n>      —— 清单外 root 属主残留计数
             out.lineSequence().filter { it.startsWith("ISLAND-") }.forEach { Log.i(TAG, "fixHomeOwnership: $it") }
             Log.i(TAG, "fixHomeOwnership done via privileged channel")
+            recordOwnershipAudit(ctx)
             true
         }.getOrDefault(false)
     }

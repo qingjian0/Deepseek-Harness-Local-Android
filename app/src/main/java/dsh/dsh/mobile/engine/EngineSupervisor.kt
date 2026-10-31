@@ -602,7 +602,7 @@ class EngineSupervisor(private val ctx: Context) {
 
                 // 本 fork 定制：不再注入默认 AGENTS.md 种子；旧种子段启动时剥掉
                 val seedStripped = withContext(Dispatchers.IO) { AgentContextSeed.stripLegacySeedOnBoot(ctx) }
-                step("agents-seed")
+                step("agents-user-owned")
                 if (seedStripped) Log.i(TAG, "AGENTS.md: legacy seed stripped, user section preserved")
 
                 // 孤儿进程回收（v1.2.104）：**必须早于桥 bind 与引擎 fork** ——

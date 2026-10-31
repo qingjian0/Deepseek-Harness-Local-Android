@@ -83,7 +83,7 @@ class HttpDownloader(private val ctx: Context) {
         )
     }
 
-    /** 下载一次；优先续传。返回文件总字节数。 */
+    /** 下载一次；优先续传。遇到 416 时清理失效偏移并对当前 URL 从头重试一次。 */
     private fun fetch(
         url: String,
         part: File,
@@ -92,69 +92,115 @@ class HttpDownloader(private val ctx: Context) {
         shouldCancel: () -> Boolean,
     ): Long {
         var start = if (part.isFile) part.length() else 0L
-        if (expectedSize > 0 && start > expectedSize) {
+        if (expectedSize > 0 && start >= expectedSize) {
+            // 没有可信的完整性证明时，不能把同尺寸临时文件当作已下载完成。
             part.delete()
-            start = 0
-        }
-        if (expectedSize > 0 && start == expectedSize) {
-            // 上次其实已经下完（校验失败才会走到这里，保留给上层删除重下）。
-            part.delete()
-            start = 0
+            start = 0L
         }
 
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 20_000
-            readTimeout = 60_000
-            instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "dsh-mobile-runtime")
-            if (start > 0) setRequestProperty("Range", "bytes=$start-")
-        }
-        var code = conn.responseCode
-        if (start > 0 && code == HttpURLConnection.HTTP_OK) {
-            // 服务端忽略了 Range：从头写，避免把整包追加到半包后面。
-            part.delete()
-            start = 0
-        } else if (start > 0 && code != HttpURLConnection.HTTP_PARTIAL) {
-            conn.disconnect()
-            throw IllegalStateException("HTTP $code")
-        }
-        if (code !in 200..299) {
-            conn.disconnect()
-            throw IllegalStateException("HTTP $code")
-        }
+        // 416 通常意味着本地 .part 的 Range 偏移已经不被服务器接受。
+        // 清除临时文件后，对同一 URL 做一次全量请求，避免所有镜像重复携带坏偏移。
+        var restartedAfter416 = false
+        while (true) {
+            val requestStart = start
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 20_000
+                readTimeout = 60_000
+                instanceFollowRedirects = true
+                setRequestProperty("User-Agent", "dsh-mobile-runtime")
+                if (requestStart > 0) setRequestProperty("Range", "bytes=$requestStart-")
+            }
 
-        val total = when {
-            code == HttpURLConnection.HTTP_PARTIAL -> start + conn.contentLengthLong.coerceAtLeast(0)
-            expectedSize > 0 -> expectedSize
-            else -> conn.contentLengthLong
-        }
-        var done = start
-        var lastAt = 0L
-        try {
-            conn.inputStream.use { input ->
-                java.io.FileOutputStream(part, start > 0).use { out ->
-                    val buf = ByteArray(1 shl 16)
-                    while (true) {
-                        if (shouldCancel()) throw CancelledException()
-                        val n = input.read(buf)
-                        if (n <= 0) break
-                        out.write(buf, 0, n)
-                        done += n
-                        val now = System.currentTimeMillis()
-                        if (now - lastAt >= 250L) {
-                            lastAt = now
-                            if (total > 0) onProgress((done.toDouble() / total).toFloat().coerceIn(0f, 1f))
+            val code = try { conn.responseCode } catch (e: Exception) {
+                conn.disconnect()
+                throw e
+            }
+
+            if (requestStart > 0 && code == 416) {
+                conn.disconnect()
+                if (!restartedAfter416) {
+                    Log.w(TAG, "server rejected resume offset=$requestStart; restarting full download: $url")
+                    if (part.exists() && !part.delete()) {
+                        throw java.io.IOException("cannot delete stale partial file: ${part.absolutePath}")
+                    }
+                    start = 0L
+                    restartedAfter416 = true
+                    continue
+                }
+                throw IllegalStateException("HTTP 416 after clean restart")
+            }
+
+            if (requestStart > 0 && code == HttpURLConnection.HTTP_OK) {
+                // 服务端忽略 Range：当前响应是完整文件，必须覆盖而不是追加。
+                if (part.exists() && !part.delete()) {
+                    conn.disconnect()
+                    throw java.io.IOException("cannot reset partial file: ${part.absolutePath}")
+                }
+            } else if (requestStart > 0 && code != HttpURLConnection.HTTP_PARTIAL) {
+                conn.disconnect()
+                throw IllegalStateException("HTTP $code")
+            }
+            if (code !in 200..299) {
+                conn.disconnect()
+                throw IllegalStateException("HTTP $code")
+            }
+
+            if (code == HttpURLConnection.HTTP_PARTIAL) {
+                val contentRange = conn.getHeaderField("Content-Range")
+                val match = Regex("bytes\\s+(\\d+)-(\\d+)/(\\d+|\\*)", RegexOption.IGNORE_CASE)
+                    .matchEntire(contentRange?.trim().orEmpty())
+                val rangeStart = match?.groupValues?.get(1)?.toLongOrNull()
+                if (rangeStart != requestStart) {
+                    conn.disconnect()
+                    throw java.io.IOException(
+                        "invalid Content-Range for resume: expected=$requestStart actual=${contentRange ?: "missing"} ($url)",
+                    )
+                }
+            }
+
+            val rangeTotal = if (code == HttpURLConnection.HTTP_PARTIAL) {
+                Regex("bytes\\s+\\d+-\\d+/(\\d+)", RegexOption.IGNORE_CASE)
+                    .matchEntire(conn.getHeaderField("Content-Range")?.trim().orEmpty())
+                    ?.groupValues?.get(1)?.toLongOrNull() ?: -1L
+            } else -1L
+            val total = when {
+                rangeTotal > 0 -> rangeTotal
+                code == HttpURLConnection.HTTP_PARTIAL -> requestStart + conn.contentLengthLong.coerceAtLeast(0)
+                expectedSize > 0 -> expectedSize
+                else -> conn.contentLengthLong
+            }
+            var done = if (code == HttpURLConnection.HTTP_PARTIAL) requestStart else 0L
+            var lastAt = 0L
+            try {
+                conn.inputStream.use { input ->
+                    java.io.FileOutputStream(part, code == HttpURLConnection.HTTP_PARTIAL).use { out ->
+                        val buf = ByteArray(1 shl 16)
+                        while (true) {
+                            if (shouldCancel()) throw CancelledException()
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            if (n == 0) continue
+                            out.write(buf, 0, n)
+                            done += n
+                            val now = System.currentTimeMillis()
+                            if (now - lastAt >= 250L) {
+                                lastAt = now
+                                if (total > 0) onProgress((done.toDouble() / total).toFloat().coerceIn(0f, 1f))
+                            }
                         }
                     }
                 }
+            } finally {
+                conn.disconnect()
             }
-        } finally {
-            conn.disconnect()
+            if (total > 0 && done != total) {
+                throw java.io.IOException("truncated download: $done/$total bytes ($url)")
+            }
+            if (expectedSize > 0 && done != expectedSize) {
+                throw java.io.IOException("download size mismatch: expected=$expectedSize actual=$done ($url)")
+            }
+            return done
         }
-        if (total > 0 && done != total) {
-            throw java.io.IOException("truncated download: $done/$total bytes ($url)")
-        }
-        return done
     }
 
     companion object {
