@@ -8,7 +8,7 @@ DSH Mobile includes code derived from the following MIT-licensed projects:
    Copyright (c) 2026 dsh-pet-android contributors
    MIT License.
    The throwing/spring/squash constants and formulas in
-   app/src/main/java/app/dsh/mobile/pet/PetPhysics.kt are derived from that
+   app/src/main/java/dsh/dsh/mobile/pet/PetPhysics.kt are derived from that
    project's Physics.kt, which in turn is a line-by-line port of
    dsh-pet's src/shared/physics.ts.
 
