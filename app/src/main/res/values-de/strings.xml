@@ -562,7 +562,7 @@ Sie können auch ohne Update fortfahren, die Oberfläche wird dann aber nicht an
 
     <!-- v1.3.0: LAN WebUI -->
     <string name="setting_lan_web">LAN-WebUI-Zugriff</string>
-    <string name="setting_lan_web_sub">Ermöglicht Browsern im selben Netzwerk den Zugriff auf die WebUI dieses Telefons (Port 3090).</string>
+    <string name="setting_lan_web_sub">Ermöglicht Browsern im selben Netzwerk den Zugriff auf die WebUI dieses Telefons (Port 4090).</string>
     <string name="setting_runtime_proxy">Runtime-Download-Proxy</string>
     <string name="setting_runtime_proxy_sub">Standard gh-proxy.org; direkte GitHub-Downloads sind in einigen Regionen unzuverlässig</string>
     <string name="setting_runtime_proxy_value_default">Standard · gh-proxy.org (empfohlen)</string>

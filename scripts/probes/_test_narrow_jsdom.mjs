@@ -52,7 +52,7 @@ function buildFrame({ width, height, expanded, rightbar = false }) {
         ${rightbar ? '<div id="rightbar" class="pI_x6G_rightbarCol" style="position:relative">轨迹</div>' : ""}
       </div>
     </body></html>`,
-    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:3080/" },
+    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:4080/" },
   );
   // jsdom 不跑布局，getBoundingClientRect 恒为 0；但插件只读 innerWidth/innerHeight
   // 与 display 计算值，不依赖真实盒模型尺寸。
@@ -146,7 +146,7 @@ console.log("\n=== ⑦ 侧栏晚出现（插件先激活，随后引擎渲染侧
         <div id="sidebar" class="pI_x6G_sidebarCol"></div>
         <div id="center" class="pI_x6G_centerCol"></div>
       </div></body></html>`,
-    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:3080/" },
+    { pretendToBeVisual: true, runScripts: "outside-only", url: "http://127.0.0.1:4080/" },
   );
   const win = dom.window;
   Object.defineProperty(win, "innerWidth", { value: 405, writable: true, configurable: true });

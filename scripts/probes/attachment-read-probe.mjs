@@ -6,8 +6,8 @@
 // 本探针绕过 UI 直连该包，把链路压缩成一次 SAVE_OK/READ_OK 判定，便于真机回归。
 //
 // 用法（设备上，run-as 到 app 私有目录后）：
-//   cd /data/data/app.dsh.mobile/files/engine
-//   LD_LIBRARY_PATH=$PWD/lib ./bin/node <此文件> /data/data/app.dsh.mobile/files/dsh-home
+//   cd /data/data/dsh.dsh.mobile/files/engine
+//   LD_LIBRARY_PATH=$PWD/lib ./bin/node <此文件> /data/data/dsh.dsh.mobile/files/dsh-home
 //
 // 期望输出：SAVE_OK ... 然后 READ_OK bytes=350（与输入同字节数）。
 // 失败时打印 error.code —— EACCES/EINVAL 指向 syncDirectory 补丁缺失，

@@ -26,9 +26,9 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INSTALLER = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine/RuntimeInstaller.kt")
-PICKER = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/UpdateAssetPicker.kt")
-SERVICE = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdateDownloadService.kt")
+INSTALLER = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/engine/RuntimeInstaller.kt")
+PICKER = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/UpdateAssetPicker.kt")
+SERVICE = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdateDownloadService.kt")
 
 failures: list[str] = []
 
@@ -93,7 +93,7 @@ def main() -> int:
     check(
         "已装 2000 > 包内 1000 → 复用（不降级）",
         reuse(
-            package="app.dsh.mobile",
+            package="dsh.dsh.mobile",
             bundled=True,
             installed_built=2000,
             bundled_built=1000,
@@ -105,7 +105,7 @@ def main() -> int:
     check(
         "已装 1000 < 包内 2000 → 重装（正常升级）",
         reuse(
-            package="app.dsh.mobile",
+            package="dsh.dsh.mobile",
             bundled=True,
             installed_built=1000,
             bundled_built=2000,
@@ -117,7 +117,7 @@ def main() -> int:
     check(
         "builtAt 相同 + 版本相同 → 复用",
         reuse(
-            package="app.dsh.mobile",
+            package="dsh.dsh.mobile",
             bundled=True,
             installed_built=1000,
             bundled_built=1000,
@@ -129,7 +129,7 @@ def main() -> int:
     check(
         "builtAt 缺失时退回版本串：不同 → 重装",
         reuse(
-            package="app.dsh.mobile",
+            package="dsh.dsh.mobile",
             bundled=True,
             installed_built=0,
             bundled_built=0,

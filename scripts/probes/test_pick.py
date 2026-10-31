@@ -14,14 +14,14 @@ def adb_shell(cmd, timeout=30):
     return adb("shell", cmd, timeout=timeout).decode("utf-8", "replace")
 
 
-np_out = adb_shell("run-as app.dsh.mobile pidof node").strip()
+np_out = adb_shell("run-as dsh.dsh.mobile pidof node").strip()
 if not np_out:
     print("引擎未运行（node 不存在）")
     sys.exit(1)
 np = np_out.split()[0]
 print("node pid:", np)
 
-env = adb("shell", f"run-as app.dsh.mobile cat /proc/{np}/environ").decode("utf-8", "replace")
+env = adb("shell", f"run-as dsh.dsh.mobile cat /proc/{np}/environ").decode("utf-8", "replace")
 token = ""
 for kv in env.split("\x00"):
     if kv.startswith("DSH_BRIDGE_TOKEN="):
@@ -31,13 +31,13 @@ if not token:
     print("token 未取到")
     sys.exit(1)
 
-adb("forward", "tcp:3083", "tcp:3083", timeout=20)
+adb("forward", "tcp:4083", "tcp:4083", timeout=20)
 
 
 def pick(target, tap=False, clickable_only=True):
     body = json.dumps({"target": target, "tap": tap, "clickableOnly": clickable_only}).encode("utf-8")
     req = urllib.request.Request(
-        "http://127.0.0.1:3083/pick", data=body,
+        "http://127.0.0.1:4083/pick", data=body,
         headers={"X-DSH-Token": token, "Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=20) as resp:

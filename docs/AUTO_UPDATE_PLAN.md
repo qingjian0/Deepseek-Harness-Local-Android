@@ -240,7 +240,7 @@ enum class ModeNote { KeptRuntime, AddedRuntime, FullToNoRuntime, NoRuntimeAsset
 
 ## 7. 架构与模块
 
-### 7.1 新增 `app/src/main/java/app/dsh/mobile/update/`
+### 7.1 新增 `app/src/main/java/dsh/dsh/mobile/update/`
 
 | 文件 | 职责 | 预估行数 |
 |---|---|---|

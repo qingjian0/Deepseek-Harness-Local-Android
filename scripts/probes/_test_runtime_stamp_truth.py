@@ -34,9 +34,9 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INSTALLER = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine/RuntimeInstaller.kt")
-INDEX_CLIENT = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine/RuntimeIndexClient.kt")
-CHECKER = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdateChecker.kt")
+INSTALLER = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/engine/RuntimeInstaller.kt")
+INDEX_CLIENT = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/engine/RuntimeIndexClient.kt")
+CHECKER = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdateChecker.kt")
 MANIFEST_PY = os.path.join(ROOT, "scripts/write-runtime-manifest.py")
 GRADLE_KTS = os.path.join(ROOT, "app/build.gradle.kts")
 WORKFLOW = os.path.join(ROOT, ".github/workflows/android-build.yml")

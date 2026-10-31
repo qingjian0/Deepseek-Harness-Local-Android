@@ -54,10 +54,10 @@ static void free_string_array(char **vec) {
  * 关掉所有 > stderr 的继承 fd。
  *
  * 为什么必须在 execve 前做（2026-10-09 实测事故）：app 进程里的
- * `java.net.ServerSocket`（AgentBridge 的 127.0.0.1:3083）**不带 O_CLOEXEC**
+ * `java.net.ServerSocket`（AgentBridge 的 127.0.0.1:4083）**不带 O_CLOEXEC**
  * —— 实测该 listen socket 的 fdinfo `flags: 04002`（O_RDWR|O_NONBLOCK，没有
  * O_CLOEXEC）。fork 之后引擎把这块 socket 一起带过去了，于是：
- *   AI 随便起的子进程只要还有一个活着，3083 就**永不释放**；
+ *   AI 随便起的子进程只要还有一个活着，4083 就**永不释放**；
  *   引擎重启时新桥 bind 失败（EADDRINUSE），notify / scr / say 全部哑掉。
  * 关在 execve 前，等于把「引擎及其全部后代」一次性摘干净 —— 后代从引擎继承，
  * 引擎干净了它们自然干净。
@@ -83,7 +83,7 @@ static void close_inherited_fds(void) {
  * 成功返回 master fd，失败返回负的 errno 取反（Java 层取 abs 得 errno）。
  */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeForkPty(
+Java_dsh_dsh_mobile_engine_Pty_nativeForkPty(
         JNIEnv *env, jclass clazz,
         jstring jCmd, jobjectArray jArgs, jstring jCwd,
         jobjectArray jEnv, jint rows, jint cols) {
@@ -137,7 +137,7 @@ Java_app_dsh_mobile_engine_Pty_nativeForkPty(
         if (slave > STDERR_FILENO) close(slave);
         ioctl(STDIN_FILENO, TIOCSCTTY, 0);   /* 设为控制终端 */
         /* 父进程死了要跟着死。setsid 之后子进程已脱离会话，没人回收就是孤儿
-         * —— 而孤儿会一直攥着继承来的 3080/3083 监听 socket 不放，端口再也
+         * —— 而孤儿会一直攥着继承来的 4080/4083 监听 socket 不放，端口再也
          * 起不来。SIGTERM 而非 SIGKILL：给引擎机会收尾（落盘、断连）。 */
         prctl(PR_SET_PDEATHSIG, SIGTERM);
         /* 竞态：prctl 生效前父进程可能已经没了，那时 PDEATHSIG 不会补发信号 */
@@ -168,13 +168,13 @@ fail_errno:
 
 /* 当前跟踪的子进程 PID（供 Java 层进程组/树级清理） */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeChildPid(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeChildPid(JNIEnv *env, jclass clazz) {
     return (g_child > 0) ? (jint)g_child : -1;
 }
 
 /* 阻塞等待子进程退出，返回原始 waitpid status（Java 层解析） */
 JNIEXPORT jint JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
     if (g_child <= 0) return -1;
     int status = 0;
     if (waitpid(g_child, &status, 0) < 0) return -errno;
@@ -184,12 +184,12 @@ Java_app_dsh_mobile_engine_Pty_nativeWaitChild(JNIEnv *env, jclass clazz) {
 
 /* 向子进程发送信号（SIGTERM=15 / SIGKILL=9） */
 JNIEXPORT void JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeSignalChild(JNIEnv *env, jclass clazz, jint sig) {
+Java_dsh_dsh_mobile_engine_Pty_nativeSignalChild(JNIEnv *env, jclass clazz, jint sig) {
     if (g_child > 0) kill(g_child, sig);
 }
 
 /* Java 层关闭 master fd 后子进程收到 SIGHUP 会自然退出，此处兜底强杀 */
 JNIEXPORT void JNICALL
-Java_app_dsh_mobile_engine_Pty_nativeForceKill(JNIEnv *env, jclass clazz) {
+Java_dsh_dsh_mobile_engine_Pty_nativeForceKill(JNIEnv *env, jclass clazz) {
     if (g_child > 0) kill(g_child, SIGKILL);
 }

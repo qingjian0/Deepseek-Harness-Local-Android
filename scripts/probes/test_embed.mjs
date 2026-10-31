@@ -1,6 +1,6 @@
 // 嵌入服务端到端测试（v1.2.121）—— 验证本地语义匹配的实际延迟
 // 用法: node test_embed.mjs
-const URL = "http://127.0.0.1:3085/v1/embeddings";
+const URL = "http://127.0.0.1:4085/v1/embeddings";
 
 // 模拟 FastPicker 的真实使用：目标描述 + 屏幕上的若干文本节点
 const target = "打开 WLAN";

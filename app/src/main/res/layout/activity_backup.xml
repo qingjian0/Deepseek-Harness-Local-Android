@@ -38,7 +38,7 @@
         android:layout_height="match_parent"
         android:fillViewport="true">
 
-        <app.dsh.mobile.MaxWidthLinearLayout
+        <dsh.dsh.mobile.MaxWidthLinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
@@ -285,6 +285,6 @@
                 </LinearLayout>
 
             </LinearLayout>
-        </app.dsh.mobile.MaxWidthLinearLayout>
+        </dsh.dsh.mobile.MaxWidthLinearLayout>
     </ScrollView>
 </LinearLayout>

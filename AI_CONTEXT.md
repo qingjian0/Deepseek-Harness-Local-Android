@@ -8,7 +8,7 @@
 用户连报三次「还是失败 / 报错一点没变 / 还是下载失败」。逐层剥开是三个独立问题：
 
 **第 1 层｜设备上的 `pnpm-workspace.yaml` 本身是坏的（真凶）**
-`/data/data/app.dsh.mobile/files/dsh-home/profiles/web/pnpm-workspace.yaml` 里被写进了
+`/data/data/dsh.dsh.mobile/files/dsh-home/profiles/web/pnpm-workspace.yaml` 里被写进了
 pnpm 10 时代的旧键：
 
 ```yaml
@@ -64,7 +64,7 @@ Error:   × load configuration
 即**非交互运行（App 里就是非交互）时 pnpm 自己不会写这个文件**，必须由调用方补。
 v1.4.63 只回读文件里的占位值 → 文件天然不存在 → 名单恒空。
 
-### 二、修法（`app/src/main/java/app/dsh/mobile/engine/PluginCenter.kt`）
+### 二、修法（`app/src/main/java/dsh/dsh/mobile/engine/PluginCenter.kt`）
 
 - `stripVersion(name)`：`@parcel/watcher@2.5.1` → `@parcel/watcher`（scoped 前缀保留）。
 - `ignoredBuildNames(output)`：先 `trimEnd('.', ';', ':')`，再 `stripVersion`，再 `.distinct()`。
@@ -85,8 +85,8 @@ v1.4.63 只回读文件里的占位值 → 文件天然不存在 → 名单恒�
 真机复现命令（四件套环境变量，缺任一个都报别的错）：
 
 ```sh
-E=/data/data/app.dsh.mobile/files/engine
-H=/data/data/app.dsh.mobile/files/dsh-home
+E=/data/data/dsh.dsh.mobile/files/engine
+H=/data/data/dsh.dsh.mobile/files/dsh-home
 su -c "cd $H/profiles/web && LD_LIBRARY_PATH=$E/lib PATH=$E/bin:$PATH \
   DSH_HOME=$H HOME=$H $E/bin/node \
   $E/lib/node_modules/@deepseek-ai/dsh/lib/bin.js plugin --profile web add <pkg>"
@@ -113,7 +113,7 @@ Done in 117ms using pnpm v12.15.0
   设备 `192.168.101.21:9000`，型号 PLZ110（OPPO），**有 root**，读私有目录必须
   `su -c`（release 包 `run-as` 报 `package not debuggable`）。
 - 装机：`./adb.exe -s 192.168.101.21:9000 install -r <apk>`；核对版本用
-  `dumpsys package app.dsh.mobile | grep version`。
+  `dumpsys package dsh.dsh.mobile | grep version`。
 - 构建：`export JAVA_HOME=/d/新建文件夹/jbr`，用
   `.../gradle-9.2.1-bin/2t0n5ozlw9xmuyvbp7dnzaxug/gradle-9.2.1/bin/gradle.bat -p . -Ppackage=noruntime assembleRelease`
   （`-Ppackage=noruntime` 必须加，否则 `:app:prepareRuntimeAssets` 报缺 PTC patch）。
@@ -144,7 +144,7 @@ Done in 117ms using pnpm v12.15.0
 - 所以上一轮往 `.npmrc` 写 `onlyBuiltDependencies=` **从根上无效**，这就是
   「修了还报错」的原因。
 
-正确实现（`app/src/main/java/app/dsh/mobile/engine/PluginCenter.kt`，照抄上游
+正确实现（`app/src/main/java/dsh/dsh/mobile/engine/PluginCenter.kt`，照抄上游
 `@deepseek-ai/dsh-plugin-manager/lib/types/build-approval.js`）：
 - `policyFile(ctx)` → profile 目录下的 `pnpm-workspace.yaml`
 - `ignoredBuildNames(output)`：正则 `IGNORED_BUILDS = /\bIgnored build scripts: (.+)/`
@@ -175,7 +175,7 @@ Done in 117ms using pnpm v12.15.0
 
 **3. 补回被并发改动删掉的残影修复**
 
-`app/src/main/java/app/dsh/mobile/MainActivity.kt:187-192` 的
+`app/src/main/java/dsh/dsh/mobile/MainActivity.kt:187-192` 的
 `findViewById<View>(R.id.statusBarRow).clipToOutline = true`
 （v1.4.62 的灵动岛方角涟漪残影修复）曾被另一个会话的工作区版本删掉，本轮已补回。
 **如果又发现它消失，先查是不是并发会话覆盖了。**
@@ -390,7 +390,7 @@ PR 与 main 冲突时由贡献者自行 rebase 后更新。
 ## 项目规范与源码地图核验（2026-10-30）
 
 - 已静态阅读 `docs/git-workflow.md`、`docs/RELEASE.md`、`docs/translation-mapping.md`、`docs/CI_RUNTIME_PIPELINE.md`、`.github/workflows/i18n-check.yml`，并抽查 README、Gradle、EngineService、EngineSupervisor、PetOverlayService 与 CMake 源码；结论及增量分别写入项目长期记忆（Git/发版规则、本地化规则、目录职责地图）。
-- 目录结构为单 `:app` 模块；原生 Kotlin 位于 `app/src/main/java/app/dsh/mobile/`，含 `engine/`、`service/`、`pet/`、`download/`；C11 PTY 在 `app/src/main/cpp/`；资源在 `res/` 与 `assets/`；运行时构建/补丁/校验及行为探针在 `scripts/` 和 `scripts/probes/`。抽查时未发现 `app/src/test/`。
+- 目录结构为单 `:app` 模块；原生 Kotlin 位于 `app/src/main/java/dsh/dsh/mobile/`，含 `engine/`、`service/`、`pet/`、`download/`；C11 PTY 在 `app/src/main/cpp/`；资源在 `res/` 与 `assets/`；运行时构建/补丁/校验及行为探针在 `scripts/` 和 `scripts/probes/`。抽查时未发现 `app/src/test/`。
 - **范围边界**：这是核心规范文件阅读与代表文件/目录抽样，不是全仓逐文件审查；本轮未运行 CI 全门禁、Gradle 构建、APK 安装或模拟器/真机验收。
 - **版本核对**：`app/build.gradle.kts` 当前为 versionCode 308、versionName 1.4.57、minSdk 26、targetSdk 28；HEAD `d43d8dc7ceaddeeaf7964b68acb38b02a88af3e8`，main。工作树存在其他在途变更，提交前需按对应工作线区分，勿清理无关文件。
 
@@ -573,7 +573,7 @@ PR 与 main 冲突时由贡献者自行 rebase 后更新。
 
 - release 基线包（286/1.4.36，`-Pruntime*` 全带，pin 到 v1.4.37 的运行时）装好后首启：
   `RuntimeInstaller: installing runtime 2026.10.28-7432d79c (noruntime)`（不再是 unknown）；
-- 下载 127MB（代理优先）→ 解压 → `engine healthy on :3080`；戳写成
+- 下载 127MB（代理优先）→ 解压 → `engine healthy on :4080`；戳写成
   `{"version":"2026.10.28-7432d79c","builtAt":1793181069,"sha256":"d910e10c…","source":"download"}`
   —— **遗留 2 关闭**；
 - 自动检查（release 构建 → stable 频道 → **release 资产**，25138298B，
@@ -623,45 +623,45 @@ full:      meta:     versionCode=288 package=full runtimeVersion=2026.10.28-7432
 - 项目边界：当前工作区根 `/e/Deepeek harness` 不是 Git 根；实际 Git 仓库是 `/e/Deepeek harness/dsh-android`，远端为 `origin=https://github.com/Soodok/Deepseek-Harness-Local-Android.git`，另有 `masspedro`、`xiaopb` 远端。
 - Git 快照：当前分支 `main`；HEAD `6fd87bd287aa72d6dcea9718d1c470a7f3026b7e`（2026-10-29 22:02 +08:00，`fix(ui): 全屏模式与灵动岛冲突 —— 按挖孔安全区动态定位（用户反馈）`）；`main` 有 514 个提交，所有 refs 合计 783 个提交，根提交为 `f9413d61879e457082867033a231649194f5ecc6`（2026-08-26）。
 - 构建源码当前版本：`app/build.gradle.kts:169-176` 为 `minSdk=26`、`targetSdk=28`、`versionCode=293`、`versionName="1.4.43"`；`settings.gradle.kts` 只有 `:app` 一个模块；顶层插件为 AGP 8.5.2、Kotlin 1.9.24。
-- 当前工作树有未提交用户/本轮外部改动：已修改 `AI_CONTEXT.md`、`app/build.gradle.kts`、`app/src/main/java/app/dsh/mobile/MainActivity.kt`、`app/src/main/res/values-de/strings.xml`、`values-pt-rBR/strings.xml`、`values-zh-rCN/strings.xml`、`values/strings.xml`、`values-night/themes.xml`；未跟踪 `_rel/`、`docs/promo/video/remotion/tests/v4-keyframes.test.mjs`、`docs/promo/video/review-frames/`。本轮只更新了 `AI_CONTEXT.md`，未覆盖、未清理其他改动。
+- 当前工作树有未提交用户/本轮外部改动：已修改 `AI_CONTEXT.md`、`app/build.gradle.kts`、`app/src/main/java/dsh/dsh/mobile/MainActivity.kt`、`app/src/main/res/values-de/strings.xml`、`values-pt-rBR/strings.xml`、`values-zh-rCN/strings.xml`、`values/strings.xml`、`values-night/themes.xml`；未跟踪 `_rel/`、`docs/promo/video/remotion/tests/v4-keyframes.test.mjs`、`docs/promo/video/review-frames/`。本轮只更新了 `AI_CONTEXT.md`，未覆盖、未清理其他改动。
 - 规模快照：Git 跟踪文件共 531 个，其中 `app=310`、`scripts=63`、`docs=141`、`.github=4`、其它 13；主源码包含 106 个 Kotlin 文件、3 个 C/C++ 文件、124 个资源文件、70 个 assets 文件。计数来自本轮 `git ls-files`，不是构建产物计数。
 
 ### 真实运行拓扑（源码证据）
 
-- `DshApp` 是 Application 入口，创建全局 `EngineSupervisor` 与 `ExtensionManager`，同时安装 Java 未捕获异常处理，将堆栈写入 `filesDir/crash-last.txt`：`app/src/main/java/app/dsh/mobile/DshApp.kt:10-48`。
-- `MainActivity` 是 `ThemedActivity` WebView 外壳，不重写上游 WebUI；健康后加载回环地址，提供桌面/竖屏视口、文件选择、下载、剪贴板、网页媒体权限、渲染进程崩溃后只重建 WebView 等宿主能力：`app/src/main/java/app/dsh/mobile/MainActivity.kt:39-48`、`:350-651`。`onRenderProcessGone()` 返回 `true` 并调用 `recoverWebView()`，源码语义是保留引擎、只恢复渲染层：`:573-598`。
-- `EngineService` 是 `specialUse` 前台服务，`onStartCommand()` 调用 `DshApp.supervisor.start()`；通知栏退出走异步 `exitCompletely()`，先停止引擎/局域网代理/本地模型，再拆悬浮层和桌宠：`app/src/main/java/app/dsh/mobile/service/EngineService.kt:27-89`、`:219-275`。Manifest 同时声明 `FOREGROUND_SERVICE_SPECIAL_USE` 与桌宠下载用的 `FOREGROUND_SERVICE_DATA_SYNC`：`app/src/main/AndroidManifest.xml:7-13`、`:175-201`。
-- `EngineSupervisor` 是启动/健康/自愈状态机：`Idle → Installing → Starting → Healthy/SafeMode`，异常进入 `Backoff`，超过限制进入 `Failed`，显式退出进入 `Stopped`：`app/src/main/java/app/dsh/mobile/engine/EngineSupervisor.kt:20-56`。固定参数在 `EngineConfig.kt:24-85`：健康超时 45s、轮询 500ms、稳定窗 3s、退避 2/4/8/16/32s、普通重启上限 14、插件恢复重启上限 3、一次用户可见启动墙钟预算 5 分钟、端口清场累计上限 8。
+- `DshApp` 是 Application 入口，创建全局 `EngineSupervisor` 与 `ExtensionManager`，同时安装 Java 未捕获异常处理，将堆栈写入 `filesDir/crash-last.txt`：`app/src/main/java/dsh/dsh/mobile/DshApp.kt:10-48`。
+- `MainActivity` 是 `ThemedActivity` WebView 外壳，不重写上游 WebUI；健康后加载回环地址，提供桌面/竖屏视口、文件选择、下载、剪贴板、网页媒体权限、渲染进程崩溃后只重建 WebView 等宿主能力：`app/src/main/java/dsh/dsh/mobile/MainActivity.kt:39-48`、`:350-651`。`onRenderProcessGone()` 返回 `true` 并调用 `recoverWebView()`，源码语义是保留引擎、只恢复渲染层：`:573-598`。
+- `EngineService` 是 `specialUse` 前台服务，`onStartCommand()` 调用 `DshApp.supervisor.start()`；通知栏退出走异步 `exitCompletely()`，先停止引擎/局域网代理/本地模型，再拆悬浮层和桌宠：`app/src/main/java/dsh/dsh/mobile/service/EngineService.kt:27-89`、`:219-275`。Manifest 同时声明 `FOREGROUND_SERVICE_SPECIAL_USE` 与桌宠下载用的 `FOREGROUND_SERVICE_DATA_SYNC`：`app/src/main/AndroidManifest.xml:7-13`、`:175-201`。
+- `EngineSupervisor` 是启动/健康/自愈状态机：`Idle → Installing → Starting → Healthy/SafeMode`，异常进入 `Backoff`，超过限制进入 `Failed`，显式退出进入 `Stopped`：`app/src/main/java/dsh/dsh/mobile/engine/EngineSupervisor.kt:20-56`。固定参数在 `EngineConfig.kt:24-85`：健康超时 45s、轮询 500ms、稳定窗 3s、退避 2/4/8/16/32s、普通重启上限 14、插件恢复重启上限 3、一次用户可见启动墙钟预算 5 分钟、端口清场累计上限 8。
 - `EngineSupervisor.spawnEngine()` 在 spawn 前顺序执行孤儿回收、权限/属主自愈、运行时安装、hardssh 补装、sessions/workspaces 外置、插件总开关收敛，再调用 `EngineProcess.spawn()`：`EngineSupervisor.kt:535-629`、`:986-1030`。健康后等待插件 health marker；插件降级可有限摘除并重启；凭证/登录特征会直接转为可操作的 Failed，不进入无限重启：`:631-748`、`:825-961`。
-- `EngineProcess` 维护 PTY master fd、日志泵和 wait 线程；日志写 logcat 与 `filesDir/engine.log`，记录设备厂商/型号/SDK/系统版本和退出 status/signal/exit code：`app/src/main/java/app/dsh/mobile/engine/EngineProcess.kt:11-85`。停止为 TERM→宽限→KILL，Root 模式再经 `Privilege.runSu()` 清理进程组：`:87-116`。
-- JNI PTY 层由 `Pty.kt` 加载 `libdshpty.so`，接口是 `nativeForkPty/nativeWaitChild/nativeSignalChild/nativeForceKill/nativeChildPid`：`app/src/main/java/app/dsh/mobile/engine/Pty.kt:3-40`。`dsh_pty.c` 使用 `posix_openpt`、`fork`、`setsid`、`TIOCSCTTY`、`PR_SET_PDEATHSIG`、`execve`，并在 exec 前关闭继承 fd，避免 3083/3080 socket 被后代长期持有：`app/src/main/cpp/dsh_pty.c:53-76`、`:104-147`。CMake 为 `dshpty` 和伪装成 `.so` 的 `dsh_pty_exec` 配置 16KB page alignment：`app/src/main/cpp/CMakeLists.txt:5-28`。
-- 引擎运行目录和用户数据拓扑由 `EngineConfig` 定义：`filesDir/engine/{bin/node,lib}`、`filesDir/dsh-home`、`tmp`；`dsh-home/profiles` 保持私有，`sessions/workspaces` 按权限选择性软链外置：`app/src/main/java/app/dsh/mobile/engine/EngineConfig.kt:8-21`、`:361-385`、`:717-743`。共享 Documents 只有 `MANAGE_EXTERNAL_STORAGE` 明确授予才采用，探针失败时回退 app 专属 external；已有可达软链不因瞬时探针失败拆除：`:284-355`、`:439-488`、`:551-624`。
+- `EngineProcess` 维护 PTY master fd、日志泵和 wait 线程；日志写 logcat 与 `filesDir/engine.log`，记录设备厂商/型号/SDK/系统版本和退出 status/signal/exit code：`app/src/main/java/dsh/dsh/mobile/engine/EngineProcess.kt:11-85`。停止为 TERM→宽限→KILL，Root 模式再经 `Privilege.runSu()` 清理进程组：`:87-116`。
+- JNI PTY 层由 `Pty.kt` 加载 `libdshpty.so`，接口是 `nativeForkPty/nativeWaitChild/nativeSignalChild/nativeForceKill/nativeChildPid`：`app/src/main/java/dsh/dsh/mobile/engine/Pty.kt:3-40`。`dsh_pty.c` 使用 `posix_openpt`、`fork`、`setsid`、`TIOCSCTTY`、`PR_SET_PDEATHSIG`、`execve`，并在 exec 前关闭继承 fd，避免 4083/4080 socket 被后代长期持有：`app/src/main/cpp/dsh_pty.c:53-76`、`:104-147`。CMake 为 `dshpty` 和伪装成 `.so` 的 `dsh_pty_exec` 配置 16KB page alignment：`app/src/main/cpp/CMakeLists.txt:5-28`。
+- 引擎运行目录和用户数据拓扑由 `EngineConfig` 定义：`filesDir/engine/{bin/node,lib}`、`filesDir/dsh-home`、`tmp`；`dsh-home/profiles` 保持私有，`sessions/workspaces` 按权限选择性软链外置：`app/src/main/java/dsh/dsh/mobile/engine/EngineConfig.kt:8-21`、`:361-385`、`:717-743`。共享 Documents 只有 `MANAGE_EXTERNAL_STORAGE` 明确授予才采用，探针失败时回退 app 专属 external；已有可达软链不因瞬时探针失败拆除：`:284-355`、`:439-488`、`:551-624`。
 
 ### 本地桥、WebView 与设备能力
 
-- `AgentBridge` 监听 `127.0.0.1:3083`，路由覆盖通知、读屏、OCR、tap/gesture/key/input、frame/vision、local loop、scene memory、扩展/插件、TTS、文件编辑等：`app/src/main/java/app/dsh/mobile/engine/AgentBridge.kt:22-40`、`:349-412`。启动时随机生成 token，仅写入引擎环境 `DSH_BRIDGE_TOKEN`；`Privilege.authorisedBridgeRequest()` 无 token 或 token 不匹配即拒绝：`AgentBridge.kt:104-148`、`Privilege.kt:200-225`。桥绑定失败会记录端口持有者并写入 `engine.log`，不是静默降级：`AgentBridge.kt:169-200`。
+- `AgentBridge` 监听 `127.0.0.1:4083`，路由覆盖通知、读屏、OCR、tap/gesture/key/input、frame/vision、local loop、scene memory、扩展/插件、TTS、文件编辑等：`app/src/main/java/dsh/dsh/mobile/engine/AgentBridge.kt:22-40`、`:349-412`。启动时随机生成 token，仅写入引擎环境 `DSH_BRIDGE_TOKEN`；`Privilege.authorisedBridgeRequest()` 无 token 或 token 不匹配即拒绝：`AgentBridge.kt:104-148`、`Privilege.kt:200-225`。桥绑定失败会记录端口持有者并写入 `engine.log`，不是静默降级：`AgentBridge.kt:169-200`。
 - `open-file` 端点只允许 canonical path 落在 app files/cache、engine、dsh-home、当前/旧 workspaces 根内，拒绝相对路径、目录穿越和越界路径：`AgentBridge.kt:416-485`。返回 `opened=true` 只代表 Activity 已拉起，不代表用户已经保存。
 - WebView 外壳关闭 `allowFileAccess/allowContentAccess`，只允许回环导航；外部 URL 交系统浏览器：`MainActivity.kt:350-367`、`:554-571`。媒体权限回调只放行音频，摄像头/视频采集拒绝；系统权限异步时暂存一次性 `PermissionRequest`：`:392-434`。Manifest 同时声明 `RECORD_AUDIO` 与 `MODIFY_AUDIO_SETTINGS`，这是网页 `getUserMedia` 成功的两层条件：`AndroidManifest.xml:14-22`。
-- 无障碍服务必须用户在系统设置手动开启，XML 开启读取窗口、手势、截图能力：`app/src/main/res/xml/dsh_accessibility_service.xml:2-13`；服务入口是 `DshAccessibilityService`，负责读屏、触摸/窗口事件摘要、语音面板和 60s 保活检查：`app/src/main/java/app/dsh/mobile/DshAccessibilityService.kt:20-95`、`:210-262`。显式退出标记同时存 SharedPreferences，防止无障碍看门狗在用户退出后复活引擎：`DshAccessibilityService.kt:225-255`、`DshApp.kt:70-103`。
-- `LocalLoopExecutor` 是当前源码中的端侧决策程序执行器：JSON DSL 按 `PICK→ACT→VERIFY` 执行，FastPicker 精确/语义匹配失败后按锚点、过滤、原生 `tapText` 判别式降级，最后返回 candidates/foreground/失败屏幕证据并 escalate：`app/src/main/java/app/dsh/mobile/engine/LocalLoopExecutor.kt:13-41`、`:73-100`、`:310-430`、`:454-518`。其 IPC 采用单线程 executor + 超时，超时会取消 Future，不把节点树 IPC 挂死循环。
+- 无障碍服务必须用户在系统设置手动开启，XML 开启读取窗口、手势、截图能力：`app/src/main/res/xml/dsh_accessibility_service.xml:2-13`；服务入口是 `DshAccessibilityService`，负责读屏、触摸/窗口事件摘要、语音面板和 60s 保活检查：`app/src/main/java/dsh/dsh/mobile/DshAccessibilityService.kt:20-95`、`:210-262`。显式退出标记同时存 SharedPreferences，防止无障碍看门狗在用户退出后复活引擎：`DshAccessibilityService.kt:225-255`、`DshApp.kt:70-103`。
+- `LocalLoopExecutor` 是当前源码中的端侧决策程序执行器：JSON DSL 按 `PICK→ACT→VERIFY` 执行，FastPicker 精确/语义匹配失败后按锚点、过滤、原生 `tapText` 判别式降级，最后返回 candidates/foreground/失败屏幕证据并 escalate：`app/src/main/java/dsh/dsh/mobile/engine/LocalLoopExecutor.kt:13-41`、`:73-100`、`:310-430`、`:454-518`。其 IPC 采用单线程 executor + 超时，超时会取消 Future，不把节点树 IPC 挂死循环。
 - `SceneMemory` 是非参数化场景记忆，文件为 `filesDir/scene_memory.json`，最多 200 条；指纹包含屏幕文本、checked 状态和前台包名，Jaccard 阈值 0.7，复用失败两次淘汰；待确认记忆不参与命中，连续两次成功可自动转正：`SceneMemory.kt:9-38`、`:117-159`、`:161-243`。这些是源码事实；历史交接文档中的设备耗时/成功率属于另行记录的运行证据，不能由本轮静态阅读重新确认。
 
 ### 运行时与升级安全
 
 - 运行时来源是 Termux bionic Node 闭包，不是 glibc/proot；`scripts/collect-termux-runtime.sh` 下载 Termux 包、解包 `com.termux/files/usr`、嵌入 dsh npm 依赖并执行 Android 适配补丁；脚本声明 dsh 默认 `0.2.1-rc.2`，当前可由 `DSH_VERSION` 覆盖：`scripts/collect-termux-runtime.sh:1-14`、`:59-122`、`:128-151`。
 - `scripts/build-runtime.sh` 是唯一 runtime 流水线：collect→zod 去重→SONAME 去重→BUILD.json→闭包校验→输出 meta；验证 bash/rg/pnpm/curl、6 个 SONAME、目标 ABI ELF、Android ripgrep 包、PTC patch 和 WebView polyfill 标记，并拒绝 hardssh 混入：`scripts/build-runtime.sh:1-12`、`:45-110`、`:132-210`。
-- `RuntimeInstaller` 支持 `full`（APK 内置 runtime.zip）与 `noruntime`（按 manifest/索引下载）；安装到 `engine.staging` 后校验，再用 `.runtime-swap` 意图日志将 `engine` 顶层条目逐项原子换名，保留 `engine.old` 到首次 Healthy/SafeMode：`app/src/main/java/app/dsh/mobile/engine/RuntimeInstaller.kt:15-33`、`:105-163`、`:249-348`。恢复顺序是 `recoverInterruptedSwap → recoverPendingHealth → cleanupInstallResidue`，`swap` 回滚、`committed` 前滚；原子日志写为 tmp→fsync→rename：`:121-129`、`:265-348`、`:455-515`。设计与中断复现边界见 `docs/RUNTIME_SWAP.md:21-75`、`:77-128`。
-- `RuntimeIndexClient` 下载并验签 `runtime-index.json`，优先构建期 PEM 公钥、再回退 APK 签名证书；验签失败直接拒绝，不无签名降级：`app/src/main/java/app/dsh/mobile/engine/RuntimeIndexClient.kt:19-29`、`:142-177`。`HttpDownloader` 要求非空 SHA-256，支持 Range `.part` 续传、大小/哈希校验和 URL 回退：`app/src/main/java/app/dsh/mobile/engine/HttpDownloader.kt:9-18`、`:30-73`、`:76-146`。
+- `RuntimeInstaller` 支持 `full`（APK 内置 runtime.zip）与 `noruntime`（按 manifest/索引下载）；安装到 `engine.staging` 后校验，再用 `.runtime-swap` 意图日志将 `engine` 顶层条目逐项原子换名，保留 `engine.old` 到首次 Healthy/SafeMode：`app/src/main/java/dsh/dsh/mobile/engine/RuntimeInstaller.kt:15-33`、`:105-163`、`:249-348`。恢复顺序是 `recoverInterruptedSwap → recoverPendingHealth → cleanupInstallResidue`，`swap` 回滚、`committed` 前滚；原子日志写为 tmp→fsync→rename：`:121-129`、`:265-348`、`:455-515`。设计与中断复现边界见 `docs/RUNTIME_SWAP.md:21-75`、`:77-128`。
+- `RuntimeIndexClient` 下载并验签 `runtime-index.json`，优先构建期 PEM 公钥、再回退 APK 签名证书；验签失败直接拒绝，不无签名降级：`app/src/main/java/dsh/dsh/mobile/engine/RuntimeIndexClient.kt:19-29`、`:142-177`。`HttpDownloader` 要求非空 SHA-256，支持 Range `.part` 续传、大小/哈希校验和 URL 回退：`app/src/main/java/dsh/dsh/mobile/engine/HttpDownloader.kt:9-18`、`:30-73`、`:76-146`。
 - 当前 CI 已将 runtime 构建与 Android APK 构建分离：`runtime-build.yml` 通过脚本指纹、dsh engineVersion 和资产完整性决定是否构建双 ABI，并发布滚动 prerelease `runtime`；`android-build.yml` 的 fetch-runtime 按 runtime prerelease→latest 正式 release→本地兜底三层取货，tag 构建启用 `--strict` 禁止漂移：`.github/workflows/runtime-build.yml:1-29`、`:76-217`、`:222-350`；`.github/workflows/android-build.yml:1-20`、`:99-191`。流程约束详见 `docs/CI_RUNTIME_PIPELINE.md:41-177`。
 
 ### 插件、扩展与桌宠
 
-- 社区插件市场 `PluginMarket` 直接读内置 `assets/market/catalog.json`，源码注释与解析结构记录 3540 条/23 分类/中英描述；进程级缓存避免重复解析，兼容性只对前 8 条做网络探测：`app/src/main/java/app/dsh/mobile/engine/PluginMarket.kt:181-231`、`:319-398`。`PluginCenter` 安装/卸载通过引擎 CLI 串行执行，pnpm store 锁损坏和 ignored builds 有有限自愈；不会自动放行引擎兼容性拒绝：`PluginCenter.kt:23-30`、`:216-289`。
-- `NativePluginCheck` 只读 npm manifest，识别原生 build、平台 optionalDependencies、engine fork 与 `engines.dsh` 版本下限；semver 预发布按数值比较，内置引擎版本读 `engine/lib/node_modules/@deepseek-ai/dsh/package.json`：`app/src/main/java/app/dsh/mobile/engine/NativePluginCheck.kt:9-40`、`:86-137`、`:167-266`。
+- 社区插件市场 `PluginMarket` 直接读内置 `assets/market/catalog.json`，源码注释与解析结构记录 3540 条/23 分类/中英描述；进程级缓存避免重复解析，兼容性只对前 8 条做网络探测：`app/src/main/java/dsh/dsh/mobile/engine/PluginMarket.kt:181-231`、`:319-398`。`PluginCenter` 安装/卸载通过引擎 CLI 串行执行，pnpm store 锁损坏和 ignored builds 有有限自愈；不会自动放行引擎兼容性拒绝：`PluginCenter.kt:23-30`、`:216-289`。
+- `NativePluginCheck` 只读 npm manifest，识别原生 build、平台 optionalDependencies、engine fork 与 `engines.dsh` 版本下限；semver 预发布按数值比较，内置引擎版本读 `engine/lib/node_modules/@deepseek-ai/dsh/package.json`：`app/src/main/java/dsh/dsh/mobile/engine/NativePluginCheck.kt:9-40`、`:86-137`、`:167-266`。
 - 插件故障分层自愈：`PluginRecovery` 只按 health marker 精确归因第三方 bundle，最多 3 次；引擎完全起不来时只有最近安装包且时间差至少 60s 才允许快速摘除：`PluginRecovery.kt:13-34`、`:53-125`、`:168-245`。`PluginKillSwitch` 把用户显式停用/恢复记录为意图日志，只在 spawn 前收敛 manifest，支持停用期间白名单逐个恢复：`PluginKillSwitch.kt:12-48`、`:213-295`、`:358-441`。
-- 环境扩展 `ExtensionManager` 从 Termux 镜像解析依赖闭包、逐包 SHA-256 校验、解包/激活；任务在进程级 IO scope 中，网络最多 3 个并发，按扩展锁发布，失败清 cache；APK 型扩展走 PackageInstaller：`app/src/main/java/app/dsh/mobile/engine/ExtensionManager.kt:39-53`、`:121-171`、`:177-257`、`:310-343`。
-- 桌宠由独立 `PetOverlayService` 持有悬浮窗、动画链、气泡、桥服务和后台资源维护；动画包导入只写 `filesDir/pet`，先校验 zip/路径/WebP/配置/大小/空间，再临时目录原子替换，失败保留旧包：`app/src/main/java/app/dsh/mobile/pet/PetOverlayService.kt:41-53`、`:213-274`、`:317-363`；`PetPackInstaller.kt:54-64`、`:124-237`、`:308-334`。
-- 当前桌宠门禁是硬门禁：`PetPluginDetector.canEnable()` 要求悬浮窗权限、`@xiaopb/dsh-pet-bridge` 已安装且已启用且版本至少 0.3.1、动画包存在，缺一不可；`bridgeGateOpen()` 无旁路：`app/src/main/java/app/dsh/mobile/pet/PetPluginDetector.kt:62-87`。下载器把残件放 `filesDir/pet-pack`，支持代理/直连候选、Range 续传、分卷与逐卷/整包 SHA 校验、取消后保留残件：`PetPackDownloader.kt:20-31`、`:68-100`、`:102-167`。
+- 环境扩展 `ExtensionManager` 从 Termux 镜像解析依赖闭包、逐包 SHA-256 校验、解包/激活；任务在进程级 IO scope 中，网络最多 3 个并发，按扩展锁发布，失败清 cache；APK 型扩展走 PackageInstaller：`app/src/main/java/dsh/dsh/mobile/engine/ExtensionManager.kt:39-53`、`:121-171`、`:177-257`、`:310-343`。
+- 桌宠由独立 `PetOverlayService` 持有悬浮窗、动画链、气泡、桥服务和后台资源维护；动画包导入只写 `filesDir/pet`，先校验 zip/路径/WebP/配置/大小/空间，再临时目录原子替换，失败保留旧包：`app/src/main/java/dsh/dsh/mobile/pet/PetOverlayService.kt:41-53`、`:213-274`、`:317-363`；`PetPackInstaller.kt:54-64`、`:124-237`、`:308-334`。
+- 当前桌宠门禁是硬门禁：`PetPluginDetector.canEnable()` 要求悬浮窗权限、`@xiaopb/dsh-pet-bridge` 已安装且已启用且版本至少 0.3.1、动画包存在，缺一不可；`bridgeGateOpen()` 无旁路：`app/src/main/java/dsh/dsh/mobile/pet/PetPluginDetector.kt:62-87`。下载器把残件放 `filesDir/pet-pack`，支持代理/直连候选、Range 续传、分卷与逐卷/整包 SHA 校验、取消后保留残件：`PetPackDownloader.kt:20-31`、`:68-100`、`:102-167`。
 
 ### Git 历史主线（已核对提交）
 
@@ -771,7 +771,7 @@ fork 永不自行 bump `versionCode`/`versionName`）。
   variable：`DEBUG_CERT_SHA256`（`B5:3E:BD:…:40:01`）均已配置，CI 指纹门禁生效。
 
 **验收结果（2026-10-29 凌晨，MuMu 5555 / Android 12 / x86_64）**
-- 干净虚拟机首装 → 引导 → 127MB 运行时 → `engine healthy on :3080` → READY 后 22s 自动检查
+- 干净虚拟机首装 → 引导 → 127MB 运行时 → `engine healthy on :4080` → READY 后 22s 自动检查
   → 三路直连优先 + 代理兜底 → 404 优雅降级（不会重试风暴）。
 - **真实更新闭环跑通**（基线 286 debug → 287）：debug 包跟 edge 频道，自动检查 → 后台下载
   → 通知「1.4.37 已下载 / 点击安装」；落盘 `files/update/287/` 的 APK sha256
@@ -1142,7 +1142,7 @@ v1.4.28 只修了「反复切分类」这条路径（本地过滤 + 分类缓存
 | 放太多功能、状态文字被截成 `Engine r...` | 顶部 4 个文字按钮（重启/日志/终端/隐藏）**改图标**，状态文字宽度从 <40dp 恢复到可完整显示 |
 | 展开后摄像头黑点遮挡文字 | **删除 `bg_island_dot.xml`** 与收起态里的圆点 View；恢复 64×26 单横条胶囊 |
 | 灵动岛与摄像头挖孔重叠 | **沉浸式状态栏默认改关**（`DEFAULT_IMMERSIVE = false`），并**移除 `layoutInDisplayCutoutMode` 铺进挖孔区逻辑** —— 窗口不再画进摄像头区域 |
-| 状态文案里的 URL 挤占空间 | `status_healthy` 去掉 `· http://127.0.0.1:3080`（端口在网页里可见），三语同步 |
+| 状态文案里的 URL 挤占空间 | `status_healthy` 去掉 `· http://127.0.0.1:4080`（端口在网页里可见），三语同步 |
 
 **我自查发现并修的 4 个 bug**（不是宝宝报的）：
 1. 灵动岛前景色用了 `@color/text_secondary` —— 岛背景恒纯黑，浅色主题下该 token
@@ -1535,7 +1535,7 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
      是 rowPriv 的兄弟节点，按 row id 提取会漏）。
   ④ 图标重复 → 新做 11 个（rotate/palette/layout/mic_wave/headset/apk/note/
      export/lan/log/clock），替换 10 处重复，25 项图标全唯一。
-- **引擎重启逻辑重写**（宝宝要求「异常退出时把 3080 上所有东西杀掉再完整启动」）：
+- **引擎重启逻辑重写**（宝宝要求「异常退出时把 4080 上所有东西杀掉再完整启动」）：
   * `reclaimPort` 改为按**端口持有者**清场：读 /proc/net/tcp{,6} 的 LISTEN
     inode → 扫 /proc/<pid>/fd 匹配 socket:[inode] → kill -9。不再依赖 cmdline
     匹配 files/engine/bin/node（包装层会失效）。
@@ -1545,7 +1545,7 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
   * 新增 `looksLikeAuthFailure()`：只扫本次启动日志段，命中 401/403/
     unauthorized/invalid api key/token expired/credentials/EACCES → State.Failed
     + 三语提示「登录已失效，请重新登录」，return 不再重试（防重启风暴）。
-- **实测**：kill -9 引擎 node → 'port 3080 is free after thorough reclaim'
+- **实测**：kill -9 引擎 node → 'port 4080 is free after thorough reclaim'
   → 6.4s 后 'engine healthy' ✓
 - 4 资产上线（release 227.4MB）。
 
@@ -1661,7 +1661,7 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
 - **生态事实修正**：真正可用的是 `dsh-pet-bridge@0.1.0`（cc-pet HookServer 协议），
   五字段是 `kind/agent_source/tool_name/tool_input/caller_pid`，**没有 bubble 文本**；
   `tool/result→post` 不带工具名，所以原生只显示「完成一步」，不伪造「已读 xxx」。
-- **实现**：新增 `app.dsh.mobile.pet`（Protocol/BridgeServer/Controller/Pack/Installer/
+- **实现**：新增 `dsh.dsh.mobile.pet`（Protocol/BridgeServer/Controller/Pack/Installer/
   Renderer/View/Physics/Service/Menu/Settings/Prefs/Detector/Status）。独立前台服务，
   `TYPE_APPLICATION_OVERLAY`，不碰 `StatusOverlay` 的无障碍 overlay。
 - **入口**：设置→扩展→桌面宠物；桥插件装了但没重启引擎时给出「重启引擎」。
@@ -1979,7 +1979,7 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
     （logcat `download enqueued`）✅；文件未落地 = 模拟器 DownloadProvider 对
     本地回环 + run-as 临时服务的环境限制，非 App 代码问题。
   · 跨域 a[download]/iframe 不触发 listener（WebView 跨域 download 属性失效 +
-    SPA 拦截），与 issue 场景无关（file-share 的下载是同源 3080）。
+    SPA 拦截），与 issue 场景无关（file-share 的下载是同源 4080）。
 - **已知限制（写进发布说明与 issue 回复）**：大文件 blob 下载占 1.3× 内存，
   低内存设备可能失败；后续可分块。插件侧 fetch→blob→a[download] 已可用（桥接住）。
 - **验证**：312 项测试全过；i18n 全过；compileDebugKotlin + assembleRelease 成功。
@@ -2660,7 +2660,7 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
   | **v35 + token 注册** | **48s** | **13，零探索** | ✓ 完成（9 行文字全对）|
 - **结论**：243s 主要是**测试环境缺 token 注册**导致 AI 花 ~110s 摸索环境，不是产品性能问题；真机 web profile 由 app 注入 android-overlay.yml（token 已注册）→ 体验应接近 48s。
 - **AI 高效行为**（48s 测试）：`scr dump` 勘察 → `scr launch com.android.chrome` 一步启动 → `scr idle` 等待 → `scr shot` 截图 + 读图/OCR → 输出；最终回答正确说明「canvas 文字不在无障碍树，用截图 + 离线 OCR 读取核对」。
-- **seed v35 新增**「Environment (read once — do NOT re-verify)」：命令已在 PATH、bridge 认证内部处理、禁止找 token/curl 3083/读包装脚本/翻 `$PREFIX/bin`。
+- **seed v35 新增**「Environment (read once — do NOT re-verify)」：命令已在 PATH、bridge 认证内部处理、禁止找 token/curl 4083/读包装脚本/翻 `$PREFIX/bin`。
 
 ### 端到端 AI 测试：极难任务自主规划（1.2.129，2026-10-12）
 - **方法**：`scripts/probes/headless_task.py` —— 用 `dsh --profile headless --json`（无 Host/HTTP 层的一次性 Agent）直发任务给模型，环境变量从运行中引擎进程 `/proc/<pid>/environ` 复制（保证一致）；`--json` 输出机器可读事件流，统计工具调用特征。API key 走 `.credentials.yaml` 的 **refs 段**（PC 环境变量注入模拟器，仅测试用）。
@@ -2787,11 +2787,11 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
 - None.
 
 ## Key paths
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/ScreenOcr.kt`（离线 OCR：降采样/缓存/节流冷却/预热）
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/DshAccessibilityService.kt`（dump 兜底 + waitForIdle 快速返回 + 本地模型自动就绪）
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/engine/AgentContextSeed.kt`（seed v32：OCR/本地快速层说明）
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/engine/SceneMemory.kt`（pending 机制 + 诊断字段）
-- `E:/Deepeek harness/dsh-android/app/src/main/java/app/dsh/mobile/engine/LocalModel.kt`（本地嵌入模型：下载 + llama-server 启动）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/ScreenOcr.kt`（离线 OCR：降采样/缓存/节流冷却/预热）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/DshAccessibilityService.kt`（dump 兜底 + waitForIdle 快速返回 + 本地模型自动就绪）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/engine/AgentContextSeed.kt`（seed v32：OCR/本地快速层说明）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/engine/SceneMemory.kt`（pending 机制 + 诊断字段）
+- `E:/Deepeek harness/dsh-android/app/src/main/java/dsh/dsh/mobile/engine/LocalModel.kt`（本地嵌入模型：下载 + llama-server 启动）
 - `E:/Deepeek harness/dsh-android/scripts/probes/loop_common.py`（测试库；`/memory/clear` 等写端点须传 body 才是 POST）
 - `E:/Deepeek harness/dsh-android/scripts/probes/_ocr_canvas.html`（canvas 测试页；PC 起 `python -m http.server 8899 --directory scripts/probes`，模拟器 Chrome 访问 `http://10.0.2.2:8899/_ocr_canvas.html`）
 - `E:/Deepeek harness/dsh-android/dist/v1.2.120/`（已上架产物）
@@ -2855,7 +2855,7 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
 - Loader entry 指向**具体文件**（`./android-plugins/<pkg>/index.js`）—— Node ESM
   **不支持目录导入**（实测 `Directory import ... is not supported`）。
 - `nearestPackage` 会向上一直找，故 `android-plugins/` 上层不能有 package.json（已确认无）。
-- 验证方法：`curl -sL -b ck.txt "http://127.0.0.1:3080/?token=<TK>"` 的返回页里能 grep 到
+- 验证方法：`curl -sL -b ck.txt "http://127.0.0.1:4080/?token=<TK>"` 的返回页里能 grep 到
   `<pkgname>/client.js`（与官方插件并列在 preload 清单里）。
 
 ### 交付物（全部为插件，零引擎源码改动）
@@ -2897,7 +2897,7 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
 
 ### 真机验证证据
 - 日志：`[dsh-android] narrow-sidebar: 已接管（侧栏全宽，隐藏 2 个对话列；视口 386x777）`
-  （引擎日志 `/data/user/0/app.dsh.mobile/files/engine/engine.log`，由 MainActivity 的
+  （引擎日志 `/data/user/0/dsh.dsh.mobile/files/engine/engine.log`，由 MainActivity 的
   `onConsoleMessage` 转发 —— 只转发 WARNING+ 或含 `[dsh-android]` 前缀的消息）。
 - 设备文件哈希 = 本地哈希（`f3cc06de…`，含 `isInOverlay`/`hasCloseButton`）。
 - 截图确认：主界面正常（v1.2.179）、竖屏展开侧栏 → 侧栏全宽 + 对话流隐藏。
@@ -2913,7 +2913,7 @@ app/build/generated/runtimeAssets` 后重建 → **158MB**（正常）。
 - 无线 adb（192.168.101.21:9000）会周期性掉线，需 `adb connect` 重连。
 - `adb push` 到 `/data/local/tmp` 用 **Windows 真实路径**（`C:/Users/Qt/AppData/Local/Temp/...`），
   `/tmp/...` 是 Git Bash 虚拟路径，adb 看不到。
-- 引擎 node 直接跑脚本验证导入：`su -c 'B=/data/user/0/app.dsh.mobile/files; export
+- 引擎 node 直接跑脚本验证导入：`su -c 'B=/data/user/0/dsh.dsh.mobile/files; export
   LD_LIBRARY_PATH=$B/engine/lib:$B/engine/bin; export DSH_HOME=$B/dsh-home; cd $B;
   $B/engine/bin/node /data/local/tmp/x.mjs'`（引号地狱时改用推送 .sh 文件执行）。
 - 大包部署：`split -b 10M` 分片 → 设备端 `for i in $(seq 1 N); do cat p_$i >> x.apk; done`
@@ -3056,7 +3056,7 @@ const rightbar = rightbar === 0 || available < 300 ? 0 : Math.min(available, …
 - **ColorOS/OnePlus 上 `pm install -r` 会把无障碍服务关掉**（`enabled_accessibility_services`
   变 null）。重装后需重新启用：
   `adb shell settings put secure enabled_accessibility_services
-  app.dsh.mobile/app.dsh.mobile.DshAccessibilityService`
+  dsh.dsh.mobile/dsh.dsh.mobile.DshAccessibilityService`
   `adb shell settings put secure accessibility_enabled 1`
 
 ### 2026-10-17 续：语音发送后「悬浮框收起闪一两下」（v1.2.185）
@@ -3111,7 +3111,7 @@ const rightbar = rightbar === 0 || available < 300 ? 0 : Math.min(available, …
 
 ### P1 — 普通模式下局域网代理杀不掉（关不掉但通知已消失）
 - 根因：`LanWebProxy.stop()` 依赖 `child` 引用（**从未赋值**）+ Shizuku/su；
-  普通模式（无 Shizuku/root）两条通道全失效 → node 仍监听 3090，而通知已撤掉。
+  普通模式（无 Shizuku/root）两条通道全失效 → node 仍监听 4090，而通知已撤掉。
 - 修复：`killStaleProxy()` 增加**同 uid 直杀**：
   `ProcessBuilder("/system/bin/sh","-c","pkill -f lan-web-proxy").start().waitFor(3s)`
   （app 杀自己 fork 的进程无需提权）。
@@ -3322,7 +3322,7 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
 `deterministicFailure?.contains("EADDRINUSE")` 分支里，而该变量是
 `failureSignature()` 的产物 = `"<退出码>:<哈希>"` —— **哈希里永远不含这个字面量**。
 后果链：Root 引擎的 node 是 `su` 的**孙进程**（`dsh_pty.c` 的 `PR_SET_PDEATHSIG`
-只挂到 su 外壳上，信号传不到 node）→ App 被强杀时 node 以 uid 0 变孤儿继续占 3080
+只挂到 su 外壳上，信号传不到 node）→ App 被强杀时 node 以 uid 0 变孤儿继续占 4080
 → 新引擎 EADDRINUSE 启动即退 → 本该「清场重试、不计罪」却落进 guardian →
 连续判罪后**回滚 profiles → SAFE MODE（归档用户配置）→ State.Failed**。
 模拟器实测孤儿 ppid 实测为 **570（adbd）而非 1**，而旧 `OrphanReaper` 只认
@@ -3356,12 +3356,12 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
 - **版本戳读取容错**：读不了等价于「版本不匹配」，走重装路径（内部会先自愈）。
 
 ### 实测（模拟器，引擎真实启动链路）
-- **安卓 16（dsh36）**：造孤儿占 3080 → 启动 App → 日志
-  `port 3080 in use — reclaiming` → 孤儿被杀（init 回收 18323）→
-  `engine healthy on :3080`；**无 guardian 判罪**（无 meta、无 rolled back、无归档）。
+- **安卓 16（dsh36）**：造孤儿占 4080 → 启动 App → 日志
+  `port 4080 in use — reclaiming` → 孤儿被杀（init 回收 18323）→
+  `engine healthy on :4080`；**无 guardian 判罪**（无 meta、无 rolled back、无归档）。
 - **安卓 11（dsh30，API 30）**：`chmod 000` 文件与目录 + 强杀 App → 二次启动 →
   `ownership check: found entries this app cannot read` → `restored permissions on 16806 entr(ies)`
-  → `engine healthy on :3080`；属性恢复为 `drwx------` / `-rw-------`。
+  → `engine healthy on :4080`；属性恢复为 `drwx------` / `-rw-------`。
 - 注意：安卓 11 AVD 自带 WebView 是 Chrome 83，会弹「WebView needs an update」
   对话框（App 的既有门槛提示，非 bug），需点 CONTINUE ANYWAY 才继续启动流程。
 
@@ -3420,7 +3420,7 @@ CI `i18n-check` 失败（23 条）。项目门禁（`scripts/check-i18n.py`）�
 - `.abi` 仍为 `x86_64`，未改动 runtime ABI；`gradle assembleDebug -Pabi=x86_64 --console=plain` 两次通过，最后一次 `BUILD SUCCESSFUL in 8s`。
 - `python scripts/check-i18n.py`：三语 391 keys 同步、Kotlin CJK=0、新增文案通过。
 - `node --check app/src/main/assets/android-plugins/plugin-health.mjs` 通过；`git diff --check` 通过。
-- 模拟器 `emulator-5554`（Android 16 x86_64）安装 debug APK 后，正常启动 marker：`ok=true, missingServices=[], failedEntries=[]`；监督日志：`plugin health marker received (ok=true)`、`plugin health: ok=true missing= failed=`、`engine healthy on :3080`。
+- 模拟器 `emulator-5554`（Android 16 x86_64）安装 debug APK 后，正常启动 marker：`ok=true, missingServices=[], failedEntries=[]`；监督日志：`plugin health marker received (ok=true)`、`plugin health: ok=true missing= failed=`、`engine healthy on :4080`。
 - 可回滚重复服务插件验证：临时 `fake-bad` bundle 注入 `ctx.provide("directoryPicker")`，真实 engine.log 记录 Cordis 原始错误 `service "directoryPicker" has been registered at <BrowseDirectoryPicker>`；随后 marker `ok=false`，监督日志记录 failed entry，`PluginRecovery` 输出 `auto-disabled third-party plugin fake-bad (attempt=1/3...)`，重启后 marker 恢复 `ok=true`，profile bundles 已自动摘除 `fake-bad`；测试结束已恢复原 profile 并删除临时 node_modules。
 
 ### 未验证/遗留
@@ -3473,7 +3473,7 @@ node-pty package marker、拒绝 shim 残留），并核对 APK 内 `assets/runt
 并修复 zip 模式新条目未写回的潜在 bug。
 
 ### 行为验证（真实设备，非静态推断）
-- **x86_64 模拟器（Android 16）**：装 staged 0.2.1 debug 包 → 引擎 `engine healthy on :3080`，
+- **x86_64 模拟器（Android 16）**：装 staged 0.2.1 debug 包 → 引擎 `engine healthy on :4080`，
   plugin-health marker `ok=true, missingServices=[], failedEntries=[]`；
   终端真实链路全 PASS（`defaultShell` → 自带 bash、`resolveExecutable`、`spawnTerminal` pid 正常、
   PTY 内执行命令 `tty=/dev/pts/2`）；关闭回收 `terminate OK`（2.3s，无残留）。
@@ -3543,14 +3543,14 @@ beta 包构建于该文件修改之后，经 dex/arsc 校验确认已包含 `sta
 | 其他（含 android） | **抛错** `native path opener is unsupported on android` |
 
 前端把内部错误统一显示成 `openDocument.error`（「无法打开配置文件」），用户误以为文件损坏。
-文件本身完好，路径：`/data/user/0/app.dsh.mobile/files/dsh-home/profiles/web/cordis.patch.yml`。
+文件本身完好，路径：`/data/user/0/dsh.dsh.mobile/files/dsh-home/profiles/web/cordis.patch.yml`。
 该按钮在 1.3.3（引擎 0.2.0）就存在，属长期平台差异，非 1.4.0 引入。
 
 ### 修法（不改 228MB runtime）
 新增宿主机插件 `app/src/main/assets/android-plugins/open-file.mjs`，
 替换上游自己留给测试用的实例级 seam `settingsController.openTextFile`
 （源码：`this.openTextFile = internals.openTextFile ?? openNativeTextFile`），
-改为 `POST http://127.0.0.1:3083/open-file`（带 `X-DSH-Token`）。
+改为 `POST http://127.0.0.1:4083/open-file`（带 `X-DSH-Token`）。
 应用侧新增 `FileEditorActivity` 承接：读取 / 编辑 / 原子保存。
 
 - 部署：`EngineConfig.ensureAndroidOverlay()` 的单文件插件列表加入 `open-file.mjs`，
@@ -3633,7 +3633,7 @@ $ ls files/dsh-home/workspaces/   →  Permission denied
   | 项 | 修复前 | 修复后 |
   |---|---|---|
   | 探针结果 | `docs=true`（假阳性） | `docs=false` ✅ |
-  | 落点 | `/storage/emulated/0/Documents/dshdata` | `Android/data/app.dsh.mobile/files/dshdata` ✅ |
+  | 落点 | `/storage/emulated/0/Documents/dshdata` | `Android/data/dsh.dsh.mobile/files/dshdata` ✅ |
   | `ls workspaces/` | Permission denied | 正常 ✅ |
   | 引擎 `readdir`/`readFile` | EACCES | `list: ['proj']` / `read: hello` ✅ |
 - plugin-health `ok:true`，`failedEntries:[]`。
@@ -3799,7 +3799,7 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
    回调注册在 MainActivity、onDestroy 置空。用户先按 Home（Activity 被回收）
    再点通知栏退出 → 回调 null → 无人结束 App 进程。
 3. **cleanupOrphanEngine 以 portInUse() 为前提**
-   主引擎退出后 3080 已释放，但它经 su 派生 / 被 init 收养的后代仍在跑；
+   主引擎退出后 4080 已释放，但它经 su 派生 / 被 init 收养的后代仍在跑；
    端口检查看不到 → 整条清理被跳过。
 
 ### 修复
@@ -3853,7 +3853,7 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
 - 安装健壮性：`HttpDownloader`（续传/URL 回退/sha）+ `engine.staging` 校验后换名、失败从 `engine.old` 回滚；空间预算按旧 + staging + zip 峰值。
 
 ### 关键文件
-`scripts/pack-hardssh.sh`、`scripts/build-runtime.sh`、`scripts/write-runtime-manifest.py`、`scripts/write-runtime-index.py`、`scripts/sign-runtime-index.py`、`scripts/apply-fork-links.py`、`scripts/verify-apk-assets.py`、`app/src/main/java/app/dsh/mobile/engine/{HardsshInstaller,RuntimeIndexClient,HttpDownloader,RuntimeInstaller}.kt`、`app/src/main/java/app/dsh/mobile/engine/RepoConfig.kt.tmpl`。
+`scripts/pack-hardssh.sh`、`scripts/build-runtime.sh`、`scripts/write-runtime-manifest.py`、`scripts/write-runtime-index.py`、`scripts/sign-runtime-index.py`、`scripts/apply-fork-links.py`、`scripts/verify-apk-assets.py`、`app/src/main/java/dsh/dsh/mobile/engine/{HardsshInstaller,RuntimeIndexClient,HttpDownloader,RuntimeInstaller}.kt`、`app/src/main/java/dsh/dsh/mobile/engine/RepoConfig.kt.tmpl`。
 
 ### 待验证
 - CI 首跑（本地按用户要求未编译）：Gradle `-Ppackage` 生成式 assets、2×2 矩阵、tag 的 index 签名。

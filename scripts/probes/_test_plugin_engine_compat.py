@@ -25,11 +25,11 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CHECK = os.path.join(ROOT, "app", "src", "main", "java", "app", "dsh", "mobile",
+CHECK = os.path.join(ROOT, "app", "src", "main", "java", "dsh", "dsh", "mobile",
                      "engine", "NativePluginCheck.kt")
-MARKET = os.path.join(ROOT, "app", "src", "main", "java", "app", "dsh", "mobile",
+MARKET = os.path.join(ROOT, "app", "src", "main", "java", "dsh", "dsh", "mobile",
                       "engine", "PluginMarket.kt")
-STORE = os.path.join(ROOT, "app", "src", "main", "java", "app", "dsh", "mobile",
+STORE = os.path.join(ROOT, "app", "src", "main", "java", "dsh", "dsh", "mobile",
                      "PluginStoreActivity.kt")
 
 passed = 0

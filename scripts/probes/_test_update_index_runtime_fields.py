@@ -34,7 +34,7 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCRIPT = os.path.join(ROOT, "scripts/write-update-index.py")
-MODEL = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/update/AppUpdate.kt")
+MODEL = os.path.join(ROOT, "app/src/main/java/dsh/dsh/mobile/update/AppUpdate.kt")
 WF = os.path.join(ROOT, ".github/workflows/android-build.yml")
 
 failures: list[str] = []

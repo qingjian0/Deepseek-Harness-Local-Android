@@ -114,9 +114,9 @@ gradle :app:assembleDebug -Pabi=arm64-v8a -Ppackage=full -PruntimeZip=<zip>
 模拟器冒烟（可选但推荐）：
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am force-stop app.dsh.mobile
-adb shell am start -W -n app.dsh.mobile/.MainActivity
-adb shell pidof app.dsh.mobile          # 应返回 pid
+adb shell am force-stop dsh.dsh.mobile
+adb shell am start -W -n dsh.dsh.mobile/.MainActivity
+adb shell pidof dsh.dsh.mobile          # 应返回 pid
 adb logcat -d | grep -E "FATAL|AndroidRuntime"   # 应为空
 ```
 

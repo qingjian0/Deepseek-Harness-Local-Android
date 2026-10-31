@@ -9,7 +9,7 @@
 | 编号 | 问题 | 修法 |
 |---|---|---|
 | H1 | LAN WebUI 6 位纯数字验证码、登录无速率限制 → 爆破即接管引擎会话 | 8 位字母数字口令 + 失败指数退避 + 锁定 + 防开放重定向 |
-| H2 | 健康检查只认「3080 有 200」，端口被抢占则 WebView 加载攻击者页面 | 必须同时能从 engine.log 取到带 token 的 URL；拿不到不加载 |
+| H2 | 健康检查只认「4080 有 200」，端口被抢占则 WebView 加载攻击者页面 | 必须同时能从 engine.log 取到带 token 的 URL；拿不到不加载 |
 | M1 | /vision/crop 的 id 直接拼路径 → 路径穿越写/读任意文件 | id 白名单 + canonical 前缀校验 |
 | M2 | JS 桥/麦克风不校验来源，任意回环页面可静默拿麦克风 | onPermissionRequest 只放行 loopback origin |
 | M3 | .npmrc 的 onlyBuiltDependencies 可被包名换行注入 | npm 包名正则校验 + lambda 形式 replace |
@@ -45,7 +45,7 @@ def check(name, ok, detail=""):
 # ══════════════════════════════════════════════════════════════════
 # H1：LAN 验证码强度 + 登录限速
 # ══════════════════════════════════════════════════════════════════
-app = read("app", "src", "main", "java", "app", "dsh", "mobile", "DshApp.kt")
+app = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "DshApp.kt")
 proxy = read("app", "src", "main", "assets", "tools", "lan-web-proxy.mjs")
 
 check("H1: 验证码不再是 6 位纯数字",
@@ -74,7 +74,7 @@ check("H1: next 参数防开放重定向",
 # ══════════════════════════════════════════════════════════════════
 # H2：健康检查必须验证引擎身份
 # ══════════════════════════════════════════════════════════════════
-sup = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "EngineSupervisor.kt")
+sup = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "engine", "EngineSupervisor.kt")
 
 check("H2: 健康判定要求同时拿到带 token 的 URL",
       re.search(r"code in 200\.\.499[\s\S]{0,400}?extractTokenUrl\(\)", sup) is not None,
@@ -82,11 +82,11 @@ check("H2: 健康判定要求同时拿到带 token 的 URL",
 check("H2: 拿不到 tokenUrl 时 webUrl() 返回空而不是裸地址",
       'is State.Healthy -> s.tokenUrl.orEmpty()' in sup
       and 'is State.SafeMode -> s.tokenUrl.orEmpty()' in sup,
-      "回退裸 http://127.0.0.1:3080/ 会加载攻击者页面")
+      "回退裸 http://127.0.0.1:4080/ 会加载攻击者页面")
 check("H2: 提供 hasLoadableUrl() 供 UI 判断",
       "fun hasLoadableUrl()" in sup)
 
-main_act = read("app", "src", "main", "java", "app", "dsh", "mobile", "MainActivity.kt")
+main_act = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "MainActivity.kt")
 check("H2: UI 加载前判空（不把空 URL 交给 WebView）",
       main_act.count("if (u.isNotEmpty()) loadLocalUrl(u)") >= 2,
       "加载空 URL 会让 WebView 停在 about:blank 且 urlLoaded 卡死")
@@ -94,7 +94,7 @@ check("H2: UI 加载前判空（不把空 URL 交给 WebView）",
 # ══════════════════════════════════════════════════════════════════
 # M1：/vision/crop 路径穿越
 # ══════════════════════════════════════════════════════════════════
-bridge = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "AgentBridge.kt")
+bridge = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "engine", "AgentBridge.kt")
 
 check("M1: crop 的 id 做了白名单校验",
       r'rawId.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))' in bridge,
@@ -115,7 +115,7 @@ check("M2: onPermissionRequest 校验 origin 是回环",
 # v1.4.67：策略位从 .npmrc 的 onlyBuiltDependencies 换成
 # pnpm-workspace.yaml 的 allowBuilds（pnpm 11 删除了旧键）。
 # ══════════════════════════════════════════════════════════════════
-plugin = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "PluginCenter.kt")
+plugin = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "engine", "PluginCenter.kt")
 
 check("M3: 写 pnpm 策略前校验 npm 包名",
       "NPM_PACKAGE_NAME" in plugin and "matches(NPM_PACKAGE_NAME)" in plugin,
@@ -132,7 +132,7 @@ check("M3: 不直接覆盖原文件（临时文件 + rename）",
 # ══════════════════════════════════════════════════════════════════
 # 群友 dsh-root-doctor 的实测经验（susfs 隐藏挂载）
 # ══════════════════════════════════════════════════════════════════
-priv = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "Privilege.kt")
+priv = read("app", "src", "main", "java", "dsh", "dsh", "mobile", "engine", "Privilege.kt")
 
 check("susfs: 属主修复的 find 带 -xdev",
       "append(\"-xdev \")" in priv,
