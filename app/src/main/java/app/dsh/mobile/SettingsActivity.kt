@@ -17,6 +17,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import app.dsh.mobile.engine.AgentContextSeed
 import app.dsh.mobile.engine.ExtensionManager
 import app.dsh.mobile.engine.PrivMode
 import app.dsh.mobile.engine.Privilege
@@ -54,6 +55,17 @@ class SettingsActivity : ThemedActivity() {
         setContentView(R.layout.activity_settings)
         applyResponsiveLayout()
 
+        // Built-in environment prompt: default on for backward compatibility.
+        val swAgentPrompt = findViewById<android.widget.Switch>(R.id.swAgentPromptSeed)
+        swAgentPrompt.isChecked = AgentContextSeed.isEnabled(this)
+        swAgentPrompt.setOnCheckedChangeListener { _, enabled ->
+            AgentContextSeed.setEnabled(this, enabled)
+            Toast.makeText(
+                this,
+                if (enabled) R.string.setting_agent_prompt_enabled else R.string.setting_agent_prompt_disabled,
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
 
         // —— 扩展：局域网访问 WebUI（v1.2.160/v1.2.161）——
         // 独立端口 3090 的反向代理，让同网段设备用原生 WebUI 连上本机引擎。
