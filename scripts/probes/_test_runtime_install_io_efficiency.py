@@ -41,6 +41,21 @@ check("obsolete sizeOf helper is removed", not re.search(r"private fun sizeOf\("
 check("install mutex remains in place", "synchronized(INSTALL_LOCK)" in src)
 check("staging integrity validation remains", "check(isRootCompleteAt(staging))" in src)
 check("swap intent log remains before root mutation", "writeSwapLog(pendingLog)" in src)
+check("phase timing helper uses monotonic elapsed realtime", "SystemClock.elapsedRealtime()" in src)
+for phase in (
+    "recover-interrupted-swap",
+    "recover-pending-health",
+    "cleanup-install-residue",
+    "read-manifest",
+    "probe-installed-runtime",
+    "copy-bundled-runtime",
+    "download-runtime",
+    "verify-runtime-archive-abi",
+    "unzip-runtime",
+    "restore-executable-bits",
+    "validate-staging-runtime",
+):
+    check(f"timing covers {phase}", f'measurePhase("{phase}")' in src)
 
 if failures:
     print(f"FAILED ({len(failures)}): {failures}")
