@@ -114,6 +114,10 @@
     <string name="settings_section_ext">ส่วนขยาย</string>
     <string name="setting_plugin">ปลั๊กอินชุมชน</string>
     <string name="setting_plugin_sub">คลิกเดียวติดตั้งปลั๊กอินระบบนิเวศ dsh</string>
+    <string name="setting_agent_prompt_seed">พรอมป์สภาพแวดล้อมในตัว</string>
+    <string name="setting_agent_prompt_seed_sub">เพิ่มคู่มือสภาพแวดล้อม Android ของแอปในเซสชันใหม่ เมื่อปิดใช้งาน คำแนะนำของคุณจะยังคงอยู่</string>
+    <string name="setting_agent_prompt_enabled">เปิดใช้พรอมป์สภาพแวดล้อมในตัวแล้ว</string>
+    <string name="setting_agent_prompt_disabled">ปิดใช้พรอมป์สภาพแวดล้อมในตัวแล้ว และเก็บคำแนะนำของคุณไว้</string>
     <string name="setting_user_prompt">คำแนะนำผู้ใช้</string>
     <string name="setting_user_prompt_sub">เพิ่มคำแนะนำในการยืนของคุณเองที่ด้านบนของคำแนะนำสภาพแวดล้อมในตัว</string>
     <string name="user_prompt_intro">คำแนะนำเหล่านี้จะผนวกเข้ากับคู่มือสภาพแวดล้อมในตัวของแอปและนำไปใช้กับทุกเซสชันใหม่</string>
