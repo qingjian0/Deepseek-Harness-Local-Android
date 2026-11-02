@@ -361,9 +361,11 @@ class RuntimeInstaller(private val ctx: Context) {
         if (swapLogFile().isFile) return
         val staging = File(ctx.filesDir, "engine.staging")
         if (staging.exists()) {
-            val mb = runCatching { sizeOf(staging) / (1L shl 20) }.getOrDefault(0L)
+            // Do not pre-walk the entire staging tree just to log its size:
+            // deleteRecursively() must walk it anyway, so the size pass doubles
+            // metadata I/O on the cold-start recovery path.
             if (staging.deleteRecursively()) {
-                Log.w(TAG, "removed orphaned engine.staging (${mb}MB) left by an interrupted install")
+                Log.w(TAG, "removed orphaned engine.staging left by an interrupted install")
             }
         }
         val zip = File(ctx.cacheDir, "runtime.zip")
@@ -372,9 +374,6 @@ class RuntimeInstaller(private val ctx: Context) {
             if (zip.delete()) Log.w(TAG, "removed orphaned runtime.zip cache (${mb}MB)")
         }
     }
-
-    private fun sizeOf(dir: File): Long =
-        dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     /**
      * 换装中途自杀开关（**仅 debuggable 包生效**）。
