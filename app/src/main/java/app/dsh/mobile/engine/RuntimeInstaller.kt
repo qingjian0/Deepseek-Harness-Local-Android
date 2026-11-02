@@ -855,24 +855,24 @@ class RuntimeInstaller(private val ctx: Context) {
                 onProgress(0f)
                 measurePhase("download-runtime") {
                     HttpDownloader(ctx).download(
-                    urls, assetZip, expected, expectedSize,
-                    onProgress = { frac ->
-                    // 下载占进度条前 45%，解压占后 55%，避免进度条回到 0 再走一遍。
-                    onProgress(frac * 0.45f)
-                    if (expectedSize > 0) {
-                        runCatching {
-                            onDetail(
-                                BootTrace.Install(
-                                    doneFiles = 0,
-                                    totalFiles = 0,
-                                    doneBytes = (expectedSize * frac).toLong(),
-                                    totalBytes = expectedSize,
-                                ),
-                            )
-                        }
-                    }
-                    },
-                    shouldCancel = shouldCancel,
+                        urls, assetZip, expected, expectedSize,
+                        onProgress = { frac ->
+                            // 下载占进度条前 45%，解压占后 55%，避免进度条回到 0 再走一遍。
+                            onProgress(frac * 0.45f)
+                            if (expectedSize > 0) {
+                                runCatching {
+                                    onDetail(
+                                        BootTrace.Install(
+                                            doneFiles = 0,
+                                            totalFiles = 0,
+                                            doneBytes = (expectedSize * frac).toLong(),
+                                            totalBytes = expectedSize,
+                                        ),
+                                    )
+                                }
+                            }
+                        },
+                        shouldCancel = shouldCancel,
                     )
                 }
             }
