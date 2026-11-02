@@ -121,14 +121,16 @@ class RuntimeInstaller(private val ctx: Context) {
         // ① 先收拾「上次换装被杀在半路」的现场（v1.4.26）。
         //    必须早于完整性判断：混合态可能通过 `isRootCompleteAt()`，
         //    看着完整但 node 与 .so 错配，那种运行时不能拿去启动。
-        recoverInterruptedSwap()
+        measurePhase("recover-interrupted-swap") { recoverInterruptedSwap() }
         // ② 再处理「换装成功但引擎始终没进 Healthy」——它依赖 engine.old，
         //    与 ① 是两个独立窗口，判断依据也不同（那里是启动成功与否）。
-        recoverPendingHealth()
+        measurePhase("recover-pending-health") { recoverPendingHealth() }
         // ③ 最后清掉上一次中断留下的临时目录（staging / zip 缓存）。
-        cleanupInstallResidue()
-        val manifest = readManifest()
-        val complete = EngineConfig.nodeBin(ctx).exists() && isRootComplete()
+        measurePhase("cleanup-install-residue") { cleanupInstallResidue() }
+        val manifest = measurePhase("read-manifest") { readManifest() }
+        val complete = measurePhase("probe-installed-runtime") {
+            EngineConfig.nodeBin(ctx).exists() && isRootComplete()
+        }
         if (complete) {
             val installed = readInstalled()
             val reuse = when {
@@ -789,7 +791,7 @@ class RuntimeInstaller(private val ctx: Context) {
             if (bundled) {
                 // v1.4.20 staging：旧 runtime + engine.staging + zip 峰值
                 requireFree(unpackMb * 2 + 300)
-                copyAssetWithProgress(assetZip, onDetail)
+                measurePhase("copy-bundled-runtime") { copyAssetWithProgress(assetZip, onDetail) }
                 requireFree(unpackMb * 2 + mb(assetZip.length()) + 200)
             } else {
                 val abi = manifest.abi.ifBlank { defaultAbi() }
@@ -851,7 +853,8 @@ class RuntimeInstaller(private val ctx: Context) {
                 Log.i(TAG, "downloading runtime ${info.version} from $urls")
                 BootTrace.stage(BootTrace.Stage.DOWNLOADING)
                 onProgress(0f)
-                HttpDownloader(ctx).download(
+                measurePhase("download-runtime") {
+                    HttpDownloader(ctx).download(
                     urls, assetZip, expected, expectedSize,
                     onProgress = { frac ->
                     // 下载占进度条前 45%，解压占后 55%，避免进度条回到 0 再走一遍。
@@ -870,12 +873,13 @@ class RuntimeInstaller(private val ctx: Context) {
                     }
                     },
                     shouldCancel = shouldCancel,
-                )
+                    )
+                }
             }
 
             // v1.3.3（issue #23）：解压前断言架构。必须在**删除旧 runtime 之前**做 ——
             // 否则发现架构不对时旧环境已经被拆了，用户从「启动失败」退化成「什么都没了」。
-            assertAssetArch(assetZip)
+            measurePhase("verify-runtime-archive-abi") { assertAssetArch(assetZip) }
             BootTrace.stage(BootTrace.Stage.EXTRACTING)
 
             // v1.2.21 事故修复：绝不 root.deleteRecursively()（会把 extensions/ 一起删）。
@@ -898,15 +902,19 @@ class RuntimeInstaller(private val ctx: Context) {
                 }
             }
 
-            unzip(
-                assetZip,
-                staging,
-                onProgress = { p -> onProgress(if (bundled) p else 0.45f + p * 0.55f) },
-                onDetail = onDetail,
-            )
-            restoreExecBits(staging)
-            check(isRootCompleteAt(staging)) {
-                "staged runtime incomplete (${staging.absolutePath})"
+            measurePhase("unzip-runtime") {
+                unzip(
+                    assetZip,
+                    staging,
+                    onProgress = { p -> onProgress(if (bundled) p else 0.45f + p * 0.55f) },
+                    onDetail = onDetail,
+                )
+            }
+            measurePhase("restore-executable-bits") { restoreExecBits(staging) }
+            measurePhase("validate-staging-runtime") {
+                check(isRootCompleteAt(staging)) {
+                    "staged runtime incomplete (${staging.absolutePath})"
+                }
             }
 
             root.mkdirs()
@@ -983,6 +991,17 @@ class RuntimeInstaller(private val ctx: Context) {
             Log.i(TAG, "runtime installed at $root (${entries.size} top-level entries)")
         } finally {
             installing = false
+        }
+    }
+
+    /** Record phase cost without changing install ordering or failure semantics. */
+    private inline fun <T> measurePhase(name: String, block: () -> T): T {
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        try {
+            return block()
+        } finally {
+            val durationMs = android.os.SystemClock.elapsedRealtime() - startedAt
+            Log.i(TAG, "runtime timing phase=$name durationMs=$durationMs")
         }
     }
 
