@@ -41,7 +41,7 @@ check("custom instructions remain editable while disabled", "if (!isEnabled(ctx)
 print("\n=== 3. UI and runtime wiring ===")
 check("settings switch reads persisted state", "swAgentPrompt.isChecked = AgentContextSeed.isEnabled(this)" in settings)
 check("settings switch persists changes", "AgentContextSeed.setEnabled(this, enabled)" in settings)
-check("switch appears before custom instructions row", layout.find('R.id.swAgentPromptSeed') < layout.find('android:id="@+id/rowUserPrompt'))
+check("switch appears before custom instructions row", layout.find('swAgentPromptSeed') < layout.find('android:id="@+id/rowUserPrompt'))
 check("engine startup still has one seed entry point", sup.count("AgentContextSeed.ensure(ctx)") == 1)
 
 print("\n" + "-" * 48)
