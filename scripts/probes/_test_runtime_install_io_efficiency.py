@@ -37,7 +37,7 @@ check("orphan staging is still removed recursively", "staging.deleteRecursively(
 check("swap log still protects recovery evidence", "if (swapLogFile().isFile) return" in body)
 check("no full-tree size pre-scan remains", "sizeOf(" not in body and "walkTopDown()" not in body)
 check("orphan runtime zip cleanup remains", 'File(ctx.cacheDir, "runtime.zip")' in body and "zip.delete()" in body)
-check("obsolete sizeOf helper is removed", not re.search(r"private fun sizeOf\\(", src))
+check("obsolete sizeOf helper is removed", not re.search(r"private fun sizeOf\(", src))
 check("install mutex remains in place", "synchronized(INSTALL_LOCK)" in src)
 check("staging integrity validation remains", "check(isRootCompleteAt(staging))" in src)
 check("swap intent log remains before root mutation", "writeSwapLog(pendingLog)" in src)
