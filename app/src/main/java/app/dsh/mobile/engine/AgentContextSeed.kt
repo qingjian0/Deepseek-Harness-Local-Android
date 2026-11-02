@@ -132,7 +132,7 @@ object AgentContextSeed {
             if (body.isEmpty()) runCatching { file.delete() }
             else write(file, body + "\n")
         } else {
-            val body = if (existing == null) render(ctx) else appSectionOf(existing)
+            val body = if (existing == null || !existing.contains(MARKER_PREFIX)) render(ctx) else appSectionOf(existing)
             write(file, body + userSection(content))
         }
         Log.i(TAG, "AGENTS.md user section saved (${content?.length ?: 0} chars)")
