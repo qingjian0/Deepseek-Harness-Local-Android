@@ -30,6 +30,9 @@ import rikka.shizuku.Shizuku
  * Shizuku 授权监听、麦克风运行时权限回调、运行权限模式对话框（双警告 + 引擎重启）。
  */
 class PermissionCenterActivity : ThemedActivity() {
+    /** 属于设置体系：启用「设置页背景图」（见 ThemedActivity.usesSettingsBackground）。 */
+    override val usesSettingsBackground: Boolean get() = true
+
 
     /** 请求的分组：engine / caps（缺省 = 全部显示，便于调试） */
     private val group: String by lazy {
@@ -167,11 +170,38 @@ class PermissionCenterActivity : ThemedActivity() {
             R.string.setting_cap_media_need,
             Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS,
         )
-        // 日历/联系人/短信：运行时危险权限，缺时提示去系统设置授予。
+        // 个人数据四项分开授权（v1.5.0-beta.12）。
+        // 旧设计是一个 PERSONAL 总开关：想让 AI 看日程，就得连带把短信与通话记录
+        // 一起打开 —— 把「愿意让 AI 看日程」和「愿意让 AI 看短信」强行等价，
+        // 而这两件事的风险完全不同。现在每项单独确认，且每次读取都会在通知栏留痕
+        // （见 SensitiveAccess）。
+        //
+        // 四项都依赖运行时危险权限；缺时点不动，提示去系统设置里授。
         bindCapSwitch(
-            R.id.swCapPersonal,
-            R.id.rowCapPersonal,
-            CapabilityGate.PERSONAL,
+            R.id.swCapCalendar,
+            R.id.rowCapCalendar,
+            CapabilityGate.PERSONAL_CALENDAR,
+            R.string.setting_cap_personal_need,
+            null,
+        )
+        bindCapSwitch(
+            R.id.swCapContacts,
+            R.id.rowCapContacts,
+            CapabilityGate.PERSONAL_CONTACTS,
+            R.string.setting_cap_personal_need,
+            null,
+        )
+        bindCapSwitch(
+            R.id.swCapSms,
+            R.id.rowCapSms,
+            CapabilityGate.PERSONAL_SMS,
+            R.string.setting_cap_personal_need,
+            null,
+        )
+        bindCapSwitch(
+            R.id.swCapCalls,
+            R.id.rowCapCalls,
+            CapabilityGate.PERSONAL_CALLS,
             R.string.setting_cap_personal_need,
             null,
         )
@@ -190,6 +220,25 @@ class PermissionCenterActivity : ThemedActivity() {
             CapabilityGate.SCREEN_CAPTURE,
             0,
         )
+        // 虚拟 HID 设备（v1.5.0-beta.13）：在系统里注册一个真实外接键盘/鼠标。
+        // 需要 root —— 普通 App 与 shell 都打不开 /dev/uhid。默认关。
+        bindCapSwitch(
+            R.id.swCapHid,
+            R.id.rowCapHid,
+            CapabilityGate.HID,
+            R.string.setting_cap_hid_need,
+            null,
+        )
+        // 按 UID 断网 / 查流量（v1.5.0-beta.17）：能整体切断别的 App 的网络，
+        // 所以与 WiFi/蓝牙分开授权、默认关闭；封锁需 root，查询只需 Usage Access。
+        bindCapSwitch(
+            R.id.swCapNet,
+            R.id.rowCapNet,
+            CapabilityGate.NET,
+            R.string.setting_cap_net_need,
+            null,
+        )
+
 
         // 一键授予全部权限（v1.5.0-beta.9）：无差别尝试 Manifest 里声明的每一个权限。
         // 有 root/Shizuku 时才有意义；两者都没有时按钮会如实提示无法授予。
@@ -655,9 +704,14 @@ class PermissionCenterActivity : ThemedActivity() {
             R.id.swCapNotifyRead to CapabilityGate.NOTIFY_READ,
             R.id.swCapNotifyAction to CapabilityGate.NOTIFY_ACTION,
             R.id.swCapMedia to CapabilityGate.MEDIA,
-            R.id.swCapPersonal to CapabilityGate.PERSONAL,
+            R.id.swCapCalendar to CapabilityGate.PERSONAL_CALENDAR,
+            R.id.swCapContacts to CapabilityGate.PERSONAL_CONTACTS,
+            R.id.swCapSms to CapabilityGate.PERSONAL_SMS,
+            R.id.swCapCalls to CapabilityGate.PERSONAL_CALLS,
             R.id.swCapRf to CapabilityGate.RF,
             R.id.swCapScreenCapture to CapabilityGate.SCREEN_CAPTURE,
+            R.id.swCapHid to CapabilityGate.HID,
+            R.id.swCapNet to CapabilityGate.NET,
         )
         for ((id, cap) in pairs) {
             val sw = runCatching { findViewById<android.widget.Switch>(id) }.getOrNull() ?: continue

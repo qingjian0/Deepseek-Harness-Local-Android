@@ -107,7 +107,13 @@ scripts/probes/*.bin
 !/scripts/probes/_test_gate_scripts.py
 !/scripts/probes/_test_download_url_scheme.py
 !/scripts/probes/_test_index_signing_diagnostics.py
+!/scripts/probes/_test_hid_tool.py
 !/scripts/probes/_test_picker_health_probe.py
+!/scripts/probes/_test_mcp_device_server.py
+!/scripts/probes/_test_appearance_pr93.py
+!/scripts/probes/_test_btsnoop_parser.py
+!/scripts/probes/_test_net_block.py
+!/scripts/probes/_test_new_capabilities.py
 tasks/
 _bench/
 

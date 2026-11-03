@@ -419,6 +419,35 @@ object AgentBridge {
         // 底层射频能力：蓝牙报文收发 / WiFi 链路与抓包。能力边界见 RadioCap 的注释。
         "POST /dev/bt" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.RadioCap.bt(c, b) },
         "POST /dev/wifi-radio" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.RadioCap.wifi(c, b) },
+        // 按 App（UID）的网络封锁与流量查询。两档：查询 B 档（不需 root），
+        // 封锁 C 档（iptables），成功判据是计数器回读而不是 ping（见 NetCap 注释）。
+        "GET /dev/net" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.NetCap.net(c, "{}") },
+        "POST /dev/net" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.NetCap.net(c, b) },
+        // 手机当 BLE 外设（GATT Server）。与 /dev/bt 的方向相反：
+        // /dev/bt 是手机去连别人，这里是被别人连。
+        "POST /dev/ble" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.BlePeripheralCap.peripheral(c, b) },
+        "GET /dev/ble" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.BlePeripheralCap.peripheral(c, "{}") },
+        // 屏幕变化检测（不存视频）：只回答「变没变、哪块在变」，用于廉价轮询。
+        "POST /dev/screenwatch" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.ScreenWatchCap.control(c, b) },
+        "GET /dev/screenwatch" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.ScreenWatchCap.status(c) },
+        // 手机冒充蓝牙键盘（HID Device）。与 /dev/uhid（本机虚拟键盘）互补：
+        // 那个是「AI 按本机」，这个是「AI 按另一台设备」。
+        "POST /dev/bt-hid" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.BtHidCap.hid(c, b) },
+        "GET /dev/bt-hid" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.BtHidCap.hid(c, "{}") },
+        // 振动摩斯电码 / 传感器场景推断 / Doze 白名单自助（P2 三个小能力）
+        "POST /dev/pulse" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.PulseCap.morse(c, runCatching { org.json.JSONObject(b.ifBlank { "{}" }) }.getOrNull() ?: org.json.JSONObject()) },
+        "POST /dev/scene" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.PulseCap.scene(c, runCatching { org.json.JSONObject(b.ifBlank { "{}" }) }.getOrNull() ?: org.json.JSONObject()) },
+        "POST /dev/doze" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.PulseCap.doze(c, runCatching { org.json.JSONObject(b.ifBlank { "{}" }) }.getOrNull() ?: org.json.JSONObject()) },
+        "GET /dev/doze" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.PulseCap.doze(c, org.json.JSONObject().put("op", "status")) },
+        // 上下文总线 + 主动提醒闸门（P1-3）与通知摘要（P2-3）。
+        // 闸门默认「不打扰」：静音时段/息屏/锁屏/Doze/冷却期内一律拒，并列出拒绝理由。
+        "GET /dev/context" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.ContextCap.context(c, org.json.JSONObject()) },
+        "POST /dev/context" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.ContextCap.context(c, runCatching { org.json.JSONObject(b.ifBlank { "{}" }) }.getOrNull() ?: org.json.JSONObject()) },
+        "POST /dev/nudge" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.ContextCap.gate(c, runCatching { org.json.JSONObject(b.ifBlank { "{}" }) }.getOrNull() ?: org.json.JSONObject()) },
+        "GET /dev/notify-digest" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.ContextCap.digest(c, org.json.JSONObject()) },
+        // 「AI 的手」可视化（P1-4）：纯视觉层，FLAG_NOT_TOUCHABLE，永不吃事件。
+        "POST /dev/hand" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.HandOverlay.control(c, runCatching { org.json.JSONObject(b.ifBlank { "{}" }) }.getOrNull() ?: org.json.JSONObject()) },
+        "GET /dev/hand" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.HandOverlay.control(c, org.json.JSONObject()) },
         // 代用户回复通知（RemoteInput）。与「读通知」分开授权，原因见 NotifyCap 注释。
         "POST /dev/notify-reply" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.NotifyCap.reply(c, b) },
         // 媒体控制走 MediaSession（需要通知访问权限，不是 MEDIA_CONTENT_CONTROL）。
@@ -442,12 +471,37 @@ object AgentBridge {
         // 屏幕录制（MediaProjection）。每次开始必须用户在系统弹窗里点头，无法静默。
         "POST /dev/record" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.RecordCap.control(c, b) },
         "GET /dev/record" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.RecordCap.status(c) },
+        // 虚拟 HID 设备（v1.5.0-beta.13）：/dev/uhid 注册真实外设键盘/鼠标/媒体键。
+        // 与「模拟点击」的本质区别：系统把它当外接硬件，没有注入标记。需要 root。
+        "GET /dev/hid" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.HidCap.status(c) },
+        "POST /dev/hid" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.HidCap.control(c, b) },
         // 权限自助：查状态 / 全量 pm grant / 列还差哪些。AI 用 getperm、grantperm 门脚本调。
         "GET /dev/perms" to Route("GET") { c, q, _ -> app.dsh.mobile.engine.cap.PermCap.missing(c, q) },
         "POST /dev/perms" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.PermCap.grant(c, b) },
         "POST /dev/perms/revoke" to Route("POST") { c, _, b -> app.dsh.mobile.engine.cap.PermCap.revoke(c, b) },
         "GET /dev/perms/status" to Route("GET") { c, _, _ -> app.dsh.mobile.engine.cap.PermCap.status(c) },
+        // 端点自描述目录（v1.5.0-beta.11）：dev 门脚本从这里拉清单自渲染，
+        // 不再硬编码。新增端点只要登记一次 EndpointCatalog，dev 立刻能发现。
+        "GET /dev/help" to Route("GET") { c, q, _ -> EndpointCatalog.help(c, q) },
+        // 真实路由表拍平清单，供 `dev api` 自检与查漏（目录写错能立刻看出来）。
+        "GET /dev/routes" to Route("GET") { c, _, _ -> devRoutes(c) },
     )
+
+    /** `GET /dev/routes` —— 真实路由表的拍平清单 + 目录一致性核对。 */
+    private fun devRoutes(@Suppress("UNUSED_PARAMETER") ctx: Context): Pair<Int, String> {
+        val arr = org.json.JSONArray()
+        routes.keys.sorted().forEach { arr.put(it) }
+        val problems = runCatching { EndpointCatalog.verifyAgainst(routes.keys) }.getOrDefault(emptyList())
+        if (problems.isNotEmpty()) {
+            Log.w(TAG, "endpoint catalog mismatch: ${problems.joinToString("; ")}")
+        }
+        return 200 to org.json.JSONObject()
+            .put("ok", true)
+            .put("count", routes.size)
+            .put("routes", arr)
+            .put("catalog_problems", org.json.JSONArray(problems))
+            .toString()
+    }
 
     private fun route(ctx: Context, method: String, path: String, query: String, body: String): Pair<Int, String> {
         // Preserve the existing action notification side effect before dispatch.
@@ -1916,7 +1970,9 @@ document.getElementById('api').textContent = checks.map(function(c){
         }
     }
 
-    /** POST /key → 全局动作（back/home/recents/notifications/quick_settings）。
+    /** POST /key → 全局动作。
+     *  API 26 可用：back / home / recents / notifications / quick_settings。
+     *  API 28+ 追加：lock（直接锁屏）/ screenshot（系统截图，落通知栏）/ power_dialog（电源菜单）。
      *  ⚠️ 实测本应用内 back 会把整个 Activity 弹到桌面而非关闭弹层，
      *  调用方应配合 /screen 检查前台是否仍在目标界面。 */
     private fun key(body: String): Pair<Int, String> {
@@ -1928,7 +1984,7 @@ document.getElementById('api').textContent = checks.map(function(c){
             val action = JSONObject(body).optString("action")
             val ok = svc.performGlobalActionByName(action)
             if (ok) 200 to """{"ok":true,"action":"$action"}"""
-            else 400 to """{"ok":false,"error":"unknown action (back|home|recents|notifications|quick_settings)"}"""
+            else 400 to """{"ok":false,"error":"unknown action (back|home|recents|notifications|quick_settings|lock|screenshot|power_dialog; lock/screenshot need API 28+)"}"""
         } catch (e: Exception) {
             500 to """{"ok":false,"error":"${e.message}"}"""
         }
