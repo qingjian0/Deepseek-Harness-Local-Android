@@ -22,6 +22,8 @@ object AgentContextSeed {
 
     private const val TAG = "AgentContextSeed"
     private const val FILE_NAME = "AGENTS.md"
+    private const val PREFS_UI = "dsh_ui"
+    private const val KEY_DEFAULT_SEED_ENABLED = "agent_default_prompt_enabled"
     private const val MARKER_PREFIX = "<!-- dsh-android AGENTS seed v"
     /** 当前模板版本：改文案必须同步递增，旧版才会被升级覆盖 */
     private const val SEED_VERSION = 50
@@ -50,9 +52,28 @@ object AgentContextSeed {
         "<!-- Add your own instructions below this line. DSH Mobile never overwrites\n" +
             "     this section, and upgrades keep it as-is. Ask the AI to write here for you. -->"
 
+    /** Default is enabled to preserve behavior for existing installations. */
+    fun isEnabled(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DEFAULT_SEED_ENABLED, true)
+
+    /** Persist the choice and immediately synchronize AGENTS.md. */
+    @Synchronized
+    fun setEnabled(ctx: Context, enabled: Boolean) {
+        ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_DEFAULT_SEED_ENABLED, enabled).apply()
+        if (enabled) ensure(ctx) else removeManagedSeed(ctx)
+    }
+
+    @Synchronized
     fun ensure(ctx: Context) {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
+
+        if (!isEnabled(ctx)) {
+            removeManagedSeed(file, existing)
+            return
+        }
 
         // ① 文件不存在 → 写入完整模板（含空的用户段）
         if (existing == null) {
@@ -89,6 +110,10 @@ object AgentContextSeed {
     fun readUserSection(ctx: Context): String? {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val text = runCatching { if (file.isFile) file.readText() else null }.getOrNull() ?: return null
+        // With the built-in guide disabled, AGENTS.md contains only the user's plain text.
+        if (!text.contains(MARKER_PREFIX) && !text.contains(USER_SECTION_BEGIN)) {
+            return text.trim().ifEmpty { null }
+        }
         return extractUserSection(text)
     }
 
@@ -98,12 +123,39 @@ object AgentContextSeed {
      * 若文件尚不存在（用户先进设置再启动引擎），先落一份完整模板再写用户段，
      * 保证两边内容都在。App 段永不被此处修改。
      */
+    @Synchronized
     fun writeUserSection(ctx: Context, content: String?) {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
-        val body = if (existing == null) render(ctx) else appSectionOf(existing)
-        write(file, body + userSection(content))
+        if (!isEnabled(ctx)) {
+            val body = content?.trim().orEmpty()
+            if (body.isEmpty()) runCatching { file.delete() }
+            else write(file, body + "\n")
+        } else {
+            val body = if (existing == null || !existing.contains(MARKER_PREFIX)) render(ctx) else appSectionOf(existing)
+            write(file, body + userSection(content))
+        }
         Log.i(TAG, "AGENTS.md user section saved (${content?.length ?: 0} chars)")
+    }
+
+    /** Remove only the app-managed guide, retaining user-authored instructions verbatim. */
+    @Synchronized
+    private fun removeManagedSeed(ctx: Context) {
+        val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
+        val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
+        removeManagedSeed(file, existing)
+    }
+
+    private fun removeManagedSeed(file: File, existing: String?) {
+        if (existing == null || !existing.contains(MARKER_PREFIX)) return
+        val user = extractUserSection(existing)?.trim().orEmpty()
+        if (user.isEmpty()) {
+            runCatching { file.delete() }
+                .onFailure { Log.w(TAG, "remove default AGENTS.md seed failed: ${it.message}") }
+        } else {
+            write(file, user + "\n")
+        }
+        Log.i(TAG, "default AGENTS.md seed removed; preserved user instructions (${user.length} chars)")
     }
 
     /** 取 App 段（用户段之前的部分）；没有用户段就是全文 */

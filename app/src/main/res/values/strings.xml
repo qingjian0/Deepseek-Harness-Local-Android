@@ -129,6 +129,10 @@
     <!-- v1.2.113：社区插件中心 -->
     <string name="setting_plugin">Community Plugins</string>
     <string name="setting_plugin_sub">One-click install dsh ecosystem plugins</string>
+    <string name="setting_agent_prompt_seed">Built-in environment prompt</string>
+    <string name="setting_agent_prompt_seed_sub">Include the app-managed Android environment guide in new sessions. Off removes only the built-in guide; your own instructions remain.</string>
+    <string name="setting_agent_prompt_enabled">Built-in environment prompt enabled</string>
+    <string name="setting_agent_prompt_disabled">Built-in environment prompt disabled; your instructions were preserved</string>
     <string name="setting_user_prompt">User instructions</string>
     <string name="setting_user_prompt_sub">Add your own standing instructions on top of the built-in environment guide</string>
     <string name="user_prompt_intro">These instructions are appended to the app\'s built-in environment guide and apply to every new session. The app never overwrites what you write here, and upgrading keeps it as-is. You can also ask the AI to write here for you.</string>
