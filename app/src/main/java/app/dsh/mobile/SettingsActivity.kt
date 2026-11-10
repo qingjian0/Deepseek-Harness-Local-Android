@@ -19,6 +19,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import app.dsh.mobile.engine.ExtensionManager
+import app.dsh.mobile.engine.UserPromptRepository
+import app.dsh.mobile.engine.UserPromptContextAdapter
 import app.dsh.mobile.engine.PrivMode
 import app.dsh.mobile.engine.Privilege
 import app.dsh.mobile.engine.RuntimeDownloadConfig
@@ -242,9 +244,25 @@ class SettingsActivity : ThemedActivity() {
         // 自定义指令（v1.3.2，issue #19）：在 App 的环境说明之上补写用户自己的长期指令。
         // 落点是 AGENTS.md 的用户段 —— 引擎只加载这一个 user-global 指令文件，
         // 分段管理后升级 App 不会丢用户内容，用户改指令也不会让环境说明变旧。
-        findViewById<LinearLayout>(R.id.rowUserPrompt).setOnClickListener {
+        val rowUserPrompt = findViewById<LinearLayout>(R.id.rowUserPrompt)
+        val swUserPrompt = findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.swUserPrompt)
+        swUserPrompt.isChecked = UserPromptRepository.isEnabled(this)
+        rowUserPrompt.setOnClickListener {
             startActivity(Intent(this, UserPromptActivity::class.java))
         }
+        fun bindUserPromptSwitch() {
+            swUserPrompt.setOnCheckedChangeListener { _, enabled ->
+                if (!UserPromptRepository.setEnabled(this, enabled)) {
+                    swUserPrompt.setOnCheckedChangeListener(null)
+                    swUserPrompt.isChecked = UserPromptRepository.isEnabled(this)
+                    bindUserPromptSwitch()
+                    Toast.makeText(this, R.string.user_prompt_toggle_failed, Toast.LENGTH_SHORT).show()
+                } else {
+                    UserPromptContextAdapter.refreshAsync(this)
+                }
+            }
+        }
+        bindUserPromptSwitch()
 
         // —— 数据：备份与恢复子页（v1.4.46：导出/导入/恢复对话/配置文件收拢）——
         findViewById<LinearLayout>(R.id.rowBackup).setOnClickListener {

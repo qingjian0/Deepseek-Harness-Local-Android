@@ -130,12 +130,14 @@
     <string name="setting_plugin">Community Plugins</string>
     <string name="setting_plugin_sub">One-click install dsh ecosystem plugins</string>
     <string name="setting_user_prompt">User instructions</string>
-    <string name="setting_user_prompt_sub">Add your own standing instructions on top of the built-in environment guide</string>
-    <string name="user_prompt_intro">These instructions are appended to the app\'s built-in environment guide and apply to every new session. The app never overwrites what you write here, and upgrading keeps it as-is. You can also ask the AI to write here for you.</string>
+    <string name="setting_user_prompt_sub">Manage your own standing instructions; enable or disable their injection independently</string>
+    <string name="setting_user_prompt_toggle">Inject user instructions into new sessions</string>
+    <string name="user_prompt_intro">Your instructions are stored independently from the app environment guide and injected into AGENTS.md for new sessions when enabled. App upgrades do not overwrite your settings. You can also ask the AI to write here for you.</string>
     <string name="user_prompt_placeholder">For example: always answer in Chinese. Or: when I say "back up", copy the workspace to the Documents folder.</string>
     <string name="user_prompt_save">Save</string>
     <string name="user_prompt_saved">Saved. Takes effect in new sessions.</string>
-    <string name="user_prompt_path">Stored in the user section of AGENTS.md (managed by the app, yours is never overwritten)</string>
+    <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
+    <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
 
     <!-- In-app file editor (v1.4.0, issue #25). Upstream\'s "open configuration
          file" button hands the path to a desktop text editor that Android does
