@@ -124,7 +124,7 @@ function runSelfTest() {
     { seq: 3, type: "assistant/attempt", data: {} },
   ];
   const frame = (events) => zlib.zstdCompressSync(
-    Buffer.from(events.map((event) => JSON.stringify(event)).join("\\n") + "\\n", "utf8"),
+    Buffer.from(events.map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8"),
   );
   const fixture = Buffer.concat([frame(first), frame(second)]);
   const decoded = decodeCumulativeFrames(fixture);
@@ -141,14 +141,14 @@ function runSelfTest() {
         duplicateEvents: decoded.duplicateEvents,
       }));
   }
-  process.stdout.write("PASS cumulative zstd snapshots: 2 frames, 5 raw events, 3 unique events\\n");
+  process.stdout.write("PASS cumulative zstd snapshots: 2 frames, 5 raw events, 3 unique events\n");
 }
 
 if (process.argv[2] === "--self-test") {
   try {
     runSelfTest();
   } catch (error) {
-    process.stderr.write("Self-test failed: " + error.message + "\\n");
+    process.stderr.write("Self-test failed: " + error.message + "\n");
     process.exit(1);
   }
   process.exit(0);
