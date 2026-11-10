@@ -92,8 +92,15 @@ if (frames.length === 0) {
 
 let requestHeaderCount = 0;
 let requestContextCount = 0;
+let modelRequestCount = 0;
+let requestsWithTools = 0;
+let requestSchemaBytesTotal = 0;
+let requestSchemaBytesMin = Infinity;
+let requestSchemaBytesMax = 0;
+let currentHeader;
 let latestHeader;
 let malformedLines = 0;
+const snapshots = [];
 for (const [start, end] of frames) {
   let plain;
   try {
@@ -108,7 +115,26 @@ for (const [start, end] of frames) {
     if (event?.type === "request/context") requestContextCount++;
     if (event?.type === "request/header") {
       requestHeaderCount++;
-      latestHeader = event?.data?.header;
+      currentHeader = event?.data?.header;
+      latestHeader = currentHeader;
+      const snapshot = schemaSummary(currentHeader?.tools);
+      snapshots.push({
+        seq: event.seq,
+        reason: event?.data?.reason,
+        toolCount: snapshot.toolCount,
+        schemaBytes: snapshot.schemaBytes,
+      });
+    }
+    // One assistant/message or assistant/attempt settles one model request.
+    // The latest request/header remains in force until another header snapshot.
+    if (event?.type === "assistant/message" || event?.type === "assistant/attempt") {
+      modelRequestCount++;
+      const tools = currentHeader?.tools ?? [];
+      const bytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
+      if (tools.length > 0) requestsWithTools++;
+      requestSchemaBytesTotal += bytes;
+      requestSchemaBytesMin = Math.min(requestSchemaBytesMin, bytes);
+      requestSchemaBytesMax = Math.max(requestSchemaBytesMax, bytes);
     }
   }
 }
@@ -124,8 +150,16 @@ process.stdout.write(JSON.stringify({
   completeFrames: frames.length,
   requestHeaderSnapshots: requestHeaderCount,
   requestContextEvents: requestContextCount,
-  latestHeaderReason: "latest request/header snapshot",
-  ...summary,
-  note: "Exact UTF-8 byte counts for the persisted schema object; token count depends on the selected model tokenizer and is not inferred here.",
+  modelRequests: modelRequestCount,
+  requestsWithTools,
+  schemaBytesPerRequest: {
+    min: modelRequestCount ? requestSchemaBytesMin : 0,
+    max: requestSchemaBytesMax,
+    average: modelRequestCount ? Math.round(requestSchemaBytesTotal / modelRequestCount) : 0,
+    cumulativeAcrossRequests: requestSchemaBytesTotal,
+  },
+  schemaSnapshots: snapshots,
+  latestHeader: summary,
+  note: "Schema sizes are exact compact UTF-8 JSON byte counts reconstructed for each model request. Token count depends on the selected model tokenizer and is not inferred here. request/context is route metadata; schemas come from request/header.",
   malformedLines,
 }, null, 2) + "\n");
