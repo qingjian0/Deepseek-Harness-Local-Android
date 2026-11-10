@@ -762,6 +762,7 @@ class EngineSupervisor(private val ctx: Context) {
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
                 step("guardian-restore")
 
+                // UserPromptContextAdapter 先迁移旧数据，再调用 AgentContextSeed.ensure(ctx)，最后渲染用户段。
                 // 三项互不依赖的启动准备任务并行执行：
                 //  - UserPromptContextAdapter 先迁移独立偏好，再协调 AgentContextSeed 与用户段渲染；
                 //  - LogJanitor 只裁剪 *.log / plugin-manager operation 日志；
