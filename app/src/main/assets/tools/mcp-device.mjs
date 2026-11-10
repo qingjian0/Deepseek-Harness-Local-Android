@@ -423,6 +423,8 @@ async function runTool(tools, name, rawArgs) {
       image,
     };
   } catch (e) {
+    const failedAfterMs = Math.round(performance.now() - toolStartedAt);
+    process.stderr.write(`[tool-perf] ${name} ${entry.method} ${entry.path} failed_after_ms=${failedAfterMs}\n`);
     const msg = e && e.name === "AbortError"
       ? `bridge did not answer within ${CALL_TIMEOUT_MS / 1000}s — the phone may be asleep ` +
         "(the app process is frozen while the screen is off); wake it and retry"
