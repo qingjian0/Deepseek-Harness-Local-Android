@@ -2,6 +2,7 @@ package app.dsh.mobile.engine
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.AtomicFile
 import org.json.JSONObject
 import java.io.IOException
 
@@ -34,7 +35,10 @@ object UserPromptRepository {
             val p = prefs(context)
             if (p.getBoolean(KEY_MIGRATED, false)) return
             val file = java.io.File(EngineConfig.dshHome(context), "AGENTS.md")
-            val legacy = if (file.isFile) file.readText(Charsets.UTF_8) else null
+            val hasAtomicData = file.isFile || java.io.File(file.absolutePath + ".bak").isFile
+            val legacy = if (hasAtomicData) {
+                AtomicFile(file).openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } else null
             val extracted = UserPromptSectionRenderer.extractLegacyContent(legacy)
             val edit = p.edit().putBoolean(KEY_MIGRATED, true)
             if (!extracted.isNullOrEmpty()) edit.putString(KEY_CONTENT, extracted)

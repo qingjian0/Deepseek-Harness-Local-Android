@@ -30,13 +30,14 @@ object UserPromptContextAdapter {
             val appContext = context.applicationContext
             UserPromptRepository.migrateLegacyIfNeeded(appContext)
             val file = File(EngineConfig.dshHome(appContext), "AGENTS.md")
-            val before = if (file.isFile) file.readText(Charsets.UTF_8) else null
+            val hasAtomicData = file.isFile || File(file.absolutePath + ".bak").isFile
+            val before = if (hasAtomicData) readAtomically(file) else null
             val suffix = UserPromptSectionRenderer.suffixAfterSection(before)
 
             // Keep upstream environment template generation and version upgrades intact.
             AgentContextSeed.ensure(appContext)
             if (!file.isFile) throw IllegalStateException("AGENTS.md was not created")
-            var current = file.readText(Charsets.UTF_8)
+            var current = readAtomically(file)
             if (suffix.isNotEmpty() && !current.endsWith(suffix)) current += suffix
 
             val rendered = UserPromptSectionRenderer.render(
@@ -47,6 +48,9 @@ object UserPromptContextAdapter {
             if (rendered != current) writeAtomically(file, rendered)
         }
     }
+
+    private fun readAtomically(file: File): String =
+        AtomicFile(file).openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
 
     private fun writeAtomically(file: File, text: String) {
         file.parentFile?.mkdirs()
