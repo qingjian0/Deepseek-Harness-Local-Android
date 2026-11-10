@@ -3,9 +3,10 @@
  * Measure model-facing tool schemas from a DSH append-only
  * session.v4.jsonl.zstd log.
  *
- * DSH may append cumulative snapshots: each zstd frame can contain the full
- * logical JSONL history as it existed at that point. Decode each frame
- * independently, then deduplicate events by seq (last copy wins).
+ * DSH writes an append-only zstd frame chain: each frame contains only the
+ * newly appended JSONL events. Decode each frame independently in file order.
+ * Keep seq-based de-duplication as a defensive integrity check, not as an
+ * assumption that frames repeat the complete session history.
  *
  * Only aggregate sizes and event counts are printed. Prompts, messages, tool
  * arguments/results, credentials, and schema text are never emitted.
@@ -44,8 +45,8 @@ function decodeCumulativeFrames(buf) {
 
     let plain;
     try {
-      // A DSH frame is a complete compressed snapshot. Do not ask zlib to
-      // decode the whole append-only file as one frame chain.
+      // Decode this individual zstd frame. DSH's frame chain is incremental:
+      // each frame contains only newly appended JSONL rows.
       plain = zlib.zstdDecompressSync(buf.subarray(start, end)).toString("utf8");
     } catch {
       // A magic-like byte sequence inside compressed data is not a frame.
@@ -69,8 +70,8 @@ function decodeCumulativeFrames(buf) {
       rawEvents++;
       frameHasEvents = true;
 
-      // seq is the event identity in DSH's append-only session log. Keep the
-      // newest occurrence because later cumulative frames repeat older rows.
+      // seq is the event identity in DSH's append-only session log. Retain
+      // defensive de-duplication in case a log contains a repeated event.
       const key = event.seq === undefined
         ? "json:" + JSON.stringify(event)
         : "seq:" + String(event.seq);
@@ -115,33 +116,38 @@ function schemaSummary(tools) {
 }
 
 function runSelfTest() {
+  // Model an incremental zstd frame chain: the second frame contains only
+  // events appended after the first frame, not a cumulative copy.
   const first = [
     { seq: 1, type: "request/header", data: { reason: "initial", header: { tools: [{ name: "demo", description: "test", parameters: { type: "object" } }] } } },
-    { seq: 2, type: "assistant/attempt", data: {} },
+    { seq: 2, type: "assistant/message", data: {} },
   ];
   const second = [
-    ...first,
     { seq: 3, type: "assistant/attempt", data: {} },
+    { seq: 4, type: "assistant/message", data: {} },
   ];
   const frame = (events) => zlib.zstdCompressSync(
     Buffer.from(events.map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8"),
   );
   const fixture = Buffer.concat([frame(first), frame(second)]);
   const decoded = decodeCumulativeFrames(fixture);
+  const messageCount = decoded.events.filter((event) => event.type === "assistant/message").length;
+  const attemptCount = decoded.events.filter((event) => event.type === "assistant/attempt").length;
   if (decoded.frameCandidates !== 2 || decoded.decodedFrames !== 2 ||
-      decoded.rawEvents !== 5 || decoded.uniqueEvents !== 3 ||
-      decoded.duplicateEvents !== 2 ||
-      decoded.events.filter((event) => event.type === "assistant/attempt").length !== 2) {
-    throw new Error("cumulative snapshot fixture did not deduplicate as expected: " +
+      decoded.rawEvents !== 4 || decoded.uniqueEvents !== 4 ||
+      decoded.duplicateEvents !== 0 || messageCount !== 2 || attemptCount !== 1) {
+    throw new Error("incremental zstd frame-chain fixture failed: " +
       JSON.stringify({
         frameCandidates: decoded.frameCandidates,
         decodedFrames: decoded.decodedFrames,
         rawEvents: decoded.rawEvents,
         uniqueEvents: decoded.uniqueEvents,
         duplicateEvents: decoded.duplicateEvents,
+        assistantMessages: messageCount,
+        assistantAttempts: attemptCount,
       }));
   }
-  process.stdout.write("PASS cumulative zstd snapshots: 2 frames, 5 raw events, 3 unique events\n");
+  process.stdout.write("PASS incremental zstd frame chain: 2 frames, 4 events, 0 duplicates; assistant/message=2, assistant/attempt=1\n");
 }
 
 if (process.argv[2] === "--self-test") {
@@ -171,7 +177,7 @@ try {
 const decoded = decodeCumulativeFrames(buf);
 if (decoded.events.length === 0) {
   process.stderr.write(
-    "No DSH session events decoded from zstd snapshots " +
+    "No DSH session events decoded from zstd frame chain " +
     `(magicCandidates=${decoded.frameCandidates}, decodedFrames=${decoded.decodedFrames}).\n`,
   );
   process.exit(3);
@@ -185,7 +191,7 @@ const messages = events.filter((event) => event?.type === "assistant/message");
 
 if (headers.length === 0) {
   process.stderr.write(
-    "No request/header event found after snapshot de-duplication " +
+    "No request/header event found after frame decoding " +
     `(rawEvents=${decoded.rawEvents}, uniqueEvents=${decoded.uniqueEvents}).\n`,
   );
   process.exit(4);
@@ -203,12 +209,11 @@ const snapshots = headers.map((event) => {
 });
 const latestHeaderEvent = headers[headers.length - 1];
 const latestHeader = latestHeaderEvent?.data?.header;
-const useAttempts = attempts.length > 0;
-const requestType = useAttempts ? "assistant/attempt" : "assistant/message";
-const requestEvents = events.filter((event) => event?.type === requestType);
-const requestCountBasis = useAttempts
-  ? "assistant/attempt"
-  : "assistant/message (fallback; request count may be approximate)";
+// assistant/message tracks completed assistant model outputs in the session
+// event stream. assistant/attempt is an error/retry lifecycle event and is not
+// a valid denominator for total model requests.
+const requestEvents = messages;
+const requestCountBasis = "assistant/message";
 let activeHeader;
 let requestSchemaBytesTotal = 0;
 let requestSchemaBytesMin = Infinity;
