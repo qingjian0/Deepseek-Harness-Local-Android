@@ -35,7 +35,7 @@ internal object UserPromptSectionRenderer {
         val begin = existing.indexOf(USER_SECTION_BEGIN)
         if (begin < 0) {
             if (!enabled) return existing
-            return existing.trimEnd() + userSection(content)
+            return existing.trimEnd() + "\n\n" + userSection(content)
         }
         val end = existing.indexOf(USER_SECTION_END, begin + USER_SECTION_BEGIN.length)
         val endExclusive = if (end < 0) existing.length else end + USER_SECTION_END.length
@@ -46,7 +46,7 @@ internal object UserPromptSectionRenderer {
     }
 
     private fun userSection(content: String): String = buildString {
-        append("\n\n").append(USER_SECTION_BEGIN).append('\n')
+        append(USER_SECTION_BEGIN).append('\n')
         val body = content.trim()
         if (body.isEmpty()) append(PLACEHOLDER).append('\n') else append(body).append('\n')
         append(USER_SECTION_END).append('\n')
