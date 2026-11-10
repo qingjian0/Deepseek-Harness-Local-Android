@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 
 const name = "android-device-tools";
 const inject = ["tools"];
+const TOOL_PERF_ENABLED = process.env.DSH_TOOL_PERF === "1";
 
 async function loadDefineTool() {
   const here = path.dirname(new URL(import.meta.url).pathname);
@@ -28,19 +29,28 @@ async function request(method, endpoint, body) {
   const startedAt = performance.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
+  const op = body && typeof body === "object" && typeof body.op === "string" ? body.op : "-";
+  let httpStatus = 0;
+  let outcome = "error";
   try {
     const headers = { "X-DSH-Token": process.env.DSH_BRIDGE_TOKEN || "" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const response = await fetch(`http://127.0.0.1:3083${endpoint}`, {
       method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal,
     });
+    httpStatus = response.status;
     const text = await response.text();
     let value;
     try { value = JSON.parse(text); } catch { value = { ok: response.ok, text }; }
+    outcome = response.ok && value?.ok !== false ? "ok" : "error";
     return { ...value, http_status: response.status };
   } finally {
     clearTimeout(timer);
-    process.stderr.write(`[tool-perf] bridge ${method} ${endpoint} elapsed_ms=${Math.round(performance.now() - startedAt)}\n`);
+    if (TOOL_PERF_ENABLED) {
+      process.stderr.write(
+        `[tool-perf] bridge ${method} ${endpoint} op=${op} http_status=${httpStatus} result=${outcome} elapsed_ms=${Math.round(performance.now() - startedAt)}\\n`,
+      );
+    }
   }
 }
 
@@ -103,11 +113,26 @@ async function runHid(args) {
   const result = await runProcess(process.execPath, [script, ...args], 30000);
   let parsed;
   try { parsed = JSON.parse(result.stdout); } catch { parsed = null; }
+  // A helper can print valid JSON and then hang until the timeout fires. Never
+  // let that partial success hide the process timeout from the caller.
+  if (result.timedOut) {
+    const value = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : { result: parsed };
+    return {
+      ...value,
+      ok: false,
+      timed_out: true,
+      process_status: result.status,
+      error: value.error || "hid_helper_timeout",
+      stderr: (result.error || result.stderr).slice(0, 2000),
+    };
+  }
   if (parsed) return parsed;
   return {
-    ok: result.status === 0 && !result.timedOut,
+    ok: result.status === 0,
     status: result.status,
-    timed_out: result.timedOut,
+    timed_out: false,
     stdout: result.stdout.slice(0, 2000),
     stderr: (result.error || result.stderr).slice(0, 2000),
   };
