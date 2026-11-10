@@ -77,11 +77,19 @@ if os.path.isfile(PLUGIN):
     pl = read(PLUGIN)
     chk('name: "device_hid"' in pl, "device_hid tool registered")
     chk("function runHid(" in pl, "runHid helper exists")
-    chk("spawnSync" in pl, "runHid spawns the script directly")
+    chk('import { spawn } from "node:child_process"' in pl, "child process uses async spawn")
+    chk("async function runProcess(" in pl and "await runProcess(process.execPath" in pl,
+        "runHid executes helper asynchronously")
+    chk("spawnSync" not in pl, "no synchronous child process remains")
+    chk("execute: async (args = {}) => {" in pl, "HID execute handler is async for wake")
     # 注释里提一句「为什么不走桥」是好事；要禁的是真的发请求。
     chk('request("GET", "/dev/hid")' not in pl and 'request("POST", "/dev/hid"' not in pl,
         "device_hid does NOT go through the bridge")
     chk("hid_script_missing" in pl, "missing-script error is explicit")
+    chk("if (result.timedOut)" in pl and 'error: value.error || "hid_helper_timeout"' in pl,
+        "valid helper JSON cannot mask a process timeout")
+    chk('process.env.DSH_TOOL_PERF === "1"' in pl and "if (TOOL_PERF_ENABLED)" in pl,
+        "bridge timing logs are opt-in")
     chk('"KEYCODE_WAKEUP"' in pl or "KEYCODE_WAKEUP" in pl, "wake op implemented")
     # 别名要写进 tool description，AI 才知道能用名字
     for al in ("vol+", "mute", "play", "enter"):
