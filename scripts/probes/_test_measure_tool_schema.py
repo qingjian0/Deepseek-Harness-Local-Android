@@ -29,7 +29,7 @@ if result.returncode != 0:
         print(result.stderr.rstrip())
     sys.exit(result.returncode or 1)
 
-if "PASS cumulative zstd snapshots" not in result.stdout:
+if "PASS incremental zstd frame chain" not in result.stdout:
     print("FAIL  self-test did not emit its success marker")
     print(result.stdout.rstrip())
     sys.exit(1)
