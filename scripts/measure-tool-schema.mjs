@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 /**
- * Measure model-facing tool schemas from a DSH session.v4.jsonl.zstd log.
+ * Measure model-facing tool schemas from a DSH append-only
+ * session.v4.jsonl.zstd log.
  *
- * This intentionally prints aggregate schema sizes only. It does not print
- * prompts, messages, tool arguments, tool results, credentials, or schema text.
+ * DSH may append cumulative snapshots: each zstd frame can contain the full
+ * logical JSONL history as it existed at that point. Decode each frame
+ * independently, then deduplicate events by seq (last copy wins).
+ *
+ * Only aggregate sizes and event counts are printed. Prompts, messages, tool
+ * arguments/results, credentials, and schema text are never emitted.
  *
  * Usage:
  *   node scripts/measure-tool-schema.mjs /path/to/session.v4.jsonl.zstd
@@ -11,46 +16,85 @@
 import fs from "node:fs";
 import zlib from "node:zlib";
 
-const ZSTD_MAGIC = 0xfd2fb528;
+const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 
-function scanFrames(buf) {
-  const frames = [];
-  let off = 0;
-  while (off + 4 <= buf.length) {
-    const start = off;
-    if (buf.readUInt32LE(off) !== ZSTD_MAGIC) break;
-    off += 4;
-    if (off >= buf.length) break;
-    const descriptor = buf.readUInt8(off++);
-    if ((descriptor & 24) !== 0) break;
-    const contentSizeFlag = descriptor >>> 6;
-    const singleSegment = (descriptor & 32) !== 0;
-    const dictionaryFlag = descriptor & 3;
-    const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag;
-    const contentSizeBytes = contentSizeFlag === 0
-      ? (singleSegment ? 1 : 0)
-      : 1 << contentSizeFlag;
-    const headerBytes = (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes;
-    if (off + headerBytes > buf.length) break;
-    off += headerBytes;
-
-    let complete = true;
-    for (;;) {
-      if (off + 3 > buf.length) { complete = false; break; }
-      const blockHeader = buf.readUIntLE(off, 3);
-      off += 3;
-      const lastBlock = (blockHeader & 1) === 1;
-      const blockType = (blockHeader >>> 1) & 3;
-      const blockSize = blockHeader >>> 3;
-      const bytes = blockType === 1 ? 1 : blockSize;
-      if (off + bytes > buf.length) { complete = false; break; }
-      off += bytes;
-      if (lastBlock) break;
-    }
-    if (!complete) break;
-    frames.push([start, off]);
+function findMagicOffsets(buf) {
+  const offsets = [];
+  let from = 0;
+  while (from <= buf.length - ZSTD_MAGIC.length) {
+    const at = buf.indexOf(ZSTD_MAGIC, from);
+    if (at < 0) break;
+    offsets.push(at);
+    from = at + ZSTD_MAGIC.length;
   }
-  return frames;
+  return offsets;
+}
+
+function decodeCumulativeFrames(buf) {
+  const offsets = findMagicOffsets(buf);
+  const eventsBySeq = new Map();
+  let decodedFrames = 0;
+  let rawEvents = 0;
+  let malformedLines = 0;
+
+  for (let i = 0; i < offsets.length; i++) {
+    const start = offsets[i];
+    const end = i + 1 < offsets.length ? offsets[i + 1] : buf.length;
+    if (end <= start + ZSTD_MAGIC.length) continue;
+
+    let plain;
+    try {
+      // A DSH frame is a complete compressed snapshot. Do not ask zlib to
+      // decode the whole append-only file as one frame chain.
+      plain = zlib.zstdDecompressSync(buf.subarray(start, end)).toString("utf8");
+    } catch {
+      // A magic-like byte sequence inside compressed data is not a frame.
+      continue;
+    }
+
+    let frameHasEvents = false;
+    for (const line of plain.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        malformedLines++;
+        continue;
+      }
+      if (!event || typeof event !== "object" || Array.isArray(event)) {
+        malformedLines++;
+        continue;
+      }
+      rawEvents++;
+      frameHasEvents = true;
+
+      // seq is the event identity in DSH's append-only session log. Keep the
+      // newest occurrence because later cumulative frames repeat older rows.
+      const key = event.seq === undefined
+        ? "json:" + JSON.stringify(event)
+        : "seq:" + String(event.seq);
+      eventsBySeq.set(key, event);
+    }
+    if (frameHasEvents) decodedFrames++;
+  }
+
+  const events = [...eventsBySeq.values()].sort((a, b) => {
+    const an = Number(a?.seq);
+    const bn = Number(b?.seq);
+    if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+    return String(a?.seq ?? "").localeCompare(String(b?.seq ?? ""));
+  });
+
+  return {
+    events,
+    frameCandidates: offsets.length,
+    decodedFrames,
+    rawEvents,
+    uniqueEvents: events.length,
+    duplicateEvents: Math.max(0, rawEvents - events.length),
+    malformedLines,
+  };
 }
 
 function schemaSummary(tools) {
@@ -84,82 +128,86 @@ try {
   process.exit(2);
 }
 
-const frames = scanFrames(buf);
-if (frames.length === 0) {
-  process.stderr.write("No complete zstd frames found.\n");
+const decoded = decodeCumulativeFrames(buf);
+if (decoded.events.length === 0) {
+  process.stderr.write(
+    "No DSH session events decoded from zstd snapshots " +
+    `(magicCandidates=${decoded.frameCandidates}, decodedFrames=${decoded.decodedFrames}).\n`,
+  );
   process.exit(3);
 }
 
-let requestHeaderCount = 0;
-let requestContextCount = 0;
-let modelRequestCount = 0;
-let requestsWithTools = 0;
+const events = decoded.events;
+const headers = events.filter((event) => event?.type === "request/header");
+const contexts = events.filter((event) => event?.type === "request/context");
+const attempts = events.filter((event) => event?.type === "assistant/attempt");
+const messages = events.filter((event) => event?.type === "assistant/message");
+
+// assistant/attempt is the request-attempt boundary. Older logs without that
+// event fall back to assistant/message and label the count as an estimate.
+const requestEvents = attempts.length > 0 ? attempts : messages;
+const requestCountBasis = attempts.length > 0
+  ? "assistant/attempt"
+  : "assistant/message (fallback; request count may be approximate)";
+
+if (headers.length === 0) {
+  process.stderr.write(
+    "No request/header event found after snapshot de-duplication " +
+    `(rawEvents=${decoded.rawEvents}, uniqueEvents=${decoded.uniqueEvents}).\n`,
+  );
+  process.exit(4);
+}
+
+const snapshots = headers.map((event) => {
+  const header = event?.data?.header;
+  const summary = schemaSummary(header?.tools);
+  return {
+    seq: event.seq,
+    reason: event?.data?.reason,
+    toolCount: summary.toolCount,
+    schemaBytes: summary.schemaBytes,
+  };
+});
+const latestHeaderEvent = headers[headers.length - 1];
+const latestHeader = latestHeaderEvent?.data?.header;
 let requestSchemaBytesTotal = 0;
 let requestSchemaBytesMin = Infinity;
 let requestSchemaBytesMax = 0;
-let currentHeader;
-let latestHeader;
-let malformedLines = 0;
-const snapshots = [];
-for (const [start, end] of frames) {
-  let plain;
-  try {
-    plain = zlib.zstdDecompressSync(buf.subarray(start, end)).toString("utf8");
-  } catch {
-    continue;
-  }
-  for (const line of plain.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    let event;
-    try { event = JSON.parse(line); } catch { malformedLines++; continue; }
-    if (event?.type === "request/context") requestContextCount++;
-    if (event?.type === "request/header") {
-      requestHeaderCount++;
-      currentHeader = event?.data?.header;
-      latestHeader = currentHeader;
-      const snapshot = schemaSummary(currentHeader?.tools);
-      snapshots.push({
-        seq: event.seq,
-        reason: event?.data?.reason,
-        toolCount: snapshot.toolCount,
-        schemaBytes: snapshot.schemaBytes,
-      });
-    }
-    // One assistant/message or assistant/attempt settles one model request.
-    // The latest request/header remains in force until another header snapshot.
-    if (event?.type === "assistant/message" || event?.type === "assistant/attempt") {
-      modelRequestCount++;
-      const tools = currentHeader?.tools ?? [];
-      const bytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
-      if (tools.length > 0) requestsWithTools++;
-      requestSchemaBytesTotal += bytes;
-      requestSchemaBytesMin = Math.min(requestSchemaBytesMin, bytes);
-      requestSchemaBytesMax = Math.max(requestSchemaBytesMax, bytes);
-    }
-  }
-}
+let requestsWithTools = 0;
 
-if (!latestHeader) {
-  process.stderr.write("No request/header event found in this session.\n");
-  process.exit(4);
+for (const _event of requestEvents) {
+  // The latest header snapshot remains active until a newer header is emitted.
+  const tools = latestHeader?.tools ?? [];
+  const bytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
+  if (tools.length > 0) requestsWithTools++;
+  requestSchemaBytesTotal += bytes;
+  requestSchemaBytesMin = Math.min(requestSchemaBytesMin, bytes);
+  requestSchemaBytesMax = Math.max(requestSchemaBytesMax, bytes);
 }
 
 const summary = schemaSummary(latestHeader.tools);
 process.stdout.write(JSON.stringify({
   fileBytes: buf.length,
-  completeFrames: frames.length,
-  requestHeaderSnapshots: requestHeaderCount,
-  requestContextEvents: requestContextCount,
-  modelRequests: modelRequestCount,
+  frameCandidates: decoded.frameCandidates,
+  decodedFrames: decoded.decodedFrames,
+  rawEvents: decoded.rawEvents,
+  uniqueEvents: decoded.uniqueEvents,
+  duplicateEvents: decoded.duplicateEvents,
+  requestHeaderSnapshots: headers.length,
+  requestContextEvents: contexts.length,
+  assistantAttemptEvents: attempts.length,
+  assistantMessageEvents: messages.length,
+  modelRequests: requestEvents.length,
+  modelRequestCountBasis: requestCountBasis,
   requestsWithTools,
   schemaBytesPerRequest: {
-    min: modelRequestCount ? requestSchemaBytesMin : 0,
+    min: requestEvents.length ? requestSchemaBytesMin : 0,
     max: requestSchemaBytesMax,
-    average: modelRequestCount ? Math.round(requestSchemaBytesTotal / modelRequestCount) : 0,
+    average: requestEvents.length ? Math.round(requestSchemaBytesTotal / requestEvents.length) : 0,
     cumulativeAcrossRequests: requestSchemaBytesTotal,
   },
   schemaSnapshots: snapshots,
   latestHeader: summary,
-  note: "Schema sizes are exact compact UTF-8 JSON byte counts reconstructed for each model request. Token count depends on the selected model tokenizer and is not inferred here. request/context is route metadata; schemas come from request/header.",
-  malformedLines,
+  note: "Schema sizes are exact compact UTF-8 JSON byte counts reconstructed from request/header. Each model request is attributed the latest active header snapshot. Token count requires the selected model tokenizer and is not estimated.",
+  malformedLines: decoded.malformedLines,
 }, null, 2) + "\n");
