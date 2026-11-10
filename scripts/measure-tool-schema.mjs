@@ -170,14 +170,25 @@ const snapshots = headers.map((event) => {
 });
 const latestHeaderEvent = headers[headers.length - 1];
 const latestHeader = latestHeaderEvent?.data?.header;
+const useAttempts = attempts.length > 0;
+const requestType = useAttempts ? "assistant/attempt" : "assistant/message";
+const requestEvents = events.filter((event) => event?.type === requestType);
+const requestCountBasis = useAttempts
+  ? "assistant/attempt"
+  : "assistant/message (fallback; request count may be approximate)";
+let activeHeader;
 let requestSchemaBytesTotal = 0;
 let requestSchemaBytesMin = Infinity;
 let requestSchemaBytesMax = 0;
 let requestsWithTools = 0;
 
-for (const _event of requestEvents) {
-  // The latest header snapshot remains active until a newer header is emitted.
-  const tools = latestHeader?.tools ?? [];
+for (const event of events) {
+  if (event?.type === "request/header") {
+    activeHeader = event?.data?.header;
+    continue;
+  }
+  if (event?.type !== requestType) continue;
+  const tools = activeHeader?.tools ?? [];
   const bytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
   if (tools.length > 0) requestsWithTools++;
   requestSchemaBytesTotal += bytes;
