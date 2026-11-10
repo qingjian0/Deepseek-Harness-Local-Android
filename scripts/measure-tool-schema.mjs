@@ -183,13 +183,6 @@ const contexts = events.filter((event) => event?.type === "request/context");
 const attempts = events.filter((event) => event?.type === "assistant/attempt");
 const messages = events.filter((event) => event?.type === "assistant/message");
 
-// assistant/attempt is the request-attempt boundary. Older logs without that
-// event fall back to assistant/message and label the count as an estimate.
-const requestEvents = attempts.length > 0 ? attempts : messages;
-const requestCountBasis = attempts.length > 0
-  ? "assistant/attempt"
-  : "assistant/message (fallback; request count may be approximate)";
-
 if (headers.length === 0) {
   process.stderr.write(
     "No request/header event found after snapshot de-duplication " +
