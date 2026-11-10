@@ -48,7 +48,7 @@ async function request(method, endpoint, body) {
     clearTimeout(timer);
     if (TOOL_PERF_ENABLED) {
       process.stderr.write(
-        `[tool-perf] bridge ${method} ${endpoint} op=${op} http_status=${httpStatus} result=${outcome} elapsed_ms=${Math.round(performance.now() - startedAt)}\\n`,
+        `[tool-perf] bridge ${method} ${endpoint} op=${op} http_status=${httpStatus} result=${outcome} elapsed_ms=${Math.round(performance.now() - startedAt)}\n`,
       );
     }
   }
