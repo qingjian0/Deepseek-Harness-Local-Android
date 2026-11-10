@@ -77,7 +77,11 @@ if os.path.isfile(PLUGIN):
     pl = read(PLUGIN)
     chk('name: "device_hid"' in pl, "device_hid tool registered")
     chk("function runHid(" in pl, "runHid helper exists")
-    chk("spawnSync" in pl, "runHid spawns the script directly")
+    chk('import { spawn } from "node:child_process"' in pl, "child process uses async spawn")
+    chk("async function runProcess(" in pl and "await runProcess(process.execPath" in pl,
+        "runHid executes helper asynchronously")
+    chk("spawnSync" not in pl, "no synchronous child process remains")
+    chk("execute: async (args = {}) => {" in pl, "HID execute handler is async for wake")
     # 注释里提一句「为什么不走桥」是好事；要禁的是真的发请求。
     chk('request("GET", "/dev/hid")' not in pl and 'request("POST", "/dev/hid"' not in pl,
         "device_hid does NOT go through the bridge")
