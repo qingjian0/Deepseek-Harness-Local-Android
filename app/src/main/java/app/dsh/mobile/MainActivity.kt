@@ -10,6 +10,7 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
+import android.os.SystemClock
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -31,6 +32,7 @@ import app.dsh.mobile.engine.RuntimeInstaller
 import app.dsh.mobile.engine.WebViewDownloader
 import app.dsh.mobile.engine.EngineSupervisor
 import app.dsh.mobile.engine.Privilege
+import app.dsh.mobile.engine.EngineModeSelector
 import app.dsh.mobile.service.EngineService
 import app.dsh.mobile.pet.PetOverlayService
 import app.dsh.mobile.update.AppUpdateBus
@@ -58,6 +60,43 @@ class MainActivity : ThemedActivity() {
     private lateinit var statusBar: TextView
     private var urlLoaded = false
 
+    /**
+     * WebView 预热已发起（v1.6.0）。
+     *
+     * 冷启动时 `loadUrl` 只在引擎进入 Healthy 后才会被调用（见 render()），
+     * 于是 Chromium 进程创建 + JS 引擎初始化 + 合成器建立（实测约 700ms）
+     * 全部排在引擎之后串行执行。但这段初始化**不依赖引擎** —— 只有页面内容依赖。
+     *
+     * 所以 onCreate 里先加载一个本地空白页，把这 700ms 提前跑掉；等引擎
+     * Healthy 后 `loadLocalUrl(realUrl)` 直接导航，Chromium 已是热态。
+     *
+     * 注意：预热页的 `onPageFinished` **不能**触发 dismissSplash()，
+     * 否则会在引擎还没起来时就把遮罩收掉，露出还没内容的 WebView。
+     */
+    private var webViewPreheated = false
+
+    /** 预热占位页的 URL 前缀；onPageFinished 靠它区分「预热页」与「真正的 WebUI」 */
+    private val preheatUrl = "about:blank"
+
+    /**
+     * 页面上报的返回栈状态（手机形态布局插件经 `DshAndroidBack` 写入）。
+     *
+     * 只看两个字段：
+     * - `mobile`：当前是不是手机竖屏形态（插件负责判定，桌面/原生恒 false）；
+     * - `consumable`：WebView 历史栈顶是否真有**同文档**条目可退。
+     *
+     * 为什么不能只信 `canGoBack()`：WebView 历史里可能存在跨文档条目（启动
+     * 重定向、runtime 跳转、外链回退），退过去就是整页重载 —— 用户看到的是
+     * 「按返回它重新加载了一下」。所以只有插件明确说「有条目」时才 goBack。
+     *
+     * 字段由 JavaBridge 线程写入，用 @Volatile 保证 UI 线程可见。
+     */
+    @Volatile private var backMobile = false
+    @Volatile private var backConsumable = false
+
+    /** 上一次「再按一次退出」的时刻（elapsedRealtime，不受用户改系统时间影响）。 */
+    private var lastBackAt = 0L
+
     /** 桌面模式：桌面 UA + 固定 1280px 视口 + 手势缩放（手机浏览器「电脑模式」等价物） */
     private var desktopMode = false
     private var defaultUa: String = ""
@@ -78,6 +117,15 @@ class MainActivity : ThemedActivity() {
      * 用字段持有是为了能 removeCallbacks —— 自由窗口拖拽时尺寸变化是高频事件。
      */
     private var viewportReapply: Runnable? = null
+
+    /**
+     * 上一次 `onPause` 的单调时刻（`SystemClock.elapsedRealtime()`）。
+     *
+     * 0 表示「还没离开过前台」，`onResume` 据此判断是首次进入还是从后台回来。
+     * 用 `elapsedRealtime` 而不是 `currentTimeMillis`：后者会被改时间/校时影响，
+     * 而我们要的是纯粹的时长。
+     */
+    private var pausedAtElapsed: Long = 0L
 
     /** 本页当前生效的语言代码（onResume 比对，变了就重建） */
     private var appliedLocale: String = ""
@@ -109,39 +157,20 @@ class MainActivity : ThemedActivity() {
      */
     private var pendingWebPermission: android.webkit.PermissionRequest? = null
 
-    // ---------- 启动动画（v1.3.1） ----------
+    // ---------- 启动遮罩（v1.6.19：状态收进 SplashController） ----------
     /** 全屏启动遮罩；null = 已淡出/未初始化 */
     private var splash: android.view.View? = null
-    private var splashLogo: android.view.View? = null
-    private var splashStatus: android.widget.TextView? = null
-    private var splashProgress: android.widget.ProgressBar? = null
-    /** 已用秒数 + 当前阶段（v1.4.8） */
-    private var splashElapsed: android.widget.TextView? = null
-    /** 文件加载明细 M/N（v1.4.8） */
-    private var splashDetail: android.widget.TextView? = null
-    /** 展开/收起阶段列表的按钮（v1.4.8） */
-    private var splashToggle: android.widget.TextView? = null
-    private var splashSteps: android.widget.TextView? = null
-    private var splashStepsScroll: android.view.View? = null
-    /** 步骤面板（分隔线 + 滚动区）；显隐只切这一个，避免分隔线残留 */
-    private var splashStepsPanel: android.view.View? = null
-    /** 上次渲染的步骤文本：内容没变就不重设，防止 130ms 一次的全量重排让卡片抖动 */
-    private var lastStepsText: String? = null
-    /** 上次渲染的步骤条数：只有条数增加才自动滚到底，避免用户翻看历史时被拽回 */
-    private var lastStepsCount = -1
-    /** 阶段列表是否展开 */
-    private var splashStepsExpanded = false
-    /** 当前 Activity 已应用的主题；从设置页返回时检测变化并 recreate。 */
-    private var appliedTheme: ThemeMode? = null
-    /** 秒表：逐秒刷新已用时间（v1.4.8） */
-    private var splashTicker: Runnable? = null
-    /** 遮罩出现时间：用于保证最短展示时长（避免一闪而过） */
-    private var splashShownAt = 0L
+    /** 遮罩的渲染 / 退出 / 动画全部由它负责 */
+    private var splashController: app.dsh.mobile.ui.SplashController? = null
     /** 是否已经淡出（幂等） */
     private var splashDismissed = false
     private var splashMinMs = 700L
-    /** 兜底看门狗：任何加载路径异常都不能让遮罩永久吞掉触摸（issue #17） */
-    private var splashWatchdog: Runnable? = null
+    /** 当前 Activity 已应用的主题；从设置页返回时检测变化并 recreate。 */
+    private var appliedTheme: ThemeMode? = null
+    /** 运行时下载面板（v1.6.18）。持有引用判重，同 gateDialog 范式。 */
+    private var runtimeSetupDialog: AlertDialog? = null
+    /** 预热历史条目是否已清理（幂等标记；clearHistory 只该做一次） */
+    private var preheatHistoryDropped = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -171,6 +200,11 @@ class MainActivity : ThemedActivity() {
         // 若写在 apply{} 里会在赋值完成前执行而触发 UninitializedPropertyAccessException。
         webView = findViewById<WebView>(R.id.webView)
         setupWebView()
+        // v1.6.0：立刻预热 WebView（详见 webViewPreheated 注释）。
+        // 必须放在 setupWebView 之后（settings/client 已就绪）、且在
+        // 任何 await 引擎状态的 UI 逻辑之前 —— 这样 Chromium 的 700ms
+        // 初始化与引擎启动并行，而不是串行叠加。
+        preheatWebView()
         // 读回用户保存的页面缩放与屏幕朝向偏好
         readUiPrefs()
         applyOrientation(orientationMode)
@@ -208,10 +242,15 @@ class MainActivity : ThemedActivity() {
         findViewById<View>(R.id.btnMore).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        // v1.4.62：岛是圆角胶囊，选项的系统方角涟漪会从圆角外戳出来（按压残影）。
-        // 整行按轮廓裁切兜底，配合子项的 22dp 圆角涟漪（bg_island_btn）。
-        // v1.4.63：上一轮并发改动把它删了，残影会复发 —— 补回。
-        findViewById<View>(R.id.statusBarRow).clipToOutline = true
+        // 保持 false。岛的层次现在只由 alpha 分档表达（见 islandIdleAlphaFor）——
+        // drawable 里已没有任何画在轮廓之外的东西：投影、上缘高光、1dp 外描边
+        // 全部撤掉了（2026-11-09 用户明确不要边缘悬浮效果，只保留透明度）。
+        //
+        // 留 false 的理由是历史遗留的按压残影：v1.4.62 用 clipToOutline=true 压住
+        // 「系统方角涟漪从圆角外戳出来」，而现在岛内的按钮各自带 22dp 圆角涟漪
+        // （bg_island_btn），整行不裁也不会露出方角。改回 true 没有收益，反而要
+        // 重新验证一遍涟漪，故不动。
+        findViewById<View>(R.id.statusBarRow).clipToOutline = false
         // 预览模式返回：一键从 AI 起的服务页回引擎主界面
         findViewById<View>(R.id.btnBack).setOnClickListener {
 runCatching { (application as DshApp).supervisor.webUrl() }
@@ -264,17 +303,38 @@ runCatching { (application as DshApp).supervisor.webUrl() }
      * 只有用户点「下载并启动」才拉起引擎（进而触发运行时下载）。
      */
     private fun showRuntimeSetupDialog() {
+        // 幂等（同 gateDialog 的范式，v1.6.18）：`onResume` 会被反复触发
+        // （切回前台、息屏亮屏、点按钮后重入），旧实现每次都 new 一个弹窗 ——
+        // 「提示连续出现两次」就是这么来的（点掉一个、onResume 又弹一个）。
+        if (runtimeSetupDialog?.isShowing == true) return
+
         val sizeMb = runCatching {
             RuntimeInstaller(this).readManifest().runtime.size / (1L shl 20)
         }.getOrDefault(0L)
         val sizeText = if (sizeMb > 0) "$sizeMb MB" else "~130 MB"
-        AlertDialog.Builder(this)
+
+        // v1.6.18（用户反馈）：「这个是必选项，而不能是弹窗，不可被取消」。
+        //
+        // 旧实现三个问题：
+        // 1. **可取消** —— 有「稍后」按钮，点它什么都不做（null listener），
+        //    但引擎不会被拉起来，启动遮罩永远等不到 READY，界面就一直卡着；
+        //    返回键/点外部同样能关掉这个弹窗，结果一样是卡死。
+        // 2. **重复弹出** —— 见上，onResume 每此都 new 一个。
+        // 3. 弹窗与遮罩叠在一起，用户不知道哪个才是「正在进行」的东西。
+        //
+        // 现在改成：**没有任何关闭途径**的必选面板 —— 不可取消、没有负面按钮、
+        // 只有一个「下载并启动」。退到后台再回来仍是同一个（runtimeSetupDialog?.isShowing
+        // 挡住重复创建）。
+        val dialog = AlertDialog.Builder(this)
             .setTitle(R.string.runtime_setup_title)
             .setMessage(getString(R.string.runtime_setup_message, sizeText))
             .setPositiveButton(R.string.runtime_setup_download) { _, _ ->
                 EngineService.start(this)
             }
-            .setNeutralButton(R.string.runtime_setup_full) { _, _ ->
+            .setNeutralButton(R.string.runtime_setup_full) { d, _ ->
+                // 「获取完整包」只是引导去下载带运行时的 APK，面板不关：
+                // 关掉它就回到「卡在空界面」的原状。
+                (d as? AlertDialog)?.let { keepRuntimeSetupVisible(it) }
                 runCatching {
                     startActivity(
                         Intent(Intent.ACTION_VIEW, Uri.parse(RepoConfig.RELEASES_PAGE))
@@ -282,8 +342,25 @@ runCatching { (application as DshApp).supervisor.webUrl() }
                     )
                 }
             }
-            .setNegativeButton(R.string.runtime_setup_later, null)
-            .show()
+            .setCancelable(false)
+            .create()
+        dialog.setCanceledOnTouchOutside(false)
+        // 返回键也吞掉（setCancelable(false) 已覆盖按键，这里显式再挡一次，
+        // 因为有 OEM 会绕过）
+        dialog.setOnKeyListener { _, keyCode, _ -> keyCode == android.view.KeyEvent.KEYCODE_BACK }
+        runtimeSetupDialog = dialog
+        dialog.show()
+    }
+
+    /**
+     * 让必选面板保持可见：点「获取完整包」跳浏览器后回来，面板还在。
+     *
+     * 只是把按钮恢复成可用 —— `setPositiveButton` 的回调默认会 dismiss，
+     * neutral 按钮则不会，所以这里不需要额外动作。留这个方法是为了
+     * 把「面板不能消失」的意图写在调用点上。
+     */
+    private fun keepRuntimeSetupVisible(dialog: AlertDialog) {
+        if (!dialog.isShowing) runCatching { showRuntimeSetupDialog() }
     }
 
     /**
@@ -351,6 +428,29 @@ runCatching { (application as DshApp).supervisor.webUrl() }
         if (::webView.isInitialized) {
             runCatching { webView.onResume() }
             runCatching { webView.resumeTimers() }
+            // v1.6.20：进程从 Android 冻结里解冻后，那条 WebSocket 已经半开 ——
+            // 两端都以为还连着，但服务端推的增量全丢、发消息在 WS 路径上静默
+            // 失败（HTTP 兜底那条却能通，所以用户看到「没发出去其实已发出」）。
+            // 引擎的重连只监听 online/offline，解冻不改变网络状态，因此它永远
+            // 不会自己醒。这里主动叫一次，并把「在后台待了多久」传给它：
+            // 待得久（≥10s）就跳过探活直接换连接 —— 探活只能证明服务端在跑，
+            // 证明不了那条 socket 还活着（第一版就栽在这个判据上，实测从未重连）。
+            runCatching {
+                // 把「在后台待了多久」传给插件：≥10 秒它就不探活、直接换连接
+                // （探活只能证明服务端在跑，证明不了那条 socket 还活着）。
+                // 首次进入没有 pausedAtElapsed，传 -1 让它按「不知道」保守处理。
+                val awayMs = if (pausedAtElapsed > 0L) {
+                    SystemClock.elapsedRealtime() - pausedAtElapsed
+                } else {
+                    -1L
+                }
+                pausedAtElapsed = 0L
+                // 无钩子时返回 no-hook（正常：插件还没加载完，页面刚起来）。
+                webView.evaluateJavascript(
+                    "(window.__dshResume ? (window.__dshResume($awayMs), 'ok') : 'no-hook')",
+                    null,
+                )
+            }
         }
         // Web 内核版本门禁（v1.2.100，酷安用户反馈引出的需求）：
         // WebView < Chrome 85 时引擎前端必白屏（??= 等解析期语法 polyfill 补不了），
@@ -408,6 +508,11 @@ runCatching { (application as DshApp).supervisor.webUrl() }
      * 这是「后台也要能收到 AI 回复」这个需求的必要成本。
      */
     override fun onPause() {
+        // v1.6.20：记下离开前台的时刻。回来后用「在后台待了多久」决定要不要
+        // 强制重连 —— 这是判断「进程是否可能被系统冻结过」唯一可靠的信号。
+        // 用 elapsedRealtime 而不是 currentTimeMillis：后者会被用户改时间/校时
+        // 影响，而我们要的是单调递增的时长。
+        pausedAtElapsed = SystemClock.elapsedRealtime()
         // 后台停看门狗：系统会节流后台 WebView，探针超时会造成误判并反复重建页面
         stopHangWatchdog()
         // 刻意不调用 super.onPause() 里的 WebView 暂停逻辑；
@@ -506,6 +611,11 @@ runCatching { (application as DshApp).supervisor.webUrl() }
     }
 
     private fun setupWebView() {
+        // debug 包打开 WebView 远程调试（chrome://inspect / CDP）：排障时能直接看
+        // 页面控制台、读 history 状态与返回栈条数；release 包保持关闭。
+        // 用 FLAG_DEBUGGABLE 而不是 BuildConfig：AGP 8 默认不生成 BuildConfig。
+        val debuggable = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (debuggable) WebView.setWebContentsDebuggingEnabled(true)
         defaultUa = webView.settings.userAgentString
         webView.settings.apply {
             javaScriptEnabled = true
@@ -726,6 +836,25 @@ runCatching { (application as DshApp).supervisor.webUrl() }
             OpenBridge(applicationContext),
             "DshAndroidOpen",
         )
+        // 返回栈桥（手机形态布局插件专用）：页面把「当前能不能安全回退」上报
+        // 到这里。没有这个桥时 onBackPressed 只能猜（canGoBack），一旦 WebView
+        // 历史里混入跨文档条目，返回就变成整页重载。
+        //
+        // 调用来自 JavaBridge 线程 → 字段声明成 @Volatile；payload 解析失败
+        // 就保持上次状态（宁可多一次提示，也不能退到未知条目上）。
+        webView.addJavascriptInterface(
+            object : Any() {
+                @android.webkit.JavascriptInterface
+                fun setState(payload: String?) {
+                    if (payload.isNullOrBlank()) return
+                    runCatching { org.json.JSONObject(payload) }.getOrNull()?.let { json ->
+                        backMobile = json.optBoolean("mobile", false)
+                        backConsumable = json.optBoolean("consumable", false)
+                    }
+                }
+            },
+            "DshAndroidBack",
+        )
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
                 view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?,
@@ -778,6 +907,19 @@ runCatching { (application as DshApp).supervisor.webUrl() }
                 // （用户实测「有些系统不会自动隐藏状态栏」）。重新断言一次。
                 scheduleImmersiveReassert()
                 if (view == null) return
+                // v1.6.0：预热占位页（about:blank）不算「页面可用」。
+                // 它只是为了提前建起 Chromium 进程与渲染管线，此时引擎还没起，
+                // 若继续走下去会：① dismissSplash() 提前收遮罩露出空 WebView；
+                // ② 对 about:blank 注入插件桥（无意义且可能报错）；
+                // ③ BootTrace 误记首屏时间。所以到这里直接返回。
+                if (isPreheatNavigation(url)) {
+                    logWebView("preheat page finished (engine still starting)")
+                    return
+                }
+                // v1.6.16：清掉预热留下的 about:blank 历史条目。
+                // 必须在这里（真实页面加载完成、且已排除预热页）调用 —— 见
+                // dropPreheatHistory 的注释，早调清不掉。
+                dropPreheatHistory()
                 // 环境自检：把 WebView 版本与关键 API 存在性写进日志，用户报障时一眼定位
                 view.evaluateJavascript(WEBVIEW_SELFCHECK_JS, null)
                 // v1.4.17（issue #37）：注入 blob 下载桥。每次页面加载后都要重新注入
@@ -809,6 +951,26 @@ runCatching { (application as DshApp).supervisor.webUrl() }
                         .use { it.readBytes().toString(Charsets.UTF_8) }
                     view.evaluateJavascript(js, null)
                 }.onFailure { logWebView("mobile keys inject failed: ${it.message}") }
+                // v1.6.17：把外部共享进来的文件交给 WebUI。
+                //
+                // 时机必须在 onPageFinished 之后（页面 JS 环境已就绪、插件已注入），
+                // 否则 evaluateJavascript 打进去没人接。drain() 取走即清空队列 ——
+                // 注入失败时文件仍在 files/inbox/，用户可以手动让 AI 读那个目录，
+                // 所以这里失败只记日志，不重试（重试会导致同一文件被塞两次）。
+                runCatching { deliverInboxFiles(view) }
+                    .onFailure { logWebView("inbox delivery failed: ${it.message}") }
+                // v1.6.15：整页浮层的返回键兜底。
+                //
+                // WebUI 是单页应用，切页面不往浏览器历史写记录（实测前端 bundle 里
+                // pushState/popstate 出现 0 次）。而 onBackPressed 是「能后退就后退，
+                // 不能就退出应用」—— 于是在插件页 / 自动化任务页 / SSH 工作区这类
+                // 整页界面上按返回会一路退出到桌面。这段脚本给整页浮层补历史条目，
+                // 让 canGoBack() 在这些界面上为 true，Kotlin 侧无需改动。
+                runCatching {
+                    val js = assets.open("js/back-guard.js")
+                        .use { it.readBytes().toString(Charsets.UTF_8) }
+                    view.evaluateJavascript(js, null)
+                }.onFailure { logWebView("back guard inject failed: ${it.message}") }
                 // v1.4.6：视口缩放必须在**启动遮罩收起之前**定稿，并在遮罩之下整页
                 // 重栅格化一次。旧顺序是「先 dismissSplash()、再改 meta」——用户会先看到
                 // 按 initial-scale=1 画好的首屏（含登录/开始使用弹窗），紧接着整页缩放
@@ -843,9 +1005,94 @@ runCatching { (application as DshApp).supervisor.webUrl() }
         if (preview) statusBar.text = getString(R.string.status_preview, uri.port)
     }
 
+    /**
+     * 预热 WebView（v1.6.0）。
+     *
+     * ## 为什么
+     * 冷启动的时序原本是「引擎全部就绪 → 才 loadUrl」，于是 Chromium 进程创建、
+     * JS 引擎初始化、合成器建立（实测约 700ms）全被排在引擎之后串行叠加。
+     * 但这三件事**不依赖引擎**，只有页面内容依赖。
+     *
+     * 实测证据（logcat，同一次冷启）：
+     * ```
+     * 06:37:06.491 engine healthy on :3080
+     * 06:37:06.508 chromium android_setCpu already initialized   ← 晚 17ms
+     * ```
+     * 即 Chromium 确实是在引擎 healthy 之后才开始初始化。
+     *
+     * ## 做什么
+     * 加载 `about:blank`：不联网、不读文件、不触发任何插件注入，
+     * 只让 Chromium 把进程与渲染管线建起来。等引擎 Healthy 后
+     * `loadLocalUrl(realUrl)` 时已是热态。
+     *
+     * ## 风险与规避
+     * 预热页同样会触发 `onPageFinished`，那里会 `dismissSplash()`。
+     * 若不加区分，遮罩会在引擎未就绪时就被收掉，用户直接看到空白 WebView。
+     * 因此 `onPageFinished` 里用 [webViewPreheated] + URL 判定跳过预热页。
+     */
+    private fun preheatWebView() {
+        if (webViewPreheated) return
+        webViewPreheated = true
+        runCatching {
+            // about:blank 是唯一零依赖的目标：不需要 assets、不需要网络、
+            // 不走 shouldInterceptRequest，且 onPageFinished 会正常回调。
+            webView.loadUrl(preheatUrl)
+        }.onFailure { logWebView("preheat failed: ${it.message}") }
+    }
+
+    /**
+     * 当前这次 onPageFinished 是否属于预热页（应跳过遮罩关闭与所有页面注入）。
+     *
+     * 只认 `about:blank`：真正 WebUI 的 URL 一定是 `http://127.0.0.1:3080/...`。
+     */
+    private fun isPreheatNavigation(url: String?): Boolean {
+        if (!webViewPreheated) return false
+        if (url.isNullOrEmpty()) return false
+        return url == preheatUrl || url == "about:blank"
+    }
+
     /** 统一的回环页加载入口：缩放统一由 onPageFinished 的 viewport meta 接管，这里只导航。 */
     private fun loadLocalUrl(url: String) {
         webView.loadUrl(url)
+    }
+
+    /**
+     * 把预热留下的 `about:blank` 历史条目清掉。
+     *
+     * 不清的后果有两个，都是用户可见的：
+     * 1. **右滑返回变白屏** —— 返回目标是空白页，界面整块变白（本次报障）；
+     * 2. 返回键要按两次才退出应用 —— 一次退到空白页，一次才真退出。
+     *
+     * 调用时机很关键：必须在真实页面**加载完成后**调用。`loadUrl` 刚返回时
+     * 新条目还没提交进历史，此时 `clearHistory()` 清不掉任何东西（历史里只有
+     * 预热页那一条，清完反而让页面变成无历史状态）。所以放在 `onPageFinished`
+     * 里、确认不是预热页之后再调。
+     *
+     * `clearHistory()` 只是**不可见地**抹掉历史，不触发导航，不重载页面，
+     * 用户不会感知到任何闪动。
+     */
+    private fun dropPreheatHistory() {
+        if (!webViewPreheated) return
+        if (preheatHistoryDropped) return
+        val list = runCatching { webView.copyBackForwardList() }.getOrNull() ?: return
+        if (list.size <= 1) {
+            // 历史里只有当前页 —— 预热条目已被 WebView 自己合并掉，无需处理
+            preheatHistoryDropped = true
+            return
+        }
+        val first = list.getItemAtIndex(0)
+        val firstUrl = first?.url
+        if (firstUrl == preheatUrl || firstUrl == "about:blank") {
+            runCatching { webView.clearHistory() }
+                .onSuccess {
+                    preheatHistoryDropped = true
+                    logWebView("dropped preheat history entry")
+                }
+                .onFailure { logWebView("clearHistory failed: ${it.message}") }
+        } else {
+            // 首条不是预热页：说明这次导航没经过 about:blank，不必清
+            preheatHistoryDropped = true
+        }
     }
 
     /** 手势缩放开关：竖屏关闭（锁死固定全屏，禁止双指捏合/拖动移动），桌面模式开启（保留双指缩放）。
@@ -912,7 +1159,11 @@ runCatching { (application as DshApp).supervisor.webUrl() }
                     row.post {
                         row.pivotX = row.width / 2f
                         row.pivotY = 0f
-                        row.animate().scaleX(1f).scaleY(1f).alpha(1f)
+                        // ★不能硬用 alpha(1f)：那会把「活跃度透明度」覆盖掉
+                        //   （引擎空闲时岛本应退到 0.55）。用当前状态的目标值收尾，
+                        //   否则每次手动收起再展开，岛都会变回满不透明。
+                        val targetAlpha = islandIdleAlphaFor(lastRenderedState)
+                        row.animate().scaleX(1f).scaleY(1f).alpha(targetAlpha)
                             .setDuration(180L)
                             .setInterpolator(android.view.animation.OvershootInterpolator(0.9f))
                             .start()
@@ -1222,423 +1473,121 @@ runCatching { (application as DshApp).supervisor.webUrl() }
             bar.isIndeterminate = false
             bar.progress = (frac * 10000).toInt()
         }
-        // 启动遮罩里的进度条同步真实解压百分比（就绪后转为不确定动画）
-        splashProgress?.let { p ->
-            if (frac == null) {
-                p.isIndeterminate = true
-            } else {
-                p.isIndeterminate = false
-                p.progress = (frac * 10000).toInt()
-            }
-        }
+        // v1.6.19：**不再**从这里写启动遮罩的进度条。
+        //
+        // 原先有两条订阅同时写 `splashProgress`：本方法（安装总进度，口径是
+        // 「下载 45% + 解压 55%」）与 `renderSplashTrace`（BootTrace 的**当前阶段**
+        // 百分比，0..100%）。两个口径不同、回调时机也不同，同一控件被两边交替
+        // 赋值 → 百分比来回跳。现在遮罩只由 BootTrace 驱动，顶部细条继续用
+        // 安装总进度，各管一个控件。
     }
 
     // ==================== 启动遮罩（v1.3.1） ====================
 
+    // ==================== 启动遮罩（v1.6.19 重做） ====================
+
     /**
-     * 初始化启动遮罩：logo 淡入 + 缩放入场，随后进入缓慢呼吸。
+     * 初始化启动遮罩。
      *
-     * 设计取舍：动画只用 ViewPropertyAnimator（零依赖、不引第三方库）；
-     * 遮罩不是纯装饰——它同时承载**真实解压进度**与引擎阶段文案，
-     * 让冷启动那段时间「有东西看、也知道在干什么」。
+     * v1.6.19 起把状态、渲染、退出全部收进 [SplashController]，这里只做三件事：
+     * 拿到根 View、把 debug 包的 `splash_min_ms` 覆盖传进去、把「忙不忙」与
+     * 「看门狗触发」两个回调接上。旧实现在本类里堆了 15 个 splash 字段 +
+     * 三套渲染路径，改一处要对照三处。
      */
     private fun setupSplash() {
-        val v = findViewById<android.view.View>(R.id.splash) ?: return
-        splash = v
-        splashLogo = findViewById(R.id.splashLogo)
-        splashStatus = findViewById(R.id.splashStatus)
-        splashProgress = findViewById(R.id.splashProgress)
-        splashElapsed = findViewById(R.id.splashElapsed)
-        splashDetail = findViewById(R.id.splashDetail)
-        splashToggle = findViewById(R.id.splashToggle)
-        splashSteps = findViewById(R.id.splashSteps)
-        splashStepsScroll = findViewById(R.id.splashStepsScroll)
-        splashStepsPanel = findViewById(R.id.splashStepsPanel)
-        splashShownAt = System.currentTimeMillis()
+        splashController?.dispose()
+
+        val root = findViewById<android.view.View>(R.id.splash) ?: return
+        splash = root
         splashDismissed = false
-        // 仅 debug 包：允许用 `am start ... --el splash_min_ms 20000` 拉长遮罩停留时间，
-        // 方便在真机/模拟器上验证启动遮罩（尤其是展开加载步骤后的卡片布局）。
-        // release 包 FLAG_DEBUGGABLE 为 0，这段不生效。
-        if ((applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-            val override = intent?.getLongExtra("splash_min_ms", 0L) ?: 0L
-            if (override > 0L) splashMinMs = override
-        }
-        // v1.4.8：默认收起阶段列表；每次冷启动都从收起状态开始，避免把 logo 挤走
-        splashStepsExpanded = false
-        lastStepsText = null
-        lastStepsCount = -1
-        splashStepsPanel?.visibility = android.view.View.GONE
-        splashToggle?.setText(R.string.splash_show_steps)
-        splashToggle?.setOnClickListener { toggleSplashSteps() }
-        splashDetail?.text = ""
-        // 兜底：WebView 异常时强制收遮罩（issue #17）。但 noruntime 首启下载/解压
-        // 可能超过 45s —— 安装/启动期间不能收，否则用户会看到一块黑 WebView。
-        // 每 15s 续期，最多续 20 次（约 5 分钟）后仍强制收起。
-        splashWatchdog?.let { v.removeCallbacks(it) }
-        var watchdogExtensions = 0
-        val watchdog = object : Runnable {
-            override fun run() {
+
+        // 仅 debug 包：允许用 `am start ... --el splash_min_ms 20000` 拉长遮罩
+        // 停留时间，方便验证展开步骤后的布局。release 包这段不生效。
+        val debuggable =
+            (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val override = if (debuggable) intent?.getLongExtra("splash_min_ms", 0L) ?: 0L else 0L
+        splashMinMs = override.takeIf { it > 0L } ?: 700L
+
+        splashController = app.dsh.mobile.ui.SplashController(
+            activity = this,
+            root = root,
+            minimumMs = splashMinMs,
+            isBusy = {
+                // 「等用户点下载」也算忙。
+                //
+                // 这是模拟器上复现出来的 bug：用户停在运行时下载面板上超过 45 秒，
+                // 此时引擎状态还是 Idle（用户没点，引擎没起），看门狗判定
+                // 「不忙 → 出问题了」→ 收掉遮罩。等用户再点下载，遮罩已经没了，
+                // 只剩一片白 WebView + 顶部「Installing runtime…」。
+                // 面板还在等用户决策，不该被当成卡死。
+                val waitingUser = runtimeSetupDialog?.isShowing == true
                 val state = (application as DshApp).supervisor.state.value
-                val busy = state is EngineSupervisor.State.Installing ||
+                waitingUser ||
+                    state is EngineSupervisor.State.Installing ||
                     state is EngineSupervisor.State.Starting
-                if (busy && watchdogExtensions < 20) {
-                    watchdogExtensions++
-                    v.postDelayed(this, 15_000L)
-                } else {
-                    dismissSplash()
-                }
-            }
-        }
-        splashWatchdog = watchdog
-        v.postDelayed(watchdog, 45_000L)
-        // 秒表：每秒刷新"已用 N.Ns · 当前阶段"
-        startSplashTicker()
-        // WebView 底色与主题一致：遮罩淡出时不会闪出白底
-        runCatching { webView.setBackgroundColor(getColor(R.color.bg)) }
-        val logo = splashLogo ?: return
-        logo.alpha = 0f
-        logo.scaleX = 0.82f
-        logo.scaleY = 0.82f
-        logo.animate()
-            .alpha(1f)
-            .scaleX(1f)
-            .scaleY(1f)
-            .setDuration(420L)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .withEndAction {
-                // 引擎还没好时，用极缓的呼吸动画表示"在动"
-                logo.animate()
-                    .scaleX(1.05f).scaleY(1.05f)
-                    .setDuration(1_400L)
-                    .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
-                    .withEndAction {
-                        logo.animate()
-                            .scaleX(1f).scaleY(1f)
-                            .setDuration(1_400L)
-                            .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
-                            .withEndAction { if (splash != null) setupSplashPulseAgain() }
-                            .start()
-                    }
-                    .start()
-            }
-            .start()
+            },
+            onWatchdog = { dismissSplash() },
+            onHidden = {
+                splash = null
+                splashController = null
+            },
+        )
     }
 
-    /** 呼吸动画循环（单独方法，便于在遮罩淡出时停止）。 */
-    private fun setupSplashPulseAgain() {
-        val logo = splashLogo ?: return
-        if (splash == null || splashDismissed) return
-        logo.animate()
-            .scaleX(1.05f).scaleY(1.05f)
-            .setDuration(1_400L)
-            .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
-            .withEndAction {
-                if (splash == null || splashDismissed) return@withEndAction
-                logo.animate()
-                    .scaleX(1f).scaleY(1f)
-                    .setDuration(1_400L)
-                    .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
-                    .withEndAction { setupSplashPulseAgain() }
-                    .start()
-            }
-            .start()
-    }
-
-    /** 更新遮罩上的阶段文案。 */
+    /** 更新遮罩上的阶段文案（兜底路径；正常渲染走 BootTrace）。 */
     private fun setSplashStatus(resId: Int) {
-        splashStatus?.setText(resId)
+        splashController?.setFallbackStatus(resId)
     }
 
-    // ==================== 启动过程可视化（v1.4.8） ====================
-
-    /**
-     * 启动秒表：每秒刷新一次「已用 N.Ns · 阶段」。
-     *
-     * 为什么用 `postDelayed` 循环而不是协程：遮罩的生命周期很短（几秒），
-     * 一个 Runnable 就够，且随遮罩一起移除，不需要额外的 scope 管理。
-     */
-    private fun startSplashTicker() {
-        stopSplashTicker()
-        val v = splash ?: return
-        val r = object : Runnable {
-            override fun run() {
-                if (splash == null || splashDismissed) return
-                renderSplashTrace(BootTrace.snapshot.value)
-                v.postDelayed(this, 200L)
-            }
-        }
-        splashTicker = r
-        v.post(r)
-    }
-
-    private fun stopSplashTicker() {
-        splashTicker?.let { splash?.removeCallbacks(it) }
-        splashTicker = null
-    }
-
-    private fun toggleSplashSteps() {
-        splashStepsExpanded = !splashStepsExpanded
-        splashStepsPanel?.visibility =
-            if (splashStepsExpanded) android.view.View.VISIBLE else android.view.View.GONE
-        splashToggle?.setText(
-            if (splashStepsExpanded) R.string.splash_hide_steps else R.string.splash_show_steps,
-        )
-        if (splashStepsExpanded) {
-            renderSplashTrace(BootTrace.snapshot.value)
-            applyStepsViewport()
-        }
-    }
-
-    /**
-     * 把步骤滚动区的高度收敛到「内容高度」与上限之间（v1.4.30）。
-     *
-     * ScrollView 用 wrap_content 时会按内容无限展开、不滚动，卡片会被撑到超出屏幕；
-     * 固定高度又会让步骤少时留一大块空白。这里按实际测量结果取 min，两者兼顾。
-     */
-    private fun applyStepsViewport() {
-        val scroll = splashStepsScroll as? android.widget.ScrollView ?: return
-        val tv = splashSteps ?: return
-        scroll.post {
-            val inner = scroll.width - scroll.paddingLeft - scroll.paddingRight
-            if (inner <= 0) return@post
-            tv.measure(
-                android.view.View.MeasureSpec.makeMeasureSpec(
-                    inner,
-                    android.view.View.MeasureSpec.EXACTLY,
-                ),
-                android.view.View.MeasureSpec.makeMeasureSpec(
-                    0,
-                    android.view.View.MeasureSpec.UNSPECIFIED,
-                ),
-            )
-            val maxPx = (220 * resources.displayMetrics.density).toInt()
-            val contentPx = tv.measuredHeight + tv.paddingTop + tv.paddingBottom
-            val target = minOf(contentPx, maxPx).coerceAtLeast(1)
-            if (scroll.layoutParams.height != target) {
-                scroll.layoutParams = scroll.layoutParams.apply { height = target }
-                scroll.requestLayout()
-            }
-        }
-    }
-
-    /** 阶段 key → 本地化文案；未知 key 原样显示（新阶段不会因缺翻译而消失） */
-    private fun stageLabel(key: String): String = when (key) {
-        "guardian-restore" -> getString(R.string.boot_step_guardian)
-        "agent-seed" -> getString(R.string.boot_step_seed)
-        "parallel-preflight" -> getString(R.string.boot_step_parallel_preflight)
-        "orphan-reap" -> getString(R.string.boot_step_orphans)
-        "bridge" -> getString(R.string.boot_step_bridge)
-        "log-sweep" -> getString(R.string.boot_step_log_sweep)
-        "home-owner-check" -> getString(R.string.boot_step_owner)
-        "hardssh-install" -> getString(R.string.boot_step_hardssh)
-        "runtime-install" -> getString(R.string.boot_step_runtime)
-        "profile-plugins" -> getString(R.string.boot_step_profile_plugins)
-        "user-data" -> getString(R.string.boot_step_userdata)
-        "spawn" -> getString(R.string.boot_step_spawn)
-        "health-poll" -> getString(R.string.boot_step_health)
-        else -> key
-    }
-
-    /** 当前阶段主文案（遮罩大字） */
-    private fun stageStatusRes(stage: BootTrace.Stage): Int = when (stage) {
-        BootTrace.Stage.IDLE, BootTrace.Stage.PREPARING -> R.string.splash_preparing
-        BootTrace.Stage.DOWNLOADING -> R.string.splash_downloading
-        BootTrace.Stage.EXTRACTING -> R.string.splash_extracting
-        BootTrace.Stage.STARTING -> R.string.splash_starting
-        BootTrace.Stage.LOADING -> R.string.splash_loading
-        BootTrace.Stage.READY -> R.string.splash_loading
-        BootTrace.Stage.FAILED -> R.string.splash_failed
-    }
-
-    /**
-     * 把 [BootTrace] 快照渲染到遮罩上。
-     *
-     * 三个层次：
-     *  1. 主文案 —— 粗粒度阶段（准备/解压/启动/加载）；
-     *  2. 秒数行 —— `3.2s · 解压运行时`，让用户知道"还在动"以及动了多久；
-     *  3. 明细行 —— 解压时给 `M/N 个文件`，之后给最近一个阶段的耗时。
-     */
+    /** 把 BootTrace 快照交给控制器渲染；遮罩已收时是空操作。 */
     private fun renderSplashTrace(snap: BootTrace.Snapshot) {
-        if (splashDismissed) return
-        splashStatus?.setText(stageStatusRes(snap.stage))
-
-        val elapsed = snap.elapsedMs()
-        // 优先用「进行中」的阶段（mark 出来的），否则回落到最后一个已完成阶段。
-        // 旧实现只取 steps.last()，耗时长的阶段会被显示成上一个阶段名（慢一拍），
-        // 真实案例：profile-plugins 首装慢，屏幕却写「链接用户数据」。
-        val lastKey = snap.currentStep ?: snap.steps.lastOrNull()?.key
-        val label = if (snap.stage == BootTrace.Stage.DOWNLOADING) {
-            getString(R.string.boot_step_download)
-        } else if (snap.stage == BootTrace.Stage.EXTRACTING) {
-            getString(R.string.boot_step_runtime)
-        } else if (lastKey != null) {
-            stageLabel(lastKey)
-        } else {
-            getString(R.string.splash_preparing)
-        }
-        splashElapsed?.text = getString(R.string.splash_elapsed, fmtSeconds(elapsed), label)
-
-        // 明细行
-        val detail = StringBuilder()
-        val ins = snap.install
-        if (snap.stage == BootTrace.Stage.EXTRACTING || snap.stage == BootTrace.Stage.DOWNLOADING) {
-            when {
-                // 解压文件：文件数最直观（字节数在大量小文件上几乎不动）
-                snap.stage == BootTrace.Stage.EXTRACTING && ins.totalFiles > 0 -> {
-                    detail.append(getString(R.string.splash_files, ins.doneFiles, ins.totalFiles))
-                    if (ins.doneBytes > 0) detail.append(" · ").append(fmtSize(ins.doneBytes))
-                }
-                // 下载/拷贝 zip：没有文件概念，只有字节
-                ins.totalBytes > 0 -> {
-                    detail.append(fmtSize(ins.doneBytes))
-                        .append(" / ")
-                        .append(fmtSize(ins.totalBytes))
-                }
-            }
-        } else if (snap.runtimeReused && snap.steps.any { it.key == "runtime-install" }) {
-            detail.append(getString(R.string.splash_runtime_reused))
-            val last = snap.steps.lastOrNull { it.key == "runtime-install" }
-            if (last != null) {
-                detail.append(" · ").append(fmtSeconds(last.durationMs))
-            }
-        } else if (snap.steps.isNotEmpty() || snap.currentStep != null) {
-            // 有进行中的阶段就显示它（没有耗时可显示），否则显示最后一个已完成的。
-            val cur = snap.currentStep
-            if (cur != null) {
-                detail.append(stageLabel(cur))
-            } else {
-                val last = snap.steps.last()
-                detail.append(stageLabel(last.key)).append(" · ").append(fmtSeconds(last.durationMs))
-            }
-        }
-        if (snap.failure != null) {
-            detail.setLength(0)
-            detail.append(snap.failure.take(120))
-        }
-        splashDetail?.text = detail.toString()
-
-        // 进度条：解压阶段用确定性进度，其余转不确定
-        splashProgress?.let { p ->
-            val frac = if (snap.stage == BootTrace.Stage.EXTRACTING || snap.stage == BootTrace.Stage.DOWNLOADING) {
-                ins.fraction
-            } else {
-                null
-            }
-            if (frac == null) {
-                if (!p.isIndeterminate) {
-                    p.isIndeterminate = true
-                }
-            } else {
-                p.isIndeterminate = false
-                p.progress = (frac * 10000).toInt()
-            }
-        }
-
-        if (splashStepsExpanded) renderSplashSteps(snap)
-    }
-
-    /** 阶段列表：每行 `+123ms  累计 456ms  阶段名` */
-    private fun renderSplashSteps(snap: BootTrace.Snapshot) {
-        val tv = splashSteps ?: return
-        val text = if (snap.steps.isEmpty()) {
-            getString(R.string.splash_steps_empty)
-        } else {
-            snap.steps.joinToString("\n") { s ->
-                getString(
-                    R.string.splash_step_line,
-                    fmtMs(s.durationMs),
-                    fmtSeconds(s.atMs),
-                    stageLabel(s.key),
-                )
-            }
-        }
-        // 内容没变就不动 UI：BootTrace 每 130ms 推一次快照，全量 setText 会让列表持续重排，
-        // 卡片跟着抖，滚动位置也会被反复重置（v1.4.30）。
-        if (text == lastStepsText) return
-        lastStepsText = text
-        tv.text = text
-        applyStepsViewport()
-        // 只有新增步骤时才滚到底（用户最关心"现在到哪一步"）；
-        // 条数不变时保留用户自己翻到的位置，别把人拽回去。
-        val grew = snap.steps.size != lastStepsCount
-        lastStepsCount = snap.steps.size
-        if (grew) {
-            splashStepsScroll?.post {
-                (splashStepsScroll as? android.widget.ScrollView)?.fullScroll(
-                    android.view.View.FOCUS_DOWN,
-                )
-            }
-        }
-    }
-
-    private fun fmtSeconds(ms: Long): String {
-        val s = ms / 1000.0
-        return if (s < 60) String.format(java.util.Locale.US, "%.1fs", s)
-        else String.format(
-            java.util.Locale.US, "%d:%02d",
-            (ms / 60_000).toInt(), ((ms % 60_000) / 1000).toInt(),
-        )
-    }
-
-    private fun fmtMs(ms: Long): String = if (ms < 1000) "${ms}ms" else fmtSeconds(ms)
-
-    private fun fmtSize(bytes: Long): String {
-        val mb = bytes / (1024.0 * 1024.0)
-        return if (mb >= 1024) String.format(java.util.Locale.US, "%.1fGB", mb / 1024)
-        else String.format(java.util.Locale.US, "%.0fMB", mb)
+        if (!splashDismissed) splashController?.render(snap)
     }
 
     /**
-     * 淡出启动遮罩（幂等）。
+     * 收起启动遮罩。
      *
-     * 触发点：WebView 首屏 onPageFinished（页面真的可用了），或引擎进入失败/停止态
-     * （不能让用户卡在遮罩里看不到工具栏与错误）。保证最短展示 700ms，避免一闪而过。
+     * 必须幂等：它会被 `onPageFinished`、看门狗超时、失败路径、控制器自身
+     * 的退出动画多处调用，重复调用不能重复排退出动画。
+     *
+     * 最短展示时长（[splashMinMs]）由控制器内部计算 —— 它会等
+     * `minimumMs + 180ms`（那 180ms 是给整页重栅格化留的窗口）。
      */
     private fun dismissSplash() {
-        splashWatchdog?.let { wd -> splash?.removeCallbacks(wd) }
-        splashWatchdog = null
-        stopSplashTicker()
-        val v = splash ?: return
         if (splashDismissed) return
         splashDismissed = true
-        val wait = (splashMinMs - (System.currentTimeMillis() - splashShownAt)).coerceAtLeast(0L)
-        v.postDelayed({
-            // ⚠️ v1.3.0 补丁（用户反馈「直接硬切有点生硬」）：onPageFinished 时页面往往
-            // 还没画出第一帧，立刻淡出会先露出一块空 WebView = 看起来像硬切。
-            // 这里再等 ~180ms 让首帧落地，然后做「淡出 + 轻微放大」的过渡，
-            // 视觉上是从启动图"化开"进入页面，而不是被替换。
-            v.postDelayed({
-                splashLogo?.animate()?.cancel()
-                v.animate()
-                    .alpha(0f)
-                    .scaleX(1.04f)
-                    .scaleY(1.04f)
-                    .setDuration(460L)
-                    .setInterpolator(android.view.animation.DecelerateInterpolator())
-                    .withEndAction {
-                        v.visibility = android.view.View.GONE
-                        v.scaleX = 1f
-                        v.scaleY = 1f
-                        splash = null
-                        splashLogo = null
-                        splashStatus = null
-                        splashProgress = null
-                        splashElapsed = null
-                        splashDetail = null
-                        splashToggle = null
-                        splashSteps = null
-                        splashStepsScroll = null
-                        splashStepsPanel = null
-                        // 复位展开态与去抖缓存，避免下次进引导流程时
-                        // "按钮文案=收起 / 列表却不可见"的状态错配
-                        splashStepsExpanded = false
-                        lastStepsText = null
-                        lastStepsCount = -1
-                    }
-                    .start()
-            }, 180L)
-        }, wait)
+        splashController?.dismiss()
     }
+
+    /**
+     * 「引擎起来了，但能力残缺」的提示。
+     *
+     * 与 [FailureDialog] 的定位不同：那边是**起不来**，必须打断用户；
+     * 这边引擎是可用的，所以不弹模态框、不拦操作，只在状态栏说明并给一次入口。
+     * 每个降级组合只提示一次（[lastDegradedKey]），避免状态回流时反复打扰。
+     */
+    private fun showDegradedNotice(degraded: EngineSupervisor.State.Degraded) {
+        val key = degraded.missingServices.joinToString(",")
+        if (key == lastDegradedKey) return
+        lastDegradedKey = key
+        val detail = degraded.missingServices.joinToString("\n") { "\u00b7 $it" }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.degraded_title))
+            .setMessage(
+                getString(R.string.degraded_body, degraded.missingServices.size, detail),
+            )
+            .setPositiveButton(R.string.degraded_open_maintenance) { _, _ ->
+                startActivity(android.content.Intent(this, MaintenanceActivity::class.java))
+            }
+            .setNegativeButton(android.R.string.ok, null)
+            .show()
+    }
+
+    /** 上次提示过的降级组合，避免同一个问题反复弹。 */
+    private var lastDegradedKey: String? = null
+
+
+
 
     /**
      * 屏幕朝向：把用户偏好真正落到 requestedOrientation（v1.2.120 三态）。
@@ -2248,6 +2197,15 @@ runCatching { (application as DshApp).supervisor.webUrl() }
     /** 启动阶段秒表：引擎启动本身耗时（真机可达十几秒），显示已用秒数避免被误判为卡死 */
     private var startTicker: Runnable? = null
 
+    /**
+     * 最近一次 render() 收到的引擎状态。
+     *
+     * 为什么需要存：toggleToolbar 的展开动画要用「活跃度目标透明度」收尾，
+     * 而那时拿不到 render 的入参。存一份最简单的状态引用即可（EngineSupervisor
+     * 的状态对象是不可变 sealed class，持有它没有生命周期问题）。
+     */
+    private var lastRenderedState: EngineSupervisor.State? = null
+
     private fun stopStartTicker() {
         startTicker?.let { statusBar.removeCallbacks(it) }
         startTicker = null
@@ -2267,7 +2225,30 @@ runCatching { (application as DshApp).supervisor.webUrl() }
         statusBar.postDelayed(r, 1000)
     }
 
+    /**
+     * 状态栏用的 cause 标题（与 [FailureDialog] 同一套文案）。
+     *
+     * 单独一个函数而不是复用 FailureDialog 里的实现：那个是 object 内的 private，
+     * 而这里只需要字符串资源 id，硬要共享就得把它提升成公共 API，反而更乱。
+     */
+    private fun causeTitleResForStatus(cause: app.dsh.mobile.engine.EngineTriage.Cause): Int =
+        when (cause) {
+            app.dsh.mobile.engine.EngineTriage.Cause.PORT_FOREIGN -> R.string.cause_port_foreign
+            app.dsh.mobile.engine.EngineTriage.Cause.PORT_ORPHAN -> R.string.cause_port_orphan
+            app.dsh.mobile.engine.EngineTriage.Cause.PORT_UNKNOWN_OWNER -> R.string.cause_port_unknown_owner
+            app.dsh.mobile.engine.EngineTriage.Cause.PLUGIN_INACTIVE -> R.string.cause_plugin_inactive
+            app.dsh.mobile.engine.EngineTriage.Cause.PROFILE_CORRUPT -> R.string.cause_profile_corrupt
+            app.dsh.mobile.engine.EngineTriage.Cause.RUNTIME_MISSING -> R.string.cause_runtime_missing
+            app.dsh.mobile.engine.EngineTriage.Cause.RUNTIME_ARCH -> R.string.cause_runtime_arch
+            app.dsh.mobile.engine.EngineTriage.Cause.STORAGE_DENIED -> R.string.cause_storage_denied
+            app.dsh.mobile.engine.EngineTriage.Cause.SYSTEM_OOM -> R.string.cause_system_oom
+            app.dsh.mobile.engine.EngineTriage.Cause.SYSTEM_KILLED -> R.string.cause_system_killed
+            app.dsh.mobile.engine.EngineTriage.Cause.AUTH_EXPIRED -> R.string.cause_auth_expired
+            app.dsh.mobile.engine.EngineTriage.Cause.UNKNOWN -> R.string.cause_unknown
+        }
+
     private fun render(state: EngineSupervisor.State) {
+        lastRenderedState = state
         // ⚠️ v1.2.187（用户反馈「状态栏退出不彻底，后台仍以 380MB 运行、耗电」）：
         // 用户在通知栏点「退出」后，引擎停了但 Activity 还活着 —— WebView 与它
         // 的渲染进程继续占着 ~380MB。收到**显式退出**信号就结束任务栈：
@@ -2298,11 +2279,33 @@ runCatching { (application as DshApp).supervisor.webUrl() }
                 }
             }
             is EngineSupervisor.State.Healthy, is EngineSupervisor.State.SafeMode -> {
+                // ⚠️ 这里**只能有一个** Healthy/SafeMode 分支。
+                // 2026-11-07 实测踩过：加降级提示时又写了一个同样的 when 条件，
+                // Kotlin 只走第一个匹配分支，第二段成了**永不执行的死代码** ——
+                // 状态栏显示「引擎降级 · 3 项不可用」，说明框却一次都没弹过。
+                // 症状极隐蔽：没有编译错误、没有告警，只有盯着真机才发现少了个框。
                 if (BootTrace.snapshot.value.startedAt <= 0) {
                     setSplashStatus(R.string.splash_loading)
                 }
+                // 降级：UI 已经能正常用了，所以**不弹大字报**，只在状态栏说清楚
+                // 缺了几项能力，并提供点开看详情。这类问题（插件加载失败）用户
+                // 从来不知道，也就从来没反馈过。
+                val degraded = when (state) {
+                    is EngineSupervisor.State.Healthy -> state.degraded
+                    is EngineSupervisor.State.SafeMode -> state.degraded
+                    else -> null
+                }
+                if (degraded != null) {
+                    showDegradedNotice(degraded)
+                }
             }
-            is EngineSupervisor.State.Failed, is EngineSupervisor.State.Backoff,
+            is EngineSupervisor.State.Failed -> {
+                dismissSplash()
+                // ★v1.5.3：终态失败自动弹结构化诊断（同 cause 只弹一次，
+                //   否则退避重试会让它反复弹）。用户关掉后仍可点状态栏再看。
+                FailureDialog.showOnce(this, state)
+            }
+            is EngineSupervisor.State.Backoff,
             is EngineSupervisor.State.Stopped -> dismissSplash()
             else -> Unit
         }
@@ -2311,6 +2314,13 @@ runCatching { (application as DshApp).supervisor.webUrl() }
             is EngineSupervisor.State.Installing -> getString(R.string.status_installing)
             is EngineSupervisor.State.Starting -> getString(R.string.status_starting).also { startStartTicker() }
             is EngineSupervisor.State.Healthy -> {
+                if (pendingBrowserFallback) {
+                    // v1.6.8：用户在门禁里选了「用浏览器打开」，现在有带 token 的地址了。
+                    // 走 external browser 而不是 WebView —— 前者内核对，能真正渲染。
+                    pendingBrowserFallback = false
+                    val u = (application as DshApp).supervisor.webUrl()
+                    if (u.isNotEmpty()) openInExternalBrowser(u)
+                }
                 if (!urlLoaded) {
                     urlLoaded = true
                     // v1.4.46（安全审查 H2）：拿不到带 token 的地址时**不加载**，
@@ -2319,30 +2329,215 @@ runCatching { (application as DshApp).supervisor.webUrl() }
                     if (u.isNotEmpty()) loadLocalUrl(u) else urlLoaded = false
                 }
                 state.recoveredPlugin?.let { getString(R.string.status_plugin_recovered, it) }
+                    ?: state.degraded?.let {
+                        getString(R.string.status_degraded, it.missingServices.size)
+                    }
                     ?: getString(R.string.status_healthy)
             }
             is EngineSupervisor.State.SafeMode -> {
+                if (pendingBrowserFallback) {
+                    pendingBrowserFallback = false
+                    val u = (application as DshApp).supervisor.webUrl()
+                    if (u.isNotEmpty()) openInExternalBrowser(u)
+                }
                 if (!urlLoaded) {
                     urlLoaded = true
                     val u = (application as DshApp).supervisor.webUrl()
                     if (u.isNotEmpty()) loadLocalUrl(u) else urlLoaded = false
                 }
                 state.recoveredPlugin?.let { getString(R.string.status_plugin_recovered, it) }
+                    ?: state.degraded?.let {
+                        getString(R.string.status_degraded, it.missingServices.size)
+                    }
                     ?: getString(R.string.status_safe_mode)
             }
             is EngineSupervisor.State.Backoff ->
                 getString(R.string.status_backoff, state.delayMs / 1000, state.attempt)
-            is EngineSupervisor.State.Failed -> getString(R.string.status_failed, state.reason)
+            is EngineSupervisor.State.Failed -> {
+                // v1.5.3：有结构化诊断时，状态栏显示**本地化的原因标题**而不是
+                // 那句英文 reason —— 后者是给日志的（含路径/端口细节），压在
+                // 一行状态栏里既挤又看不懂。详情在点开的诊断弹窗里。
+                val cause = state.diagnosis?.cause
+                if (cause != null) getString(causeTitleResForStatus(cause))
+                else getString(R.string.status_failed, state.reason)
+            }
             is EngineSupervisor.State.Stopped -> {
                 urlLoaded = false
                 getString(R.string.status_idle)
             }
         }
+        applyIslandActivity(state)
     }
 
+    /**
+     * 灵动岛「活跃度」透明度（v1.5.5）。
+     *
+     * ## 为什么需要
+     * 灵动岛一直以满不透明度压在网页上方。引擎就绪后它其实**没有新信息**，
+     * 却和「正在安装 / 启动失败」一样显眼 —— 用户的注意力被一块静止的条持续
+     * 分走。这正是 iOS 灵动岛空闲时会「退回一点」的原因：把视觉权重让给内容。
+     *
+     * ## 分档而不是二值
+     * - **Idle / Stopped**：0.55 —— 明显退后，但仍能读到状态（不至于以为它消失了）
+     * - **Healthy / SafeMode / Degraded**：0.72 —— 正常运行，轻微退让
+     * - **Installing / Starting / Backoff / Failed**：1.0 —— 有事发生，必须显眼
+     * 用 0.55 而不是 0.42：0.42 时 11sp 的状态文字在浅色网页上基本读不出来
+     * （实测对比度掉到 2.7:1），"降透明"不该变成"看不见"。
+     *
+     * ## 为什么动 alpha 而不是 visibility
+     * visibility=GONE 会让整行参与重新布局，收起动画与 insets 会抖；
+     * alpha 只影响合成，零布局成本 —— StatusOverlay 的截图隐藏也是同一手法
+     * （见 StatusOverlay 里 alpha=0f 的注释）。
+     */
+    private fun applyIslandActivity(state: EngineSupervisor.State) {
+        val row = findViewById<View>(R.id.statusBarRow) ?: return
+        // 用户手动收起（GONE）时不要把它拽回来：那种情况由 toggleToolbar 管
+        if (row.visibility != View.VISIBLE) return
+        val target = islandIdleAlphaFor(state)
+        // 已经在动画途中就跳过，避免每次 render 都打断上一段动画
+        if (kotlin.math.abs(row.alpha - target) < 0.01f) return
+        row.animate().alpha(target).setDuration(220L).start()
+    }
+
+    /**
+     * 灵动岛在该状态下的目标不透明度（纯函数，供 render 与 toggleToolbar 共用）。
+     *
+     * 分三档而不是二值，理由见 [applyIslandActivity]。null 视为「未知」→ 0.72
+     * （偏向"正常运行"，避免刚启动时岛就隐得看不见）。
+     */
+    private fun islandIdleAlphaFor(state: EngineSupervisor.State?): Float = when (state) {
+        is EngineSupervisor.State.Installing,
+        is EngineSupervisor.State.Starting,
+        is EngineSupervisor.State.Backoff,
+        is EngineSupervisor.State.Failed -> 1.0f
+        is EngineSupervisor.State.Healthy,
+        is EngineSupervisor.State.SafeMode -> 0.72f
+        EngineSupervisor.State.Idle, EngineSupervisor.State.Stopped -> 0.55f
+        null -> 0.72f
+        else -> 0.72f
+    }
+
+    /**
+     * 系统返回：手机形态走三段逻辑，其它形态保持原样。
+     *
+     * 1. `mobile && consumable && canGoBack()` → `goBack()`。`consumable` 是插件
+     *    按「自己压了几条同文档条目」上报的，因此这一步不会退到跨文档条目，
+     *    也就不会出现整页重载。
+     * 2. `mobile` 但没条目可退 → 双击退出：首次轻提示，2 秒内再按才 `finish()`。
+     * 3. 非手机形态（桌面 / 原生预设、纯浏览器场景）→ 完全保持 v1.5.x 行为。
+     *
+     * 注意：`consumable=true` 但 `canGoBack()=false` 时也要走第 2 段 —— 状态与
+     * WebView 历史短暂不同步时，宁可提示一次，也不能退到未知条目上。
+     */
     override fun onBackPressed() {
-        // WebView 有历史则先回退，保持类原生浏览体验
-        if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
+        // v1.6.15：先问页面「有没有东西可关」，再考虑历史，最后才退出。
+        //
+        // 顺序为什么是这样：WebUI 是单页应用，切页面不写浏览器历史（实测
+        // `pushState`/`popstate` 出现 0 次），所以 `canGoBack()` 在插件页、
+        // 自动化任务页、SSH 工作区这些整页界面上恒为 false —— 旧逻辑会直接
+        // `super.onBackPressed()` 退出到桌面，用户感受是「返回键没用，直接退出了」。
+        //
+        // 但也不能把「问页面」放到历史之后：历史里可能留着上一轮导航的条目
+        // （比如从某个深链接进来），先 goBack() 会把用户带到一个不相干的位置，
+        // 而当前浮层还开着。
+        askBackGuard {
+            // ── 手机形态（PR #95）：插件上报「当前有没有同文档条目可退」 ──
+            //
+            // 不能只信 canGoBack()：WebView 历史里可能留着跨文档条目（启动重定向、
+            // runtime 跳转、外链），退过去就是整页重载。只有插件明确说「有条目」
+            // 时才 goBack。
+            if (backMobile) {
+                if (backConsumable && webView.canGoBack() && backTargetIsRealPage()) {
+                    webView.goBack()
+                    return@askBackGuard
+                }
+                // 没有可退条目 → 双击退出：首次轻提示，2 秒内再按才 finish()。
+                // 注意 consumable=true 但 canGoBack()=false 也要走这里 —— 状态与
+                // WebView 历史短暂不同步时，宁可提示一次，也不能退到未知条目上。
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (lastBackAt > 0L && now - lastBackAt < BACK_EXIT_WINDOW_MS) {
+                    lastBackAt = 0L
+                    finish()
+                    return@askBackGuard
+                }
+                lastBackAt = now
+                Toast.makeText(this, R.string.back_exit_hint, Toast.LENGTH_SHORT).show()
+                return@askBackGuard
+            }
+            // 关键：`canGoBack()` 为 true 不等于「有上一个界面」。
+            //
+            // 预热时我们往 WebView 里 loadUrl("about:blank")，它**占掉一条历史条目**。
+            // 于是真实首页加载完成后 canGoBack() 恒为 true，而 goBack() 的目标正是
+            // 那个空白占位页 —— 用户看到的是「右滑一下整个界面变白，像退出网页」。
+            // 必须先确认上一条历史是真实页面，否则一律按「没有上一页」处理。
+            if (webView.canGoBack() && backTargetIsRealPage()) {
+                webView.goBack()
+            } else {
+                super.onBackPressed()
+            }
+        }
+    }
+
+    /**
+     * 历史栈里的「上一条」是不是真实页面（而非预热占位页）。
+     *
+     * [WebView.copyBackForwardList] 在当前索引为 0 时返回空列表，所以还要
+     * 单独判一次 `currentIndex > 0`：列表为空或索引不大于 0 都说明没有上一页。
+     *
+     * 为什么不直接用 URL 判断：回环页可能是 `http://127.0.0.1:3080/#/xxx` 等各种
+     * 形态，而**预热页只有 `about:blank` 一种**。所以只判「是不是空白页」，
+     * 更窄也更稳 —— 任何非 about:blank 的历史条目都当真实页面。
+     */
+    private fun backTargetIsRealPage(): Boolean {
+        val list = runCatching { webView.copyBackForwardList() }.getOrNull() ?: return false
+        val idx = list.currentIndex
+        if (idx <= 0) return false
+        val prev = list.getItemAtIndex(idx - 1) ?: return false
+        val u = prev.url ?: return false
+        return u != preheatUrl && u != "about:blank"
+    }
+
+    /**
+     * 调页面里的 `__dshBackGuard.back()`，问它「当前有没有可关闭的界面」。
+     *
+     * 注意这是**异步**的（`evaluateJavascript` 没有同步返回值），而
+     * `onBackPressed()` 必须同步决定是否 `super.onBackPressed()`。所以这里
+     * 先同步把「要不要退出」压住，等回调回来再决定 —— 否则会出现「已经退出、
+     * 回调才说该关浮层」的竞态。
+     *
+     * 页面未注入（引擎还没起来、或注入失败）时按「没处理」走原逻辑，
+     * 不能因为兜底脚本挂了就让返回键彻底失效。
+     */
+    private fun askBackGuard(onNotHandled: () -> Unit) {
+        if (webView.url.isNullOrEmpty()) {
+            onNotHandled()
+            return
+        }
+        var decided = false
+        val timeout = Runnable {
+            if (decided) return@Runnable
+            decided = true
+            runOnUiThread { onNotHandled() }
+        }
+        webView.postDelayed(timeout, 260L)
+        runCatching {
+            webView.evaluateJavascript(
+                "(function(){try{return !!(window.__dshBackGuard&&window.__dshBackGuard.back())}" +
+                    "catch(e){return false}})()",
+            ) { raw ->
+                if (decided) return@evaluateJavascript
+                decided = true
+                webView.removeCallbacks(timeout)
+                val handled = raw.trim().trim('"') == "true"
+                if (!handled) runOnUiThread { onNotHandled() }
+            }
+        }.onFailure {
+            if (!decided) {
+                decided = true
+                webView.removeCallbacks(timeout)
+                onNotHandled()
+            }
+        }
     }
 
     /**
@@ -2528,87 +2723,130 @@ runCatching { (application as DshApp).supervisor.webUrl() }
      */
     private var gateDialog: android.app.AlertDialog? = null
 
+    /**
+     * 用户在内核门禁里点了「用浏览器打开」（v1.6.8）。
+     *
+     * ## 为什么需要延迟
+     * 门禁在 `onResume` 里跑，早于引擎 `Healthy`，此刻还没有带 token 的 WebUI 地址，
+     * 直接 `startActivity` 只能打开一个 401 页面。所以这里只置标记，等
+     * `render()` 拿到可用地址时立刻拉起浏览器 —— 用户点一次就够，不必自己再点。
+     *
+     * 只在内存里：一次性的动作语义，进程重启后本就该重新协商。
+     */
+    private var pendingBrowserFallback = false
+
     private fun checkWebViewGate(): Boolean {
-        val ver = currentWebViewVersion()
-        if (ver >= AppGate.MIN_WEBVIEW_CHROME) {
-            AppGate.markWebViewOk()
+        // 把实例 UA 传进去做第三级兜底（前两级都读不到时才会用到）。
+        // 实例此刻已由 onCreate 的 setupWebView 建好，UA 是内核真实版本。
+        val ua = runCatching { if (::webView.isInitialized) webView.settings.userAgentString else null }
+            .getOrNull()
+        val report = WebViewDiagnostics.inspect(this, ua)
+        AppGate.applyReport(report)
+        if (report.allowed) {
+            // 达标，或「读不到版本」（读不到不等于太旧，见 WebViewDiagnostics.Cause）
+            logWebView("webview gate pass: ${WebViewDiagnostics.summary(report)}")
             return true
         }
-        AppGate.markWebViewBlocked()
-        val appCtx = applicationContext
-        // 升级指引：优先指向 Play 商店的 WebView 页（绝大多数设备），失败则给系统设置
-        val updateIntent = runCatching {
-            Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.webview"))
-        }.getOrElse {
-            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                .setData(Uri.parse("package:com.google.android.webview"))
-        }
-        val msg = getString(
-            R.string.webview_gate_body,
-            if (ver > 0) ver.toString() else "??",
-            AppGate.MIN_WEBVIEW_CHROME,
-        )
+
         if (gateDialog?.isShowing == true) {
             logWebView("webview gate: dialog already showing, skip")
             return false
         }
-        android.app.AlertDialog.Builder(this)
+        val msg = getString(
+            R.string.webview_gate_body,
+            if (report.chrome > 0) report.chrome.toString() else "?",
+            AppGate.MIN_WEBVIEW_CHROME,
+        )
+        val builder = android.app.AlertDialog.Builder(this)
             .setTitle(getString(R.string.webview_gate_title))
             .setMessage(msg)
             .setPositiveButton(R.string.webview_gate_update) { _, _ ->
-                runCatching { startActivity(updateIntent) }
-                // 升级完回来 onResume 会重新检测（AppGate 仍是 BLOCKED，会再判一次）
+                openWebViewUpdate(report)
             }
             .setNegativeButton(R.string.webview_gate_continue) { _, _ ->
                 AppGate.overrideWebViewGate()
                 onResume()   // 重新走一遍（这次会启动引擎）
             }
             .setCancelable(false)
-            .create()
-            .also { gateDialog = it }
-            .show()
-        logWebView("webview gate: chrome=$ver < ${AppGate.MIN_WEBVIEW_CHROME}, prompting user")
+
+        // 第三条出路（v1.6.8）：把同一个 WebUI 地址交给系统浏览器渲染。
+        // 这是「内核换不了」前提下**唯一**能让老设备真正看到界面的办法 ——
+        // 回环地址在任何浏览器里都能访问，功能全在引擎侧，WebView 只是显示器。
+        // 没有可用浏览器时（极罕见的无浏览器 ROM）不显示该按钮。
+        val hasBrowser = WebViewDiagnostics.browserFallbackIntent(
+            this, PROBE_URL_FOR_BROWSER,
+        ) != null
+        if (hasBrowser) {
+            builder.setNeutralButton(R.string.webview_gate_open_browser) { _, _ ->
+                // 此刻引擎可能还没起来（门禁在 onResume，早于引擎 Healthy），
+                // 拿不到带 token 的地址。置一个待办标记，等首个 Healthy + URL
+                // 就绪时立刻拉起浏览器，用户不必自己去点第二次。
+                pendingBrowserFallback = true
+                AppGate.overrideWebViewGate()
+                onResume()
+            }
+        }
+
+        builder.create().also { gateDialog = it }.show()
+        logWebView("webview gate: ${WebViewDiagnostics.summary(report)} → prompting user")
         return false
     }
 
     /**
-     * 当前 WebView 内核的 Chrome 版本号（0 = 读不到）。
+     * 把当前 WebUI 地址交给系统浏览器（v1.6.8）。
      *
-     * ## 三级取法（都失败才返回 0）
-     *  ① `WebView.getCurrentWebViewPackage()` —— 官方 API，但实测有坑：
-     *     **onResume 时序上可能返回 null**（provider 尚未敲定），部分 ROM 还不实现
-     *  ② 扫已知 provider 包名取 versionName —— 覆盖 Google WebView / AOSP /
-     *     国产 ROM 内置 provider；Android 对 WebView provider 查询有 visibility 豁免
-     *  ③ 当前 webView 实例的 UA —— 只在实例已建时可用
-     * UA 里的 `Chrome/NN` 永远反映真正干活的内核版本，与 provider 包名无关。
+     * ## 这条路径为什么成立
+     * 引擎只监听 `127.0.0.1`，而回环地址在**设备自身的任何浏览器**里都能访问 ——
+     * 外部浏览器与 App 共享同一网络命名空间。并且 `http://127.0.0.1` 属于
+     * "potentially trustworthy origin"，是 secure context，
+     * `crypto.randomUUID` 这类仅安全上下文可用的 API 正常可用
+     * （对照：局域网 IP 不是 secure context，所以 LAN WebUI 才需要那个注入
+     * randomUUID 的反向代理，见 docs/LAN_WEBUI.md）。
+     *
+     * 界面与功能全在引擎侧，WebView 只是个显示器，换成浏览器不损失能力。
+     * 这是「内核换不了」前提下老设备唯一能真正出界面的出路。
      */
-    private fun currentWebViewVersion(): Int {
-        // ① 官方 API
-        runCatching {
-            android.webkit.WebView.getCurrentWebViewPackage()?.versionName?.let { v ->
-                Regex("Chrome/(\\d+)").find(v)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
-                // provider 版本号首段即 Chrome 大版本（如 133.0.6943.137）
-                v.substringBefore('.')?.toIntOrNull()?.let { if (it > 0) return it }
-            }
+    private fun openInExternalBrowser(url: String) {
+        val intent = WebViewDiagnostics.browserFallbackIntent(this, url)
+        if (intent == null) {
+            logWebView("browser fallback: no activity can handle http")
+            Toast.makeText(this, getString(R.string.webview_gate_no_browser), Toast.LENGTH_LONG).show()
+            return
         }
-        // ② 扫已知 provider
-        runCatching {
-            for (pkg in WEBVIEW_PROVIDERS) {
-                val info = runCatching { packageManager.getPackageInfo(pkg, 0) }.getOrNull() ?: continue
-                val vn = info.versionName ?: continue
-                Regex("Chrome/(\\d+)").find(vn)?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
-                vn.substringBefore('.')?.toIntOrNull()?.let { if (it > 0) return it }
-            }
-        }
-        // ③ 现有实例的 UA
-        if (::webView.isInitialized) {
-            runCatching {
-                Regex("Chrome/(\\d+)").find(webView.settings.userAgentString ?: "")
-                    ?.groupValues?.get(1)?.toIntOrNull()?.let { return it }
-            }
-        }
-        return 0
+        val ok = runCatching { startActivity(intent) }
+            .onFailure { logWebView("browser fallback failed: ${it.message}") }
+            .isSuccess
+        if (ok) logWebView("browser fallback: opened WebUI in external browser")
     }
+
+    /**
+     * 按 [WebViewDiagnostics.updateIntents] 给出的顺序尝试打开升级入口，
+     * 全部失败时用 Toast 告知（不能静默 —— 用户点了「去更新」却什么都没发生
+     * 是最差的体验）。
+     */
+    private fun openWebViewUpdate(report: WebViewDiagnostics.Report) {
+        val intents = WebViewDiagnostics.updateIntents(this, report)
+        for (intent in intents) {
+            val ok = runCatching { startActivity(intent) }.isSuccess
+            if (ok) {
+                logWebView("webview gate: opened update target ${intent.data}")
+                return
+            }
+        }
+        logWebView("webview gate: every update target failed (report=${WebViewDiagnostics.summary(report)})")
+        Toast.makeText(
+            this,
+            getString(R.string.webview_gate_no_store, report.provider ?: "com.google.android.webview"),
+            Toast.LENGTH_LONG,
+        ).show()
+    }
+
+    /*
+     * ⚠️ v1.6.8：原来的 `currentWebViewVersion()` / `WEBVIEW_PROVIDERS` 已移除。
+     * 版本探测搬到 [WebViewDiagnostics]（单一真源）：原先它既是 private、
+     * 又缺「读不到 ≠ 太旧」的区分，别处想显示同一份信息还得复制一遍。
+     * 现在门禁与日志共用同一份 [WebViewDiagnostics.Report]。
+     */
 
     /** evaluateJavascript 的返回值带 JSON 引号与转义，统一清一遍 */
     private fun jsResult(raw: String?): String =
@@ -2873,8 +3111,10 @@ runCatching { (application as DshApp).supervisor.webUrl() }
         // 注销语音发送能力：本 Activity 已销毁，服务侧再发会拿到明确的「需打开 App」提示
         // （而不是把文字注入到一个已销毁的 WebView）
         stopHangWatchdog()
-        splashWatchdog?.let { wd -> splash?.removeCallbacks(wd) }
-        splashWatchdog = null
+        splashController?.dispose()
+        splashController = null
+        splash = null
+        splashDismissed = true
         VoiceBridge.registerSender(null)
         // 释放未完成的文件选择请求，否则 WebView 侧回调悬空
         pendingFileCallback?.let { runCatching { it.onReceiveValue(null) } }
@@ -2986,7 +3226,15 @@ runCatching { (application as DshApp).supervisor.webUrl() }
             fresh.id = R.id.webView
             parent?.addView(fresh, android.view.ViewGroup.LayoutParams(-1, -1))
             webView = fresh
+            // 新渲染层还没有页面上报：先回到「不认识」状态，让 onBackPressed
+            // 走原逻辑，避免拿旧 WebView 的条目判断去退新页面。
+            backMobile = false
+            backConsumable = false
+            lastBackAt = 0L
             setupWebView()
+            // v1.6.0：新 WebView 是全新的，预热标记要跟着重置，
+            // 否则 isPreheatNavigation() 会把真实页面误判成预热页而跳过全部注入。
+            webViewPreheated = false
             // 引擎仍在跑 → 直接回到它给的地址（没有则等 Healthy 回调重载）
             val target = oldUrl ?: runCatching {
                 (application as DshApp).supervisor.webUrl()
@@ -2994,6 +3242,9 @@ runCatching { (application as DshApp).supervisor.webUrl() }
             if (!target.isNullOrBlank()) {
                 urlLoaded = false   // 交给 Healthy/加载流程统一处理
                 webView.loadUrl(target)
+            } else {
+                // 引擎还没就绪：同样先预热，别让 Chromium 再冷启一次。
+                preheatWebView()
             }
             startHangWatchdog()   // 新页面继续受监控
             logWebView("webview recovered (reloaded ${target ?: "engine url pending"})")
@@ -3004,6 +3255,58 @@ runCatching { (application as DshApp).supervisor.webUrl() }
     }
 
     /** WebView 诊断日志（写 logcat + engine.log，用户可导出） */
+    /**
+     * 把外部共享进来的文件投递给 WebUI（v1.6.17）。
+     *
+     * ## 投递方式
+     * 直接把路径以文本形式写进对话输入框，而不是伪造一个 `File` 对象塞给
+     * `<input type=file>` —— 后者在 WebView 里无法用 JS 设置（安全限制，
+     * `input.files` 只读），硬做要重新走一遍 `onShowFileChooser`，等于让
+     * 用户再选一次文件，白折腾。
+     *
+     * 写路径进输入框的实际效果：用户看到一行 `[已接收] /data/.../inbox/x.pdf`，
+     * 直接回车即可让 AI 去读。AI 有 `cat`/`ls`/`read` 能力，路径就是它能用
+     * 的最小充分信息。
+     *
+     * ## 为什么用 setRangeText 而不是改 value
+     * 上游 WebUI 是受控组件（React 式），直接改 `value` 不会触发框架的状态
+     * 更新，用户一打字就被覆盖回去。`setRangeText` 触发的是原生 input 事件，
+     * 框架能感知。先 focus 再插入，光标位置也正确。
+     */
+    private fun deliverInboxFiles(view: WebView) {
+        val files = Inbox.drain(this)
+        if (files.isEmpty()) return
+
+        // 门禁 check-i18n.py 禁止 Kotlin 字符串里出现 CJK（文案必须走资源文件）。
+        // 这是给 AI 看的技术标记，不是用户可见文案，用 ASCII 前缀最省事。
+        val text = files.joinToString("\n") { "[received] $it" }
+        // raw string 里写 ${'$'}{JSON.stringify(...)} 会被 Kotlin 当插值求值 → 未定义。
+        // 在 Kotlin 侧先算好带引号的 JS 字面量再插进来。
+        val jsText = org.json.JSONObject.quote(text)
+        val js = """
+            (function(){
+              const t = $jsText;
+              const el = document.querySelector('textarea, [contenteditable="true"], input[type="text"]');
+              if (!el) return 'no-input';
+              el.focus();
+              if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                const start = el.selectionStart ?? el.value.length;
+                const end = el.selectionEnd ?? el.value.length;
+                const ins = (el.value && start > 0 ? "\n" : "") + t;
+                el.setRangeText(ins, start, end, 'end');
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+              } else {
+                // contenteditable path: insertText keeps the undo stack
+                document.execCommand('insertText', false, t);
+              }
+              return 'ok';
+            })();
+        """.trimIndent()
+        view.evaluateJavascript(js) { result ->
+            logWebView("inbox delivery -> $result (${files.size} file(s))")
+        }
+    }
+
     private fun logWebView(message: String) {
         android.util.Log.w("DshWebView", message)
         runCatching {
@@ -3020,6 +3323,14 @@ runCatching { (application as DshApp).supervisor.webUrl() }
     companion object {
         /** WebView 文件选择器的请求码（onShowFileChooser → onActivityResult） */
         private const val REQ_FILE_CHOOSER = 1001
+
+        /**
+         * 「再按一次退出」的窗口（毫秒）。
+         *
+         * 与插件侧 `BACK_EXIT_WINDOW_MS` 保持一致：提示 Toast 的时长、
+         * 用户的反应节奏、窗口三者对齐，才不会出现「提示已消失但仍算第二次」。
+         */
+        private const val BACK_EXIT_WINDOW_MS = 2_000L
 
         /** 麦克风权限请求码（语音输入，v1.2.58） */
         private const val REQ_RECORD_AUDIO = 1002
@@ -3041,18 +3352,21 @@ runCatching { (application as DshApp).supervisor.webUrl() }
         /** 连续失败几次判定卡死（3 次 ≈ 45s 无响应，足够排除偶发抖动） */
         private const val HANG_FAIL_LIMIT = 3
 
+        /**
+         * 探测「设备上有没有浏览器」用的占位地址（v1.6.8）。
+         *
+         * ⚠️ 不能拿真实 WebUI 地址来探测：门禁执行时引擎还没起来，`webUrl()` 是空串，
+         * `resolveActivity` 对空 URL 恒为 false，会导致「明明有浏览器却不显示按钮」。
+         * 这里只关心有没有 Activity 能处理 http 浏览，所以给一个永远可解析的回环地址。
+         */
+        private const val PROBE_URL_FOR_BROWSER = "http://127.0.0.1/"
 
-        /** 已知 WebView provider 包名（v1.2.100，三级取版本的 ② 号路径） */
-        private val WEBVIEW_PROVIDERS = listOf(
-            "com.google.android.webview",
-            "com.android.webview",
-            "com.google.android.trichromelibrary",
-            "com.miui.webview",
-            "com.huawei.webview",
-            "com.hihonor.webview",
-            "com.oplus.webview",
-            "com.heytap.webview",
-        )
+
+        /*
+         * ⚠️ v1.6.8：`WEBVIEW_PROVIDERS` 已迁到 [WebViewDiagnostics.KNOWN_PROVIDERS]。
+         * 保留在 MainActivity 的 companion 里会让「哪些包算 provider」出现两份，
+         * 一处更新另一处忘记就会静默分叉。
+         */
 
         /**
          * 语音发送的 Android 侧时序（v1.2.92，v1.2.94 调整）。

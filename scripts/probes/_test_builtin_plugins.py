@@ -3,7 +3,8 @@
 
 ## 两类内置插件，两套装配规则
 
-**A. 宿主兼容层**（narrow-sidebar / narrow-settings / narrow-rightbar / chat-perf）
+**A. 宿主兼容层**（chat-perf；v1.6.3 起窄屏三件套已移除，上游
+dsh-client-ui-layout 自带窄屏处理）
 —— 必须恒开，继续以「assets 目录 + EngineConfig 部署清单 + overlay insert」三件套
 装配。三处必须同时满足，缺任何一处都静默失效：
 
@@ -69,8 +70,7 @@ def skip(name, detail=""):
 cfg = open(CONFIG, encoding="utf-8").read()
 
 # ── A. 宿主兼容层：三件套 + 部署清单 + overlay entry ─────────────────
-CLIENT_PACKAGES = ["narrow-sidebar", "narrow-settings", "narrow-rightbar",
-                   "chat-perf"]
+CLIENT_PACKAGES = ["chat-perf"]
 
 for pkg in CLIENT_PACKAGES:
     d = os.path.join(ASSETS, pkg)
@@ -107,13 +107,16 @@ for pkg in CLIENT_PACKAGES:
           "dsh" in (pj.get("engines") or {}),
           "内置插件必须自证兼容的引擎版本，否则升级引擎时无门禁")
 
-# ── v1.4.47 重叠插件互斥（narrow-* 在 mobile-layout 激活时让位）────────
-# mobile-layout 现在是用户态插件，可能装着也可能被用户关掉；让位逻辑不变。
-for pkg in ("narrow-sidebar", "narrow-settings"):
-    src = open(os.path.join(ASSETS, pkg, "client.js"), encoding="utf-8").read()
-    check("%s: mobile-layout 激活时让位" % pkg,
-          'hasAttribute("data-dshm-mode")' in src,
-          "两者同时生效 → 侧栏既被要求全宽又被做成抽屉")
+# ── v1.6.3 窄屏三件套已移除（上游 layout 包自带窄屏处理）───────────
+# 断言的是「删干净了」，防止哪天被误加回来与上游打架：
+#   · assets 目录不存在  · 部署清单无条目  · overlay 无 insert entry
+# 三处任一残留 → 插件又会被挂上，与上游窄屏逻辑互相覆盖。
+for pkg in ("narrow-sidebar", "narrow-settings", "narrow-rightbar"):
+    check("%s: assets 目录已移除" % pkg,
+          not os.path.isdir(os.path.join(ASSETS, pkg)))
+    check("%s: 部署清单已移除" % pkg, '"%s" to listOf(' % pkg not in cfg)
+    check("%s: overlay 无 insert entry" % pkg,
+          "android-plugins/%s/index.js" % pkg not in cfg)
 
 # ── B. 用户态插件装配链路 ─────────────────────────────────────────────
 # 1) 不得回退到内置：assets 散文件、部署清单、overlay insert 三处都要干净。
@@ -143,8 +146,11 @@ check("mobile-layout: 预装在 spawnEngine 之前",
 check("mobile-layout: 首装开关跟随「官方推荐手机 UI」",
       "officialMobileUiEnabled" in prov,
       "开关为关（默认）时只装不挂载，避免顶掉 narrow-* 三件套")
-check("mobile-layout: overlay 里的三件套仍受同一开关控制",
-      "OO_NARROW_DISABLED_OO" in cfg)
+# v1.6.3：三件套已移除，这里改为断言「占位符彻底消失」——
+# 只出现在注释里也算残留（说明有人以为它还在生效）。
+check("mobile-layout: 三件套占位符已彻底移除",
+      "OO_NARROW_DISABLED_OO" not in cfg,
+      "占位符残留（哪怕只在注释里）会让人误以为三件套还能开关")
 check("mobile-layout: 已移除失效的 OO_OFFICIAL_DISABLED_OO 占位符",
       "OO_OFFICIAL_DISABLED_OO" not in cfg,
       "insert 行已删，占位符还留着会让人误以为还能启用")
@@ -158,15 +164,37 @@ check("mobile-layout: 待办在 boot 时落地（applyPending）", "applyPending
 # 3) 构建期资产接线（CI 传参 + 本地覆盖位）。
 gradle = open(GRADLE, encoding="utf-8").read()
 check("mobile-layout: gradle 支持 -PmobileLayoutTgzDir", "mobileLayoutTgzDir" in gradle)
-check("mobile-layout: 预留本地覆盖目录 local-overrides/mobile-layout",
-      "local-overrides/mobile-layout" in gradle,
+# 契约变更（v1.5.x）：本地覆盖目录从「为 mobile-layout 硬编码一条」改成
+# `local-overrides/$assetRoot` 循环 —— 新增插件不必再改 gradle。
+# 行为等价：assetRoot="mobile-layout" 时路径仍是 local-overrides/mobile-layout。
+check("mobile-layout: 预留本地覆盖目录 local-overrides/<assetRoot>",
+      "local-overrides/$assetRoot" in gradle,
       "本地编译测试放 tgz 即可覆盖，无需改 CI")
+# v1.5.0 回归（用户报「开了没变化」）：资产必须入库，否则本地构建出的包
+# 根本不含 tgz → readAsset 返回 null → 预装链路整条不启动 → 拨开关无反应。
+# 正式包由 CI 打包，但本地/分支构建也要能开箱即用。
+gradle_lower = gradle
+# 合并 feat/linux-workspace（2026-11-09）后，mobile-layout 的本地回退不再写死成
+# 单条目，而是并进通用 bundledProfilePlugins 循环的候选列表（vendor/<assetRoot>，
+# 与 solution-explorer 同一套逻辑）。要守的不变量没变：
+#   vendor/mobile-layout 必须在候选里，且仍不能回落到 src/main/assets。
+check("mobile-layout: gradle 的本地回退目录指向 vendor/mobile-layout",
+      ("File(projRoot, \"vendor/mobile-layout\")" in gradle_lower)
+      or ('File(legacyProfilePluginsDir, assetRoot)' in gradle_lower
+          and 'File(projRoot, "vendor")' in gradle_lower),
+      "指回 src/main/assets 会与 runtimeAssetsDir 撞 Duplicate resources")
+VENDOR = os.path.join(ROOT, "vendor", "mobile-layout")
+check("mobile-layout: 资产已入库（vendor/mobile-layout 存在）",
+      os.path.isdir(VENDOR),
+      "缺资产 = 本地构建的包不可能装上该插件（用户拨开关无反应）")
 
 # 4) 若资产已就位（CI 打包后 / 本地覆盖 / 预置），校验 bundle 契约。
 CANDIDATES = [
     os.environ.get("DSH_MOBILE_LAYOUT_ASSET"),
     os.path.join(ROOT, "local-overrides", "mobile-layout"),
-    os.path.join(ROOT, "app", "src", "main", "assets", "mobile-layout"),
+    # v1.5.0：资产入库在 vendor/mobile-layout/（不放 assets/，否则 AGP 自动
+    # 合并一次 + 本任务复制一次 = "Duplicate resources"）。
+    os.path.join(ROOT, "vendor", "mobile-layout"),
     os.path.join(ROOT, "build", "generated", "runtimeAssets", "mobile-layout"),
 ]
 asset_dir = next((p for p in CANDIDATES if p and os.path.isdir(p)), None)

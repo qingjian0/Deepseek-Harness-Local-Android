@@ -102,6 +102,117 @@ object CapabilityGate {
      */
     const val NET = "net"
 
+    /**
+     * 系统级操作（进程 / 文件 / 属性 / 服务 / 包管理 / 任意 shell）。
+     *
+     * 为什么单独一个开关且默认关闭：这是本项目里**权限最大的一档** —— 它能
+     * 杀任意进程、读写任意文件、改系统属性、卸载任何 App、以 uid 0 执行任意
+     * 命令。它不局限于「某个功能」，而是把整台机器的控制权交出去。
+     *
+     * 与 HID 的区别：HID 是「AI 假装成一只键盘」，本开关是「AI 拿到 root shell」。
+     *
+     * ⚠️ 需要 ROOT 权限模式。判定读 PrivMode（`Privilege.getMode(ctx) == ROOT`），
+     * 不探测 /proc 或 su —— 门脚本 `root` 最终会在引擎进程里自查 uid，
+     * 这里判模式是为了让开关在非 root 时如实置灰。
+     */
+    const val ROOT = "root"
+
+    /**
+     * 读取**其他 App 的私有数据**（`root appdata`）。
+     *
+     * 与 [ROOT] 分开授权，理由：`root` 是「能操作系统」，`appdata` 是「能看别人
+     * 存在磁盘里的东西」—— 前者是控制权，后者是隐私边界，量级完全不同。用户
+     * 可能愿意让 AI 帮他还原系统设置，但不愿意让它翻聊天数据库。
+     *
+     * 因此本开关：
+     * · 独立于 [ROOT]，两者都开才真的能读（门脚本里 appdata 先 need_root）；
+     * · 默认关闭（不在默认表里 → 读不到即为关）；
+     * · 每次成功读取都经 [SensitiveAccess] 留通知告警。
+     */
+    const val APPDATA = "appdata"
+
+    /**
+     * 输入框文本变化事件流（`TYPE_VIEW_TEXT_CHANGED`）。
+     *
+     * ⚠️ 这是本项目里**最接近键盘记录**的一项：它能看到用户在任何一个 App 的
+     * 输入框里敲了什么（密码框被系统屏蔽，`event.isPassword` 为真时我们不记）。
+     *
+     * 因此三件事必须同时成立：独立开关（本常量）· 默认关闭 · 每次读取经
+     * [SensitiveAccess] 留通知告警。缺任何一条都不该开这个能力。
+     */
+    const val INPUTWATCH = "inputwatch"
+
+    /**
+     * 物理按键事件流（`FLAG_REQUEST_FILTER_KEY_EVENTS` + `onKeyEvent`）。
+     *
+     * 与 [INPUTWATCH] 分开授权：按键流只知道「按了音量下」，不知道输入内容；
+     * 两者隐私量级差一个数量级，合成一个开关会让用户为了快捷键被迫交出输入内容。
+     *
+     * 注意 `onKeyEvent` 一律 `return false`（不消费），所以即使开启也不影响
+     * 用户正常按键 —— 它只观察，不拦截。
+     */
+    const val KEYWATCH = "keywatch"
+
+    /**
+     * Shizuku / ADB shell 通道（`shz` 门脚本 → `/dev/shz`）。
+     *
+     * 与 [ROOT] 的关系：两者**互斥但不等价**。ROOT 模式下引擎自己就是 uid 0，
+     * 走门脚本直连；Shizuku 模式下引擎还是 app uid，必须经桥把命令转给 App
+     * 进程的 binder，再以 adb shell（uid 2000 / `u:r:shell:s0`）执行。
+     *
+     * 权限档位也不同（2026-11-08 实测）：shell 能读别的 App 的 databases 与
+     * shared_prefs、能 uiautomator dump、能 input，但**改不了 iptables**、
+     * 写不了 SELinux。所以它是「半只脚在系统里」，不是 root 的替代品。
+     */
+    const val SHIZUKU = "shizuku"
+
+    /**
+     * 当前地理位置查询（`/dev/location`）。
+     *
+     * 与 [RF] 分开：`RF` 覆盖的是 NFC 与地理围栏，那两个都是**被动触发**
+     * （贴一下 / 进出一个圈），不会在任意时刻回报「你在哪」。而精确位置能
+     * 推断出住址、工作地、就医记录 —— 用户愿意让 AI「到公司提醒我」，
+     * 不代表愿意让它随时知道自己在哪。所以这是独立开关。
+     */
+    const val LOCATION = "location"
+
+    /**
+     * App 包管理（`/dev/packages`）：列出 / 查询 / **安装 / 卸载**。
+     *
+     * 为何需要开关：`list`/`info` 只是读，但 `install` 是给这台机器新增一个
+     * 长期运行的组件 —— 等于给 AI 一个持久的落脚点。所以整组受一个开关，
+     * 且 install/uninstall 内部**仍然强制走系统确认页**（不提供静默安装）。
+     */
+    const val PACKAGES = "packages"
+
+    /**
+     * 拍照（`/dev/camera`）。
+     *
+     * 与 [SENSOR] 分开：传感器读到的是「环境光 320 lux」，相机拍到的是
+     * 房间、屏幕、他人。量级完全不同。与录音能力（`dev/record`）也分开 ——
+     * 愿意让 AI 听和愿意让 AI 看是两件事。
+     */
+    const val CAMERA = "camera"
+
+    /**
+     * Linux 容器（`/dev/linux/…`）：状态 / 发行版列表 / 切换 / 部署 / **执行命令**。
+     *
+     * 为什么整组受一个开关、且默认关闭：
+     * - `exec` 是**在容器里跑任意命令**，能力上等价于给 AI 一个 shell。
+     *   虽然容器本身受 seccomp 沙箱约束（不能碰宿主文件），但它能装包、
+     *   能联网、能编东西、能长期驻留进程 —— 与「读一下电量」不是一个量级。
+     * - `switch`/`deploy` 会**改变用户环境**：切发行版之后用户下一次打开
+     *   Linux 工作台看到的是另一个系统，装过的东西「不见了」（其实在另一个
+     *   目录里）。这属于可逆但会让人困惑的操作。
+     *
+     * 与之相对：`status`/`distros` 只是读。**但它们也挂在同一个开关下** ——
+     * 理由是一致性：让用户只需要理解「Linux 能力开/关」一件事，而不是
+     * 「读可以写不行」两套规则。关闭时 AI 完全看不到容器，也不会有
+     * 「为什么我只能看到状态不能操作」的半残状态。
+     */
+    const val LINUX = "linux"
+
+
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -148,6 +259,15 @@ object CapabilityGate {
         .put(SCREEN_CAPTURE, can(ctx, SCREEN_CAPTURE))
         .put(HID, can(ctx, HID))
         .put(NET, can(ctx, NET))
+        .put(ROOT, can(ctx, ROOT))
+        .put(APPDATA, can(ctx, APPDATA))
+        .put(INPUTWATCH, can(ctx, INPUTWATCH))
+        .put(KEYWATCH, can(ctx, KEYWATCH))
+        .put(SHIZUKU, can(ctx, SHIZUKU))
+        .put(LOCATION, can(ctx, LOCATION))
+        .put(PACKAGES, can(ctx, PACKAGES))
+        .put(CAMERA, can(ctx, CAMERA))
+        .put(LINUX, can(ctx, LINUX))
 
     /** Platform truth, independent from the user switch. */
     fun permissionAvailable(ctx: Context, name: String): Boolean = when (name) {
@@ -183,7 +303,40 @@ object CapabilityGate {
         //   · block/unblock 要 root —— 没有时 iptables 调用直接报 403。
         // 若在这里判 root，没 root 的设备连「看流量」（B 档）都会被一起关掉。
         NET -> true
+        // 这里判的是「当前是否处于 ROOT 权限模式」，不是「能不能拿到 root」：
+        // 非 ROOT 模式下 engine/bin/su 被拒绝遮罩挡住，门脚本 `root`
+        // 里的 need_root 也会以真实 uid 报错，两层一致。
+        ROOT -> Privilege.getMode(ctx) == PrivMode.ROOT
+        // 与 [ROOT] 同一档：没有 root 就根本没有读别的 App 私有数据的通道。
+        // 但**有 root 不等于允许读** —— 这是独立的隐私开关，用户要单独打勾。
+        APPDATA -> Privilege.getMode(ctx) == PrivMode.ROOT
+        // Shizuku 只看「server 在跑 + 本 app 已授权」，与 ROOT 模式互不依赖：
+        // 有 root 的用户也可能选择用 Shizuku（不想让引擎以 uid 0 常驻）。
+        SHIZUKU -> Privilege.shizukuUsable()
+        // 位置：硬件/系统开关即便没开也允许读取（返回 location_enabled=false 让
+        // 调用方知道原因），只有**权限**缺失才置灰 —— 否则用户关了系统定位就
+        // 再也点不亮这个开关，而他要的可能只是「先授权，等我开了再用」。
+        LOCATION -> granted(ctx, Manifest.permission.ACCESS_FINE_LOCATION) ||
+            granted(ctx, Manifest.permission.ACCESS_COARSE_LOCATION)
+        // 包管理一律 true，与 [NET] 同理：这一组里 list/info 只要开关就能用，
+        // 而 install 额外需要「安装未知应用」授权 —— 缺权时 PackageCap.install
+        // 会明确返回 403 并给出开关指引，不是静默失败。
+        // 若在这里判 canRequestPackageInstalls()，没授权的设备连「看看装了什么」
+        // 都会被一起关掉，属于误置灰。
+        PACKAGES -> true
+        // 相机：只判运行时权限。硬件是否存在留给 CameraCap 报（它要列出真实 id 列表）。
+        CAMERA -> granted(ctx, Manifest.permission.CAMERA)
+        // 事件流两项一律 true：它们的真正前置条件是「无障碍服务在跑」与
+        // 「该 ROM 是否支持 FILTER_KEY_EVENTS」，硬判任一项都会把开关误置灰
+        // （用户可能只是想先把开关打开，等无障碍连上就用）。
+        // 缺条件时 /dev/watch 会明确回报 "accessibility service is not running"，
+        // 不是静默失败。
+        INPUTWATCH, KEYWATCH -> true
         CONTROL, STATUS, SENSOR, CLIPBOARD, SCHED -> true
+        // Linux 容器没有额外的平台权限要求：容器能不能起由 rootfs 部署状态决定，
+        // 那个检查在 /dev/linux/status 里如实返回。这里若判 false 会让开关**永久置灰**，
+        // 用户以为功能坏了 —— 与 HID 那条同一个教训。
+        LINUX -> true
         else -> false
     }
 

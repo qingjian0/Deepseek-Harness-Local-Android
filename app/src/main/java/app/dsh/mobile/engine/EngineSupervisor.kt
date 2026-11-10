@@ -45,6 +45,22 @@ class EngineSupervisor(private val ctx: Context) {
             val tokenUrl: String? = null,
             /** 本次启动前自动摘掉的第三方插件；仅在恢复后的首个 Healthy 状态携带。 */
             val recoveredPlugin: String? = null,
+            /**
+             * 插件探针报告的降级信息（`ok=false` 时非 null）。
+             *
+             * ⚠️ **这是「引擎已就绪但功能残缺」的唯一信号。**
+             *
+             * 实测真题（2026-11-07，模拟器）：引擎 HTTP 通了、UI 显示「引擎已就绪」，
+             * 但探针报 `ok=false` —— 4 个内置插件加载失败（workspace-controller /
+             * workspace / storage-domain / session-persistence-jsonl），
+             * 3 项能力缺失（directoryPickerController / workspaceRegistry /
+             * workspaceController）。也就是说**目录选择器、工作区、会话持久化全坏**，
+             * 而界面一切正常。用户只能靠「点什么都报错」自己发现。
+             *
+             * 之前这个信息只活在 logcat 和 engine.log 的两行文本里 —— 恰恰是
+             * 「有些事我根本不知道是什么 bug」的那一类。
+             */
+            val degraded: Degraded? = null,
         ) : State
 
         /** 安全模式：配置被隔离后以空配置拉起，功能受限但可用 */
@@ -52,9 +68,37 @@ class EngineSupervisor(private val ctx: Context) {
             val port: Int,
             val tokenUrl: String? = null,
             val recoveredPlugin: String? = null,
+            val degraded: Degraded? = null,
         ) : State
+
+        /**
+         * 插件降级的结构化描述。
+         *
+         * [missingServices] 是**能力**名（如 `workspaceRegistry`），
+         * [failedEntries] 是**插件条目**名（如 `@deepseek-ai/dsh-workspace`）。
+         * 两者都留着：前者对用户有意义（"工作区用不了"），后者对排查有意义。
+         */
+        data class Degraded(
+            val missingServices: List<String>,
+            val failedEntries: List<String>,
+        )
         data class Backoff(val delayMs: Long, val attempt: Int) : State
-        data class Failed(val reason: String) : State
+
+        /**
+         * 终态失败。
+         *
+         * [reason] 保留为**已经本地化好的一句话**（界面直接显示它）；
+         * [diagnosis] 是同一件事的结构化版本 —— 原因是哪个枚举、证据是什么、
+         * 能做什么。两者刻意都留：前者让 UI 不必为了显示一句话就自己翻译枚举，
+         * 后者让 UI/AI/日志拿到可判断的东西。
+         *
+         * v1.5.3 之前只有 [reason]，于是「端口被占」「插件没激活」「配置坏了」
+         * 在界面上长得一模一样，用户和我们都分不清。
+         */
+        data class Failed(
+            val reason: String,
+            val diagnosis: app.dsh.mobile.engine.EngineTriage.Diagnosis? = null,
+        ) : State
         data object Stopped : State
     }
 
@@ -78,8 +122,8 @@ class EngineSupervisor(private val ctx: Context) {
      *  只搜 [logOffsetAtSpawn] 之后的日志段：健康探测可能早于 stdout 送达，
      *  搜全文会拿到上一次启动的旧 token（已失效 → WebView 401 白页，实测）。
      *  stdout 泵有毫秒级延迟，最多重试 ~600ms 等该行出现。 */
-    private fun extractTokenUrl(): String? = runCatching {
-        repeat(6) {
+    private fun extractTokenUrl(attempts: Int = 6): String? = runCatching {
+        repeat(attempts.coerceAtLeast(1)) {
             val f = logFile()
             if (f.isFile) {
                 // ⚠️ v1.4.6（审查 P0）：logOffsetAtSpawn 是**字节数**（来自
@@ -250,22 +294,6 @@ class EngineSupervisor(private val ctx: Context) {
     }
 
     /** 重启互斥：重复点击重启按钮是 no-op（并发 stop/start 会互相踩踏，实测事故） */
-    /**
-     * 凭证/登录类失败的特征串（v1.4.24）。命中即判定「重启无用」，
-     * 直接引导用户重新登录，而不是反复重启。
-     */
-    private val AUTH_FAILURE_MARKERS = listOf(
-        "401", "403", "unauthorized", "authentication failed", "authentication required",
-        "invalid api key", "invalid_api_key", "incorrect api key",
-        "token expired", "invalid token", "token is invalid",
-        // 中文特征串用 Unicode 转义：这里是日志匹配模式（不是 UI 文案），
-        // i18n 门禁会禁止 Kotlin 里出现 CJK 字面量。
-        "token \u8fc7\u671f", "\u4ee4\u724c\u5df2\u8fc7\u671f",
-        "login required", "not logged in",
-        "\u8bf7\u5148\u767b\u5f55", "\u767b\u5f55\u5df2\u5931\u6548",
-        "credentials", "assertowneronly", "eacces",
-    )
-
     @Volatile private var restarting = false
 
     /**
@@ -410,6 +438,29 @@ class EngineSupervisor(private val ctx: Context) {
     }
 
     /**
+     * 公开的「清场后重试」入口（v1.5.3）—— 给 [EngineTriage.Fix.Kind.RECLAIM_PORT] 用。
+     *
+     * 语义上等于「异常退出时的彻底清场 + 重启」，只是可以被用户显式触发。
+     * 它**不重置** [totalPortReclaims]：那是生命周期总额度，防止「端口被永久占用
+     * 时每秒 spawn 一次」的旧 bug。用户手动点击不该绕过这个节流 —— 否则
+     * 一个坏掉的第三方服务器就能让用户点着玩、把电池耗光。
+     *
+     * 返回清场是否执行（端口本来就空闲时也算成功，因为目标状态已达成）。
+     */
+    fun reclaimPortAndRetry(): Boolean {
+        val ok = runCatching {
+            reclaimPort()
+            true
+        }.getOrElse {
+            Log.w(TAG, "manual port reclaim failed: ${it.message}")
+            false
+        }
+        Log.i(TAG, "manual port reclaim: ok=$ok — restarting engine")
+        restart()
+        return ok
+    }
+
+    /**
      * 为维护操作（清理 dsh-home）**同步**停掉引擎，并阻止它自动重启。
      *
      * 与 [restart] 的区别：
@@ -445,6 +496,77 @@ class EngineSupervisor(private val ctx: Context) {
 
     /** 手动导出引擎日志（用户反馈通道） */
     fun logFile(): File = File(EngineConfig.engineRoot(ctx), "engine.log")
+
+    /**
+     * 收敛成终态失败：**先归因，再进 Failed**（v1.5.3）。
+     *
+     * 为什么统一走这一个函数：此前五处 `State.Failed(...)` 各自手写文案，
+     * 「端口被占」和「插件没激活」在界面上长得一样，用户和我们都没法分辨。
+     * 现在所有终态失败都经过 [EngineTriage]，Failed 里必定带结构化诊断。
+     *
+     * [overrideReason] 用于那几种**已经知道确切文案**的场景（架构不匹配、
+     * 凭据失效、启动超时）—— 它们的文案比归因器能生成的更具体，不该被覆盖。
+     * 但诊断仍然会算，因为界面要用它的 [EngineTriage.Diagnosis.fixes] 决定
+     * 显示哪些按钮。
+     */
+    private fun failTerminal(
+        reason: String,
+        overrideCause: EngineTriage.Cause? = null,
+        neverBootedOverride: Boolean? = null,
+    ) {
+        val diag = runCatching {
+            val facts = EngineTriage.collectFacts(
+                ctx = ctx,
+                logSinceOffset = logOffsetAtSpawn,
+                neverBooted = neverBootedOverride ?: !healthyEverReached.get(),
+                hasLastGoodProfile = runCatching { ProfileGuardian(ctx).hasLastGood() }.getOrDefault(false),
+                inSafeMode = runCatching { ProfileGuardian(ctx).inSafeMode() }.getOrDefault(false),
+                // ★B 阶段（v1.5.3）：终态失败时自动跑一次全面体检。
+                //   理由见 EngineTriage.Facts.selfCheck 的注释：有几类毛病日志看不出来，
+                //   而且不该指望用户自己想到去「设置→维护→全面体检」。
+                //   只在**终态**跑（不是每次退避都跑）—— 体检要扫目录，每 2 秒一次太重。
+                runSelfCheck = true,
+            ).let { f ->
+                // archMismatch 只有调用方知道（它是异常类型决定的，不是日志能看出来的）
+                if (overrideCause == EngineTriage.Cause.RUNTIME_ARCH) f.copy(archMismatch = true) else f
+            }
+            val d = EngineTriage.diagnose(facts)
+            // 调用方给了更确切的 cause 时以它为准（例如 RUNTIME_ARCH 是异常类型
+            // 决定的、日志看不出），但**硬证据优先**：
+            //
+            // ⚠️ 2026-11-07 修。原来是 `if (overrideCause != null) d.copy(cause = overrideCause)`，
+            //    无条件覆盖。实测踩到：调用方因为误匹配（日志时间戳含 "401"）传了
+            //    AUTH_EXPIRED，而归因器明明已经采到「端口 3080 正在监听」这条**实测**事实，
+            //    结果被覆盖 —— 弹窗让用户去重新登录，而真实原因是端口被占。
+            //
+            // 现在的规则：端口类原因来自 `portInUse`（真去读 /proc/net/tcp 得到的事实），
+            // 比任何日志特征串都硬，不允许被覆盖。其余情况仍尊重调用方。
+            val hardEvidence = d.cause == EngineTriage.Cause.PORT_FOREIGN ||
+                d.cause == EngineTriage.Cause.PORT_ORPHAN ||
+                d.cause == EngineTriage.Cause.PORT_UNKNOWN_OWNER
+            if (overrideCause != null && d.cause != overrideCause && !hardEvidence) {
+                d.copy(cause = overrideCause)
+            } else {
+                d
+            }
+        }.getOrElse { e ->
+            Log.w(TAG, "triage unavailable: ${e.message}")
+            EngineTriage.Diagnosis(
+                cause = overrideCause ?: EngineTriage.Cause.UNKNOWN,
+                fixes = listOf(EngineTriage.Fix(EngineTriage.Fix.Kind.RUN_SELF_CHECK)),
+                summary = "triage unavailable",
+            )
+        }
+        Log.e(TAG, "terminal failure: ${EngineTriage.summarize(diag)}")
+        runCatching {
+            EngineLog.append(logFile(), "\n[fail-triage] ${EngineTriage.summarize(diag)}\n")
+        }
+        BootTrace.fail(ctx, reason)
+        _state.value = State.Failed(reason, diag)
+    }
+
+    /** 有没有成功启动过（用于区分「新装就起不来」与「用了一阵突然坏」） */
+    private val healthyEverReached = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
      * 失败签名：用「引擎日志尾部 + 退出码」的哈希近似。
@@ -493,7 +615,9 @@ class EngineSupervisor(private val ctx: Context) {
             val n = raf.read(buf)
             String(buf, 0, n.coerceAtLeast(0), Charsets.UTF_8)
         }.lowercase()
-        AUTH_FAILURE_MARKERS.any { text.contains(it) }
+        // ★复用归因器的判定（含数字状态码的边界匹配），不要各写一份 ——
+        //   两处各写一份时，`contains("401")` 那个 bug 就存在了两份。
+        EngineTriage.authFailureIn(text)
     }.getOrElse { false }
 
     /**
@@ -569,10 +693,10 @@ class EngineSupervisor(private val ctx: Context) {
                         "(elapsed=${bootElapsed}ms, attempts=$backoffIndex, " +
                         "pluginRecoveryRestarts=$pluginRecoveryRestarts) — giving up with a visible error",
                 )
-                _state.value = State.Failed(
+                failTerminal(
                     ctx.getString(R.string.error_boot_timeout, mins),
+                    overrideCause = EngineTriage.Cause.UNKNOWN,
                 )
-                BootTrace.fail(ctx, ctx.getString(R.string.error_boot_timeout, mins))
                 return
             }
             // 仅当引擎「自行死亡」（fork 失败 / 启动期退出）才值得让 guardian 定罪；
@@ -605,26 +729,38 @@ class EngineSupervisor(private val ctx: Context) {
             try {
                 // 孤儿进程回收必须先于任何监听桥 bind，也先于文件树修复：
                 // 避免旧 node/后代继续持有 3080/3083 socket 或并发写入 engine/dsh-home。
+                // v1.6.1 启动提速：orphan-reap / home-owner-check / guardian-restore
+                // 三者互不依赖，改为并行。
+                //
+                // 为什么安全：唯一的顺序约束是「孤儿回收必须先于任何监听桥 bind」
+                //（避免旧 node 继续持有 3080/3083）。而 owner-check 只读判权、guardian
+                // 只动 engine 内置 overlay，两者都不 bind 端口，与孤儿回收无竞争。
+                // parallel-preflight 里的 bridge 仍在三者全部完成之后才启动，约束保持。
+                //
+                // 实测收益：orphan-reap 在 ROOT 模式会 spawn 一次 su（实测 233ms），
+                // 原来是纯串行的固定开销；并行后落到 owner-check/guardian 的阴影里。
                 mark("orphan-reap")
-                withContext(Dispatchers.IO) { OrphanReaper.reap(ctx) }
-                step("orphan-reap")
-
-                // 所有启动期文件操作前先修复属主/权限。旧顺序在 AGENTS.md、日志清理、
-                // guardian 文件修复之前执行这些写入，Root 残留时可能先失败再自愈。
-                mark("home-owner-check")
-                val needFix = withContext(Dispatchers.IO) { Privilege.dshHomeNeedsOwnershipFix(ctx) }
-                if (needFix) {
-                    Log.w(TAG, "found files with broken ownership/permissions (root residue or bad labels); healing")
-                    val fixed = withContext(Dispatchers.IO) { Privilege.fixHomeOwnership(ctx) }
-                    Log.w(TAG, "attribute healing ${if (fixed) "succeeded" else "unavailable (no shizuku/su)"}")
+                var healed = 0
+                supervisorScope {
+                    val orphanJob = async(Dispatchers.IO) { OrphanReaper.reap(ctx) }
+                    val ownerJob = async(Dispatchers.IO) {
+                        val needFix = Privilege.dshHomeNeedsOwnershipFix(ctx)
+                        if (needFix) {
+                            Log.w(TAG, "found files with broken ownership/permissions (root residue or bad labels); healing")
+                            val fixed = Privilege.fixHomeOwnership(ctx)
+                            Log.w(TAG, "attribute healing ${if (fixed) "succeeded" else "unavailable (no shizuku/su)"}")
+                        }
+                    }
+                    val guardianJob = async(Dispatchers.IO) { guardian.restoreQuarantinedBuiltinOverlays() }
+                    // 逐项 await 以便把各自耗时打出来；坏一个不影响其余（runCatching）
+                    runCatching { orphanJob.await() }
+                    runCatching { ownerJob.await() }
+                    healed = runCatching { guardianJob.await() }.getOrDefault(0)
                 }
+                step("orphan-reap")
                 step("home-owner-check")
-
-                // guardian 会修改 engine 内置 overlay；确保孤儿已回收且目录权限已修复后再执行。
-                mark("guardian-restore")
-                val healed = withContext(Dispatchers.IO) { guardian.restoreQuarantinedBuiltinOverlays() }
-                step("guardian-restore")
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
+                step("guardian-restore")
 
                 // 三项互不依赖的启动准备任务并行执行：
                 //  - AgentContextSeed 只写 dsh-home/AGENTS.md；
@@ -677,27 +813,38 @@ class EngineSupervisor(private val ctx: Context) {
                 _installProgress.value = null
                 step("runtime-install")
 
-                // v1.4.20：内置 SSH 插件与 runtime 解耦。runtime 重装会删掉
-                // engine/lib，插件必须在这里补装（失败只降级 SSH，不阻断引擎）。
+                // ── v1.6.20 启动提速：三项**互不依赖**的落盘操作并行 ──────────────
+                // 目录互不重叠：hardssh 写 engine/lib/，扩展迁移写 extensions/，
+                // 用户数据外置写 dsh-home/（软链 + 目录搬迁）。旧实现串行，冷启动
+                // 这段累计 100~300ms（su 探测、解包校验、目录扫描），并行后互相藏进
+                // 各自的阴影里；最慢的那一项决定这段耗时，而不是三者之和。
+                //
+                // 语义保持不变：
+                //  · hardssh / migration 失败只降级、不阻断（与原来一致）；
+                //  · user-data 失败原本就是致命的 —— await 时照旧抛出，supervisorScope
+                //    下不会连坐另外两个，异常照样向上走启动失败路径。
                 mark("hardssh-install")
-                runCatching { HardsshInstaller(ctx).ensureInstalled() }
-                    .onSuccess { v -> if (v != null) Log.i(TAG, "bundled ssh plugin ready: $v") }
-                    .onFailure { Log.w(TAG, "bundled ssh plugin setup failed: ${it.message}") }
-                step("hardssh-install")
-
-                // 扩展启动迁移（issue #86）：早期装过 android-buildtools 的用户，其 gradle 启动
-                // 脚本仍是「toybox xargs 不剥引号 + JDK user.home/tmpdir 指向 Termux」的原样，
-                // 升级 App 不会自动变好（不重装就不重走安装期补丁）。这里补打，幂等且不抛。
-                withContext(Dispatchers.IO) {
-                    runCatching { ExtensionManager(ctx).migrateGradleLaunchers() }
-                        .onFailure { Log.w(TAG, "extension migration failed: ${it.message}") }
+                supervisorScope {
+                    val hardssh = async(Dispatchers.IO) {
+                        runCatching { HardsshInstaller(ctx).ensureInstalled() }
+                            .onSuccess { v -> if (v != null) Log.i(TAG, "bundled ssh plugin ready: $v") }
+                            .onFailure { Log.w(TAG, "bundled ssh plugin setup failed: ${it.message}") }
+                    }
+                    val migrate = async(Dispatchers.IO) {
+                        runCatching { ExtensionManager(ctx).migrateGradleLaunchers() }
+                            .onFailure { Log.w(TAG, "extension migration failed: ${it.message}") }
+                    }
+                    val userData = async(Dispatchers.IO) { EngineConfig.ensureUserDataExternal(ctx) }
+                    userData.await()
+                    hardssh.await()
+                    migrate.await()
                 }
+                step("hardssh-install")
 
                 // 用户数据外置（v1.2.99）：sessions/workspaces 迁到公开目录（软链），
                 // profiles 保持私有（上游强制凭证 0600，共享存储给不了权限位）。
                 // 必须在 spawn 前完成 —— 引擎启动即读这些目录。
                 mark("user-data")
-                withContext(Dispatchers.IO) { EngineConfig.ensureUserDataExternal(ctx) }
                 step("user-data")
 
                 _state.value = State.Starting
@@ -828,10 +975,30 @@ class EngineSupervisor(private val ctx: Context) {
                         val t1 = System.currentTimeMillis()
                         val restartMs = restartStartedAt?.let { " (total restart took ${t1 - it}ms)" } ?: ""
                         restartStartedAt = null
+                        // v1.5.3：记「曾经成功启动过」。归因器用它区分
+                        // 「新装就起不来」（多半是环境/安装问题）与「用了一阵突然坏」
+                        // （多半是残留/插件/端口），两者建议的动作本来就不该一样。
+                        healthyEverReached.set(true)
                         Log.i(TAG, (if (safe) "engine healthy in SAFE MODE on :${EngineConfig.DEFAULT_PORT}" else "engine healthy on :${EngineConfig.DEFAULT_PORT}") + restartMs)
+                        // 把探针的降级结果一并带出去（详见 Degraded 的注释）。
+                        // `health == null` 表示探针没报告（慢设备/超时）——那不是降级，
+                        // 不能因为"不知道"就告诉用户"坏了"。
+                        val degradedNow = health?.takeIf { !it.ok }?.let { h ->
+                            State.Degraded(
+                                missingServices = h.missingServices,
+                                failedEntries = h.failedEntries.map { it.name },
+                            )
+                        }
+                        if (degradedNow != null) {
+                            Log.w(
+                                TAG,
+                                "engine is up but DEGRADED: ${degradedNow.missingServices.size} " +
+                                    "capability(ies) missing — surfacing to UI so it is visible",
+                            )
+                        }
                         _state.value =
-                            if (safe) State.SafeMode(EngineConfig.DEFAULT_PORT, tokenUrl, notice)
-                            else State.Healthy(EngineConfig.DEFAULT_PORT, tokenUrl, notice)
+                            if (safe) State.SafeMode(EngineConfig.DEFAULT_PORT, tokenUrl, notice, degradedNow)
+                            else State.Healthy(EngineConfig.DEFAULT_PORT, tokenUrl, notice, degradedNow)
                         // 新运行时首次 Healthy：确认安装成功，释放 engine.old 回滚备份。
                         runCatching { RuntimeInstaller(ctx).markHealthy() }
                             .onFailure { Log.w(TAG, "runtime markHealthy failed: ${it.message}") }
@@ -916,8 +1083,10 @@ class EngineSupervisor(private val ctx: Context) {
                 // 重试多少次都必然失败 —— 直接进 Failed 并说清原因，别让用户看着
                 // 「连续 14 次启动失败」的模糊文案反复重装。
                 Log.e(TAG, "runtime architecture mismatch — stopping (retrying cannot help)", e)
-                _state.value = State.Failed(ctx.getString(R.string.error_runtime_arch_mismatch))
-                BootTrace.fail(ctx, ctx.getString(R.string.error_runtime_arch_mismatch))
+                failTerminal(
+                    ctx.getString(R.string.error_runtime_arch_mismatch),
+                    overrideCause = EngineTriage.Cause.RUNTIME_ARCH,
+                )
                 return
             } catch (e: Exception) {
                 if (shouldExitLoop()) break
@@ -964,9 +1133,10 @@ class EngineSupervisor(private val ctx: Context) {
             // 一个可操作的提示，否则就是永动机式的重启风暴。
             if (crashed && looksLikeAuthFailure()) {
                 Log.e(TAG, "auth/credential failure detected — retrying cannot help, asking user to re-authenticate")
-                val msg = ctx.getString(R.string.error_auth_expired)
-                _state.value = State.Failed(msg)
-                BootTrace.fail(ctx, msg)
+                failTerminal(
+                    ctx.getString(R.string.error_auth_expired),
+                    overrideCause = EngineTriage.Cause.AUTH_EXPIRED,
+                )
                 return
             }
             if (crashed) {
@@ -996,8 +1166,15 @@ class EngineSupervisor(private val ctx: Context) {
                         "port reclaim exhausted (${EngineConfig.MAX_PORT_RECLAIMS} lifetime attempts) — " +
                             "port ${EngineConfig.DEFAULT_PORT} is held by a foreign process",
                     )
-                    _state.value = State.Failed(
-                        "port ${EngineConfig.DEFAULT_PORT} is in use by another process",
+                    // ★v1.5.3：原来这里是一句**硬编码英文**，五语种都没有它，
+                    //   中文/德语用户看到的是英文；而且不给任何出路，只能重启 App。
+                    //   现在走本地化文案 + 归因器给出 RECLAIM_PORT / RESTART 按钮。
+                    failTerminal(
+                        ctx.getString(
+                            R.string.error_port_foreign,
+                            EngineConfig.DEFAULT_PORT,
+                        ),
+                        overrideCause = EngineTriage.Cause.PORT_FOREIGN,
                     )
                     break
                 }
@@ -1054,7 +1231,9 @@ class EngineSupervisor(private val ctx: Context) {
             // 统一走退避重启
             backoffIndex++
             if (backoffIndex > EngineConfig.MAX_RESTART) {
-                _state.value = State.Failed(ctx.getString(R.string.error_restart_failed_streak, EngineConfig.MAX_RESTART))
+                failTerminal(
+                    ctx.getString(R.string.error_restart_failed_streak, EngineConfig.MAX_RESTART),
+                )
                 return
             }
             val delayMs = EngineConfig.BACKOFF_STEPS[
@@ -1077,7 +1256,13 @@ class EngineSupervisor(private val ctx: Context) {
                 Log.i(TAG, "plugin health marker received (ok=${health.ok})")
                 return@withContext health
             }
-            Thread.sleep(200L)
+            // v1.6.0：200ms → 50ms。
+            // 实测（logcat）HTTP 端口就绪到 marker 落盘只差约 260ms，而这段
+            // 等待是**纯粹串行**叠加在启动路径上的 —— marker 早写完了我们还在睡。
+            // 200ms 粒度平均白等 100ms、最坏 200ms。
+            // 降到 50ms 后 readHealth 只是读一个小 JSON（实测 <1ms），
+            // 20 秒超时下最多 400 次读，代价可忽略。
+            Thread.sleep(50L)
         }
         null
     }
@@ -1087,11 +1272,22 @@ class EngineSupervisor(private val ctx: Context) {
         get() = process?.exitFuture?.takeIf { it.isDone }?.get()
 
     private fun spawnEngine(bootId: String): EngineProcess {
+        // spawn 内部逐项打点：boot step 只报「spawn 合计」，不细分就看不出
+        // 236ms 花在哪（本轮压缩冷启时正是靠这些数才知道 su 只占 20ms、
+        // 大头在文件自愈与 patch 生成）。日志级别 D，正常使用不可见。
+        val sp0 = System.currentTimeMillis()
+        var spT = sp0
+        fun sp(name: String) {
+            val now = System.currentTimeMillis()
+            Log.d(TAG, "spawn step $name: ${now - spT}ms")
+            spT = now
+        }
         // 【v1.2.32】启动前孤儿清理：App 被强杀/force-stop 后，引擎 node 可能成孤儿
         // 继续占着 3080（普通模式与 App 同 uid；Root 模式需 su）。此时新引擎必然
         // EADDRINUSE 无限重启（用户实测 62 次）。pkill 只匹配我们的引擎路径，
         // 不会误伤其他进程；正常重启（旧引擎已 stop）端口已释放，此处为 no-op。
         cleanupOrphanEngine()
+        sp("orphan-cleanup")
         // 【v1.2.36】记录本次启动的日志起点：token 提取只认这段之后的输出。
         // 否则健康探测先于 stdout 泵送达 "dsh web: ?token=" 行时，会提取到上一次
         // 引擎的旧 token → WebView 加载已失效地址 → "Webpage not available"
@@ -1100,18 +1296,36 @@ class EngineSupervisor(private val ctx: Context) {
         val mode = Privilege.getMode(ctx)
         var suPath: String? = null
         if (mode == PrivMode.ROOT) {
-            // Root 保护壳：先备份用户资产 dsh-home，再以 su 整体提权启动引擎。
-            // 即便 Root 引擎误改 dsh-home，用户仍可回滚；备份失败不阻断启动，仅告警。
-            val backup = Privilege.backupHome(ctx)
-            Log.w(TAG, if (backup != null) "ROOT mode: dsh-home backed up to $backup" 
-                  else "ROOT mode: WARNING — dsh-home backup failed")
+            // Root 保护壳：备份用户资产 dsh-home 后再以 su 整体提权启动引擎。
+            //
+            // ★备份必须**异步**，不能挡在启动路径上。
+            //
+            // 原实现在这里同步跑 Privilege.backupHome（内部 /system/bin/tar 打包），
+            // 实测固定吃 100~250ms —— dsh-home 越大越慢，而它只是「附加保护」：
+            // 注释早就写了「绝不能拖住启动」，却一直是同步调用。现在丢到独立线程，
+            // 启动立刻继续；备份本身仍有 60s 预算，失败只告警。
+            //
+            // 时序上仍然够用：引擎起来后要先加载插件（约 1.2 秒）、再建立会话，
+            // 那时才可能写 dsh-home，异步 tar（20ms 量级）早已结束。
+            Thread({
+                runCatching {
+                    val backup = Privilege.backupHome(ctx)
+                    Log.w(
+                        TAG,
+                        if (backup != null) "ROOT mode: dsh-home backed up to $backup"
+                        else "ROOT mode: WARNING — dsh-home backup failed",
+                    )
+                }
+            }, "dsh-home-backup").apply { isDaemon = true }.start()
             suPath = Privilege.findSu() ?: throw EngineStartException(
                 ctx.getString(R.string.error_root_no_su)
             )
+            sp("backup-home(async)")
         }
         // v1.2.159：启动前自愈 engine/bin 的 Termux shebang（真机 37 个 wrapper 指向不存在的
         // 路径 → getprop/logcat/node 直接崩）。幂等，仅改第一行。
         runCatching { EngineConfig.healTermuxShebangs(ctx) }
+        sp("heal-shebangs")
         // v1.4.65：清掉 profile 的 pnpm-workspace.yaml 里 pnpm 11 已删除、且裸写
         // scoped 包名会让整份 YAML 解析失败的历史构建白名单键（`onlyBuiltDependencies:`
         // 等）。不清掉 pnpm 会直接 `× load configuration → unexpected character: '@'`，
@@ -1122,6 +1336,7 @@ class EngineSupervisor(private val ctx: Context) {
                 Log.i(TAG, "healed pnpm-workspace.yaml (dropped obsolete build whitelist keys)")
             }
         }
+        sp("heal-pnpm")
         // 内置 SSH 远程工作区（@xiaopb/dsh-hardssh）：插件随 runtime.zip 发布，
         // 这里补 profile 模块链接并取回它自己的 patch 层。顺序必须保持：
         //   ① 插件层：禁用 fs-sandbox/subprocess、插入 hardssh 接缝行
@@ -1132,6 +1347,70 @@ class EngineSupervisor(private val ctx: Context) {
             .getOrNull()?.let { patchPaths.add(it) }
         runCatching { EngineConfig.ensureAndroidOverlay(ctx).absolutePath }
             .getOrNull()?.let { patchPaths.add(it) }
+        sp("patches")
+        // ==================== 运行模式选择 ====================
+        // 用户可选让引擎跑在 Linux 容器里（完整 Alpine 用户态，可 apk 装软件、
+        // 跑完整编译链）。环境未就绪时**回退原生**而不是拒绝启动 —— 但回退会
+        // 记进 EngineModeSelector.lastMode/lastReason，UI 必须显示「兼容模式」，
+        // 不允许静默降级（否则用户以为在用完整 Linux，装了 gcc 却发现编不了）。
+        val engineMode = EngineModeSelector.resolve(ctx)
+        sp("mode-resolve")
+        if (engineMode == EngineModeSelector.Mode.LINUX) {
+            runCatching {
+                val launcher = LinuxEngineLauncher.get(ctx)
+                // v1.6.2：编译缓存刷盘器。部署失败返回 null → 退回「无缓存」老行为，
+                // 绝不让这条纯优化路径挡住启动。
+                val cacheFlusher = EngineConfig.deployCompileCacheFlusher(ctx)
+                // 门脚本改指容器 bash：Linux 模式不走 buildEnv，不重写的话
+                // $root/bin 里留的是原生模式的版本，exec 的是 bionic bash ——
+                // 在 musl 容器里 dlopen 失败，dev/scr/loop/notify 全废。
+                runCatching { EngineConfig.deployLinuxAgentGates(ctx) }
+                    .onFailure { Log.w(TAG, "linux gate redeploy failed: ${it.message}") }
+                val spec = launcher.buildEngineArgv(
+                    port = EngineConfig.DEFAULT_PORT,
+                    bootId = bootId,
+                    patchPaths = patchPaths,
+                    compileCacheFlusher = cacheFlusher,
+                )
+                Log.i(
+                    TAG,
+                    "spawning engine in LINUX container: ${spec.argv.joinToString(" ").take(400)}",
+                )
+                return EngineProcess.spawn(
+                    // 容器模式下这几个参数不参与拼装（override 全权负责 argv）
+                    nodeBin = EngineConfig.nodeBin(ctx),
+                    entryJs = EngineConfig.dshEntry(ctx),
+                    cwd = spec.cwd,
+                    env = spec.env.toTypedArray(),
+                    logFile = logFile(),
+                    // ROOT 模式下仍走 su：原生引擎历史上以 root 身份创建了
+                    // dsh-home 的文件，容器以 App uid 写会 EACCES（实测
+                    // profiles/web/cordis.yml）。普通模式下 suPath 为 null，
+                    // 容器直接以 App uid 起 —— 免 root 能力不受影响。
+                    suPath = suPath,
+                    override = EngineProcess.Companion.Override(argv = spec.argv, cwd = spec.cwd),
+                )
+            }.onFailure { e ->
+                // 容器启动失败 → 回退原生（可观测，不静默）
+                Log.e(TAG, "linux container spawn failed, falling back to native: ${e.message}", e)
+                EngineModeSelector.setLinuxEnabled(ctx, EngineModeSelector.isLinuxEnabled(ctx))
+                lastLinuxFailure = "container spawn failed: ${e.message}"
+            }
+        }
+        // 原生模式的编译缓存刷盘器（v1.5.2）。
+        //
+        // 与 Linux 分支同一套机制：`NODE_COMPILE_CACHE` 是**懒写盘**的 —— 引擎跑到
+        // 就绪那一刻缓存目录里还是 0 个文件，只有优雅退出才落盘；而 App 停引擎用的是
+        // kill -9，缓存永远写不进去，这个优化就完全等于不存在。刷盘器由 `node --require`
+        // 注入，起一个 unref 定时器定期 flushCompileCache()。
+        //
+        // 部署失败返回 null → 退回「无缓存」老行为（纯优化，不能挡启动）。
+        //
+        // ⚠️ forContainer = false：原生模式没有 `/eng` 挂载点（那是容器里的 bind），
+        // 必须拿宿主绝对路径。传容器路径会让 node 预加载失败、整个引擎起不来。
+        val nativeFlusher = runCatching {
+            EngineConfig.deployCompileCacheFlusher(ctx, forContainer = false)
+        }.getOrNull()
         return EngineProcess.spawn(
             nodeBin = EngineConfig.nodeBin(ctx),
             entryJs = EngineConfig.dshEntry(ctx),
@@ -1140,8 +1419,14 @@ class EngineSupervisor(private val ctx: Context) {
             logFile = logFile(),
             suPath = suPath,
             patchPaths = patchPaths,
+            extraFlags = nativeFlusher?.let { listOf("--require", it) } ?: emptyList(),
         )
     }
+
+    /** 最近一次 Linux 容器启动失败的原因（回退原生时留痕，供 UI/日志排查） */
+    @Volatile
+    var lastLinuxFailure: String? = null
+        private set
 
     /** 引擎默认端口当前是否真被占用。
      *
@@ -1151,7 +1436,19 @@ class EngineSupervisor(private val ctx: Context) {
      * 现在区分两种结果：连上 = 占用；连不上但内核报 RST/拒绝 = 空闲；
      * 其它（超时/未知）**按占用处理** —— 宁可多清一次（清场对空闲端口是 no-op），
      * 也不能漏掉真正的占用者。 */
-    private fun portInUse(timeoutMs: Int = 700): Boolean {
+    /**
+     * 端口探测超时。
+     *
+     * 默认从 700ms 降到 120ms。语义要注意：**端口空闲时 connect 会立刻被拒**
+     * （ConnectException，几毫秒返回），耗时只在「有人监听但握手慢」或
+     * 「被防火墙丢包」这两种异常情况下才吃满超时。所以默认值调小不会增加
+     * 漏判风险，只减少异常路径的等待。
+     *
+     * 实测依据：冷启时 orphan-reap 稳定吃 222ms，其中绝大部分是这里在
+     * 「端口本来就空闲」的情况下走完了超时分支（Android 上 connect 到
+     * 未监听端口在某些机型会先 SYN 超时而不是立刻 RST）。
+     */
+    private fun portInUse(timeoutMs: Int = 120): Boolean {
         return try {
             java.net.Socket().use { s ->
                 s.connect(java.net.InetSocketAddress("127.0.0.1", EngineConfig.DEFAULT_PORT), timeoutMs)
@@ -1336,7 +1633,13 @@ class EngineSupervisor(private val ctx: Context) {
                 // token 的 WebUI 地址写进 engine.log（这是它独有的启动证据），
                 // 两者同时成立才算就绪。任一方独占 3080 都无法伪造这个组合。
                 if (code in 200..499) {
-                    val tokenUrl = extractTokenUrl()
+                    // ⚠️ v1.6.20：这里只给 2 次短重试，**不能沿用默认的 6 次**。
+                    // extractTokenUrl 内部每轮 sleep 100ms，6 次 = 最多阻塞 600ms；
+                    // 而 pollHealth 本身每 100ms 就会重来一轮 —— 两层重试叠在一起时，
+                    // 「token 行还没落到 engine.log」的那零点几秒里，外层循环被内层
+                    // 睡眠占住，等令牌出现后又要等内层睡满才返回，白等 0~400ms。
+                    // 内层少睡一点、把重试交给外层，探测更跟手。
+                    val tokenUrl = extractTokenUrl(attempts = 2)
                     if (!tokenUrl.isNullOrBlank()) return@withContext true
                 }
             } catch (_: Exception) {

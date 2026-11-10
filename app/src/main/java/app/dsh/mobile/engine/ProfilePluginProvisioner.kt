@@ -19,7 +19,7 @@ import java.security.MessageDigest
  *
  * ## 与内置能力（ssh / narrow-*）的分工
  * 本类只负责「**feature 插件**」：APK 带 tgz，装进 profile，之后归用户管。
- * 引擎补丁类（narrow-sidebar / chat-perf / priv-mode 等）是宿主兼容层，必须恒开，
+ * 引擎补丁类（chat-perf / priv-mode / device-tools 等）是宿主兼容层，必须恒开，
  * 继续走 overlay。
  *
  * ## 生命周期：只在首次安装时默认开启
@@ -62,16 +62,29 @@ object ProfilePluginProvisioner {
     const val MOBILE_LAYOUT_PKG = "@xiaopb/dsh-mobile-layout"
 
     /**
+     * 解决方案浏览器（VS Code 式文件树 + 完整源码控制，替换 Web GUI 右侧栏）。
+     *
+     * 与 mobile-layout 的差异：它**带 npm 运行时依赖**（highlight.js、
+     * omni-doc-viewer），首装时 pnpm 会去 registry 解析它们 —— 所以首装需要
+     * 网络；升级走直接解包，不再需要网络（见 [extractTgzInto] 的说明）。
+     */
+    const val SOLUTION_EXPLORER_PKG = "@xiaopb/dsh-solution-explorer"
+
+    /**
      * 一个随 APK 分发、以 profile bundle 形式安装的插件。
      *
      * @param pkg       npm 包名（profile 的 dependencies / bundles 里的键）
      * @param assetRoot `assets/<assetRoot>/`：内含 `<pkg>-<version>.tgz` 与 `bundle.json`
      * @param enabledOnFirstRun 首装时是否挂到 bundles；默认开。只在首装求值一次。
+     * @param hasNpmDependencies 包内 `dependencies` 非空 —— 首装时 pnpm 必须联网
+     *   到 registry 解析它们。仅用于日志与文档说明，不改变安装流程（升级走直接
+     *   解包，不受影响）。
      */
     private data class BundledProfilePlugin(
         val pkg: String,
         val assetRoot: String,
         val enabledOnFirstRun: (Context) -> Boolean = { true },
+        val hasNpmDependencies: Boolean = false,
     )
 
     /**
@@ -91,6 +104,16 @@ object ProfilePluginProvisioner {
             //    随时可开，但默认不改变用户的竖屏方案。
             // 无论哪个分支，都只在**首装**执行一次，之后不再干预用户状态。
             enabledOnFirstRun = { app.dsh.mobile.MainActivity.officialMobileUiEnabled(it) },
+        ),
+        BundledProfilePlugin(
+            pkg = SOLUTION_EXPLORER_PKG,
+            assetRoot = "solution-explorer",
+            // 默认**不挂载**，理由不是「怕出问题」，而是它改写 Web GUI 的整个
+            // 右侧栏（VS Code 式文件树 + 源码控制），属于主张很强的界面替换。
+            // 让用户先在插件页看到它、自己决定要不要开，比替他做决定更合适 ——
+            // 与 mobile-layout「跟随设置开关」是同一原则：默认不改变既有体验。
+            enabledOnFirstRun = { false },
+            hasNpmDependencies = true,
         ),
     )
 
@@ -144,9 +167,28 @@ object ProfilePluginProvisioner {
     private fun ensure(ctx: Context, plugin: BundledProfilePlugin) {
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-        // 非首次安装：一个字节都不动（用户可能关掉/卸载/自己升级过它）。
+        // 预装过一次之后：**不再「一个字节都不动」**，而是只在「随包版本比装着的
+        // 新」时升级。这是 v1.5.x 修的真实缺陷 —— 原实现只判 provisioned 标记就
+        // 直接 return，于是 CI 把新 tgz 打进 APK 也没用，老用户永远停在首次安装
+        // 那一版（实测设备 0.4.5 / npm 已 0.4.8，UI 修复传不到存量用户）。
+        //
+        // 升级有严格边界，缺一条都不动：
+        //   1. node_modules 里还在 —— 用户彻底卸载过就尊重这个意图，不偷偷装回去；
+        //   2. 随包版本 > 已装版本 —— 用户自己装了更新版时绝不降级；
+        //   3. 升级只换文件与依赖版本号，**绝不碰 bundles 挂载状态**（那是用户的开关）。
         if (prefs.getBoolean(key(plugin), false)) {
-            Log.i(TAG, "${plugin.pkg}: already provisioned on this install; leaving state untouched")
+            val bundled = readAsset(ctx, plugin)?.version
+            val current = installedVersion(ctx, plugin.pkg)
+            if (bundled == null || current == null) {
+                Log.i(TAG, "${plugin.pkg}: already provisioned (bundled=$bundled current=$current); nothing to do")
+                return
+            }
+            if (compareVersions(bundled, current) <= 0) {
+                Log.i(TAG, "${plugin.pkg}: provisioned at $current; bundled $bundled not newer")
+                return
+            }
+            Log.i(TAG, "${plugin.pkg}: upgrading $current -> $bundled from bundled tgz")
+            install(ctx, plugin, readAsset(ctx, plugin)!!, prefs, upgradeFrom = current)
             return
         }
 
@@ -176,8 +218,21 @@ object ProfilePluginProvisioner {
         }
 
         // 没网就别试 —— 必然失败，还要白等两分钟。等下次启动（恢复网络后）再说。
+        //
+        // 为什么「必然失败」取决于包里有没有 npm 依赖：
+        //   · 无依赖的包（mobile-layout）install 就是把 tgz 解进 profile，
+        //     离线也能成 —— 但 pnpm 仍会尝试解析 peerDependencies 并可能报警，
+        //     且这里无法可靠区分「能成」与「会卡」，所以统一按需网处理；
+        //   · 有依赖的包（solution-explorer：highlight.js、omni-doc-viewer）
+        //     必须联网让 pnpm 从 registry 取，离线一定失败。
+        // 两种情况在离线时都只是「推迟到下次启动」，不写失败退避，所以用户联网后
+        // 重启一次就能装上，不会因为首启没网而永久跳过。
         if (!app.dsh.mobile.update.NetworkState.isOnline(ctx)) {
-            Log.i(TAG, "${plugin.pkg}: offline; defer provisioning to next boot")
+            Log.i(
+                TAG,
+                "${plugin.pkg}: offline; defer provisioning to next boot" +
+                    if (plugin.hasNpmDependencies) " (this plugin resolves npm deps, network required)" else "",
+            )
             return
         }
 
@@ -232,6 +287,7 @@ object ProfilePluginProvisioner {
         plugin: BundledProfilePlugin,
         asset: AssetBundle,
         prefs: android.content.SharedPreferences,
+        upgradeFrom: String? = null,
     ) {
         val staged = File(ctx.filesDir, "plugin-staging").apply { mkdirs() }
             .resolve(File(asset.tgz).name.removeSuffix(".tgz") + "-staged.tgz")
@@ -246,10 +302,50 @@ object ProfilePluginProvisioner {
                     "tgz sha256 mismatch (got $got, want $want)"
                 }
             }
+            // 升级路径：**直接解包覆盖，不走 pnpm**。
+            //
+            // 升级与首装的语义不同：首装要让引擎知道「多了一个包」（写 dependencies、
+            // 解析 lockfile、可能补 bundle），必须由 CLI 完成；而升级只是「同一个包
+            // 换一批文件」，引擎每次启动读的都是 node_modules 里的实体内容，
+            // dependencies 里的版本号仅供插件页显示。
+            //
+            // 而 CLI 在升级场景下已被实测证明不可用（四种做法全失败，pnpm.log 空、
+            // 1.3 秒 no-op —— 详见 [extractTgzInto] 的表）。绕开它反而更可靠：
+            // 无网络依赖、无 lockfile 参与、失败时旧版本原样保留。
+            if (upgradeFrom != null) {
+                val dest = File(profileDir(ctx), "node_modules/${plugin.pkg}")
+                if (!dest.parentFile!!.isDirectory) {
+                    Log.w(TAG, "${plugin.pkg}: node_modules missing; cannot upgrade in place")
+                    recordFailure(prefs, plugin.pkg)
+                    return
+                }
+                val installed = extractTgzInto(staged, dest)
+                if (installed == null || compareVersions(installed, upgradeFrom) <= 0) {
+                    Log.w(
+                        TAG,
+                        "${plugin.pkg}: upgrade $upgradeFrom -> ${asset.version} failed " +
+                            "(extracted=$installed; old version left in place)",
+                    )
+                    recordFailure(prefs, plugin.pkg)
+                    return
+                }
+                // 不碰 dependencies / lockfile：升级只换 node_modules 里的实体文件，
+                // `file:` 依赖与暂存 tgz 都还在原位，pnpm 的结构保持自洽。
+                // （早期版本在这里调过 normalizeDependencySpec，会把 importers
+                //  的 specifier 改成纯版本号而 packages/snapshots 仍是 file:，
+                //   之后所有 pnpm 操作都报 broken lockfile。）
+                // **绝不碰 bundles**：用户的开关状态不因为「随包带了新版」而改变。
+                markProvisioned(prefs, plugin, installed)
+                clearFailure(prefs, plugin.pkg)
+                Log.i(TAG, "${plugin.pkg}: upgraded $upgradeFrom -> $installed by direct extraction")
+                return
+            }
             val (ok, msg) = PluginCenter.addLocalTarball(ctx, staged)
             if (!ok) {
-                // 不写 provisioned 标记 → 下次启动还会重试；但要记一次失败，
+                // 首装失败不写 provisioned 标记 → 下次启动还会重试；但要记一次失败，
                 // 用退避把「每次都白等 120s」变成「隔几小时试一次」。
+                // 升级失败不写标记以外的东西：旧版本仍在盘上、仍可用，只是这次没升上去；
+                // 同样记退避，避免每次开机都白等两分钟。
                 Log.w(TAG, "${plugin.pkg}: install failed: $msg")
                 recordFailure(prefs, plugin.pkg)
                 return
@@ -259,7 +355,34 @@ object ProfilePluginProvisioner {
             // 依赖会直接失败。装完立刻改回普通版本号：node_modules 里已是实体文件，
             // 引擎不读 dependencies，插件页的「更新」也能正常走 registry。
             val effective = installedVersion(ctx, plugin.pkg) ?: asset.version
-            normalizeDependencySpec(ctx, plugin.pkg, effective)
+            // 不调用 normalizeDependencySpec：见本函数末尾 finally 里的说明。
+            // 把 `file:` 改回纯版本号会让 lockfile 的 packages/snapshots 与
+            // importers 不一致，之后所有 pnpm 操作都会报 broken lockfile。
+            // 升级路径到此为止：**只换文件与依赖版本号，绝不碰 bundles**。
+            // 用户的开关状态（挂载/摘掉）不因为「随包带了新版」而改变。
+            if (upgradeFrom != null) {
+                // ⚠️ 必须用**安装后重新读到的**版本判断升级是否真的发生。
+                //
+                // `dsh plugin add <tgz>` 对「dependencies 里已是同一版本」是 no-op，
+                // 而 installedVersion() 读的是 node_modules 里的实体文件 —— 若 pnpm
+                // 认定已满足而没换文件，effective 就等于 upgradeFrom。此时若照样
+                // markProvisioned + 打「upgraded X -> X」，会把**没成功的升级记成
+                // 成功**：下次启动仍判 bundled > current，于是每次开机都白等一轮
+                // pnpm（实测 10 秒）。如实记录，不谎报。
+                if (effective == upgradeFrom) {
+                    Log.w(
+                        TAG,
+                        "${plugin.pkg}: upgrade $upgradeFrom -> ${asset.version} did NOT take " +
+                            "effect (still $effective; pnpm treated it as satisfied) — will retry next boot",
+                    )
+                    clearFailure(prefs, plugin.pkg)   // 不是「失败」，下次仍该试
+                    return
+                }
+                markProvisioned(prefs, plugin, effective)
+                clearFailure(prefs, plugin.pkg)
+                Log.i(TAG, "${plugin.pkg}: upgraded $upgradeFrom -> $effective (bundles untouched)")
+                return
+            }
             // `dsh plugin add <tgz>` 对「dependencies 里已存在同一版本」的包是 no-op：
             // pnpm 认为已满足，bundles 不会被补上。而「用户关掉插件」恰恰就是这个
             // 形态（deps 在、bundles 被摘）。所以要挂载就得自己补，或自己摘掉 ——
@@ -268,13 +391,40 @@ object ProfilePluginProvisioner {
                 ensureBundleEntry(ctx, plugin.pkg)
             } else {
                 removeBundleEntry(ctx, plugin.pkg)
-                Log.i(TAG, "${plugin.pkg}: installed but left off (app setting says narrow-* scheme)")
+                // 文案必须通用：这句话原本写死成「app setting says narrow-* scheme」，
+                // 只对 mobile-layout 成立；solution-explorer 是「默认不替用户换界面」，
+                // 照抄那句会让以后查日志的人以为是竖屏方案在起作用。
+                Log.i(TAG, "${plugin.pkg}: installed but left off (enabledOnFirstRun=false)")
             }
             markProvisioned(prefs, plugin, effective)
             clearFailure(prefs, plugin.pkg)
             Log.i(TAG, "${plugin.pkg}: installed $effective on first run (effective on this boot)")
         } finally {
-            staged.delete()
+            // ⚠️ 成功时**不删**暂存 tgz（v1.6.19 修的真实回归）。
+            //
+            // `pnpm add <tgz>` 会把依赖记成 `file:<staging 路径>`，并在
+            // `pnpm-lock.yaml` 的 importers / packages / snapshots 三处都写上
+            // 这个路径。暂存文件一删，lockfile 立刻变成悬空引用：
+            //
+            //     ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY
+            //     Broken lockfile: no entry for '<pkg>' in pnpm-lock.yaml
+            //
+            // 后果不是「只有这一个插件坏」，而是**之后每一次 pnpm 操作全失败**
+            // —— 装第二个插件时撞到的正是这条（实测 solution-explorer 首装
+            // 报的就是 mobile-layout 的 lockfile 缺条目）。
+            //
+            // 曾经的做法是事后把 package.json 的 `file:` 改回纯版本号，但那只
+            // 改了 importers，packages 里的 `tarball:` 与 snapshots 的键仍是
+            // file: 形态 → 一样自相矛盾。lockfile 是 pnpm 的派生结构，不许
+            // 手工外科手术。正解是让文件留着，lockfile 从头到尾保持自洽。
+            //
+            // 文件名自带版本号（`<pkg>-<ver>-staged.tgz`），各版本互不覆盖，
+            // 所以旧版本记录也始终能解析到自己的文件。单份 190KB~4MB。
+            if (!runCatching { installedVersion(ctx, plugin.pkg) }.getOrNull().isNullOrBlank()) {
+                Log.i(TAG, "${plugin.pkg}: keeping ${staged.name} so pnpm-lock.yaml stays resolvable")
+            } else {
+                staged.delete()
+            }
         }
     }
 
@@ -369,23 +519,7 @@ object ProfilePluginProvisioner {
      * 只在当前值确实是 `file:` 时改写 —— 用户自己用 registry 装过的记录
      * （普通 semver / range）原样保留。写入走 tmp + rename，避免半个 JSON。
      */
-    private fun normalizeDependencySpec(ctx: Context, pkg: String, version: String) {
-        runCatching {
-            val manifest = File(profileDir(ctx), "package.json")
-            if (!manifest.isFile) return@runCatching
-            val root = JSONObject(manifest.readText())
-            val deps = root.optJSONObject("dependencies") ?: return@runCatching
-            if (!deps.optString(pkg).startsWith("file:")) return@runCatching
-            deps.put(pkg, version)
-            val tmp = File(manifest.parentFile, "package.json.tmp")
-            tmp.writeText(root.toString(2))
-            if (!tmp.renameTo(manifest)) {
-                manifest.delete()
-                check(tmp.renameTo(manifest)) { "cannot replace ${manifest.absolutePath}" }
-            }
-            Log.i(TAG, "$pkg: dependency spec -> $version (was a local tarball path)")
-        }.onFailure { Log.w(TAG, "$pkg: cannot normalize dependency spec: ${it.message}") }
-    }
+
 
     // ── 资产与标记 ─────────────────────────────────────────────────────────
 
@@ -406,6 +540,54 @@ object ProfilePluginProvisioner {
     }
 
     private fun key(plugin: BundledProfilePlugin): String = "provisioned:" + plugin.pkg
+
+    /**
+     * 比较两个 npm 语义化版本号：返回 <0 表示 a 旧于 b，0 相同，>0 表示 a 新于 b。
+     *
+     * 为什么不用 `String.compareTo`：字符串比较下 `"0.4.10" < "0.4.8"`（逐字符），
+     * 0.4.9 之后就会判错、导致该升级时不升级。必须按数字段比较。
+     *
+     * 只实现升级判定需要的子集：`major.minor.patch` 数字段 + 可选 prerelease。
+     * prerelease 规则按 semver：有 prerelease 的**低于**同号正式版
+     * （`0.5.0-rc.1 < 0.5.0`）。`v` 前缀与 `build+meta` 忽略。
+     *
+     * 非法输入一律返回 0（视为「不更新」），宁可不动也不要降级装错。
+     */
+    internal fun compareVersions(a: String, b: String): Int {
+        fun normalize(v: String): Pair<List<Int>, List<String>>? {
+            var s = v.trim().removePrefix("v").removePrefix("V")
+            s = s.substringBefore('+')
+            val core = s.substringBefore('-')
+            val pre = if (s.contains('-')) s.substringAfter('-') else ""
+            val nums = core.split('.').map { it.toIntOrNull() ?: return null }
+            if (nums.isEmpty()) return null
+            val pres = if (pre.isEmpty()) emptyList() else pre.split('.')
+            return nums to pres
+        }
+        val pa = normalize(a) ?: return 0
+        val pb = normalize(b) ?: return 0
+        val (na, prea) = pa
+        val (nb, preb) = pb
+        // 先按数字段比，缺位补 0（1.2 == 1.2.0）
+        for (i in 0 until maxOf(na.size, nb.size)) {
+            val x = na.getOrElse(i) { 0 }
+            val y = nb.getOrElse(i) { 0 }
+            if (x != y) return x.compareTo(y)
+        }
+        // 数字段相同：无 prerelease 的更大；都有则逐段比（数字段按数值，其余按字典序）
+        if (prea.isEmpty() && preb.isEmpty()) return 0
+        if (prea.isEmpty()) return 1
+        if (preb.isEmpty()) return -1
+        for (i in 0 until maxOf(prea.size, preb.size)) {
+            val x = prea.getOrNull(i) ?: return -1
+            val y = preb.getOrNull(i) ?: return 1
+            val nx = x.toIntOrNull()
+            val ny = y.toIntOrNull()
+            val c = if (nx != null && ny != null) nx.compareTo(ny) else x.compareTo(y)
+            if (c != 0) return c
+        }
+        return 0
+    }
 
     private fun pendingKey(pkg: String): String = "pending-enabled:" + pkg
 
@@ -440,5 +622,150 @@ object ProfilePluginProvisioner {
             }
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * 把 npm `.tgz` 直接解到 `node_modules/<pkg>`，**完全不经过 pnpm**。
+     *
+     * ## 为什么要绕开 pnpm（v1.6.18 实测，四次尝试后定论）
+     *
+     * 升级场景下 `dsh plugin add <tgz>` 无法可靠工作，四种做法全试过：
+     *
+     * | 做法 | 结果 |
+     * |---|---|
+     * | 只改 package.json 版本号再 add | pnpm 判「已满足」，1.3 秒 no-op 返回 |
+     * | 同时外科改 lockfile | 拼出矛盾 lockfile，pnpm 报 badly resolved merge conflict |
+     * | 先删 node_modules 再 add | `installedVersion()==null` → ensure() 早退，包丢了 |
+     * | 先把 deps 摘掉再 add | pnpm 仍按旧 lockfile 解析，装的还是旧版 |
+     *
+     * 决定性证据：升级尝试里 `.plugin-manager/logs/<op>/pnpm.log` 是**空文件**、
+     * 整个操作 1.3 秒完成（真实安装要 10 秒+）—— pnpm 根本没跑起来，被上游
+     * `dsh-plugin-manager` 在更早的位置判成「无需操作」短路了。
+     *
+     * 而 tgz 就在 APK 里、目标目录已知、`node_modules` 里是实体目录（不是
+     * pnpm 的符号链接，`ls -la` 已实测确认），所以直接解压可行且最快：
+     * 无网络、无 pnpm、无 lockfile 参与，纯文件覆盖。
+     *
+     * 解压到临时目录再整体换位，避免留下半套文件：解压失败时旧版本原封不动。
+     *
+     * @return 成功返回新版本号，失败返回 null（旧版本保持不变）
+     */
+    private fun extractTgzInto(tgz: File, dest: File): String? = runCatching {
+        val staging = File(dest.parentFile, dest.name + ".upgrade-new")
+        staging.deleteRecursively()
+        check(staging.mkdirs()) { "cannot create ${staging.absolutePath}" }
+        var entries = 0
+        java.util.zip.GZIPInputStream(tgz.inputStream().buffered()).use { gz ->
+            val din = java.io.DataInputStream(gz)
+            val header = ByteArray(512)
+            while (true) {
+                var off = 0
+                while (off < 512) {
+                    val r = din.read(header, off, 512 - off)
+                    if (r < 0) break
+                    off += r
+                }
+                if (off < 512) break                          // 流尾
+                if (header.all { it == 0.toByte() }) break    // 零块 = 结束
+                val name = String(header, 0, 100, Charsets.UTF_8).trimEnd('\u0000')
+                val size = tarOctal(header, 124, 12)
+                val type = header[156].toInt().toChar()
+                if (name.isEmpty()) break
+                // npm 包固定以 `package/` 为前缀，剥掉这一层
+                val rel = name.removePrefix("package/").trim('/')
+                if (rel.isEmpty() || rel == "package") {
+                    skipEntryBody(din, size, false)
+                    continue
+                }
+                val out = File(staging, rel)
+                var bodyRead = false
+                when (type) {
+                    '5' -> out.mkdirs()                       // 目录：内容为空
+                    '0', '\u0000' -> {                        // 普通文件
+                        out.parentFile?.mkdirs()
+                        out.outputStream().use { o ->
+                            var left = size
+                            val buf = ByteArray(1 shl 16)
+                            while (left > 0) {
+                                val n = din.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+                                if (n < 0) throw java.io.EOFException("tar body truncated at $rel")
+                                o.write(buf, 0, n)
+                                left -= n
+                            }
+                        }
+                        entries++
+                        bodyRead = true
+                    }
+                    else -> Unit                              // 软链等：npm 包不含，整体跳过
+                }
+                // 内容已读 → 只吃 512 对齐；未读 → 连内容一起跳。
+                // ⚠️ 对齐必须按**真实 size** 算：传 0 会算出 pad=0，下一个头
+                // 就落在正文中间（实测症状：只解出第 1 个文件 LICENSE 就停）。
+                skipEntryBody(din, size, bodyRead)
+            }
+        }
+        val produced = staging.walkTopDown().filter { it.isFile }.map { it.relativeTo(staging).path }
+            .toList()
+        Log.i(TAG, "${dest.name}: extracted $entries entries; files=${produced.take(12)}")
+        val newVer = runCatching {
+            JSONObject(File(staging, "package.json").readText()).optString("version")
+        }.getOrNull()
+        check(!newVer.isNullOrBlank()) { "extracted tarball has no version in package.json" }
+        check(entries > 0) { "extracted 0 files from tarball" }
+        // 换位：旧目录先改名成备份，新目录改名就位；任何一步失败都把备份放回去。
+        val backup = File(dest.parentFile, dest.name + ".upgrade-old")
+        backup.deleteRecursively()
+        if (dest.exists() && !dest.renameTo(backup)) dest.deleteRecursively()
+        if (!staging.renameTo(dest)) {
+            if (backup.exists()) backup.renameTo(dest)
+            error("cannot move extracted tree into ${dest.absolutePath}")
+        }
+        backup.deleteRecursively()
+        Log.i(TAG, "${dest.name}: extracted $entries files from tarball (version $newVer)")
+        newVer
+    }.getOrElse {
+        Log.w(TAG, "${dest.name}: tarball extraction failed: ${it.message}")
+        null
+    }
+
+    /**
+     * 解析 tar 头里的八进制数字字段。
+     *
+     * tar 的数值字段是 `"0000007520 "` 这种**固定宽度、尾部空格 + NUL 填充**的
+     * 八进制串。直接 `String(...).trim().trimEnd('\u0000')` 是错的 —— 顺序反了，
+     * 先 trim 会把尾部空格去掉但留下 NUL，再 trimEnd 又留下空格，`toLongOrNull(8)`
+     * 返回 null → size 被当成 0 → 之后的成员全部错位，症状是解出来的文件里混进
+     * 别的文件的 CSS/JS 片段（实测诊断日志里出现 `'  width: 12px;'`）。
+     *
+     * 正确做法：去掉 NUL 与空格后，只取到第一个非八进制字符为止。
+     */
+    private fun tarOctal(header: ByteArray, off: Int, len: Int): Long {
+        val raw = String(header, off, len, Charsets.US_ASCII)
+            .takeWhile { it in '0'..'7' }
+        return raw.toLongOrNull(8) ?: 0L
+    }
+
+    /**
+     * 吃掉 tar 成员正文与 512 字节对齐补位。
+     * @param size 该成员正文长度（**对齐必须按它算**）
+     * @param bodyAlreadyRead 正文是否已被上层读走（true 时只吃补位）
+     */
+    private fun skipEntryBody(din: java.io.DataInputStream, size: Long, bodyAlreadyRead: Boolean) {
+        if (!bodyAlreadyRead && size > 0) skipFully(din, size)
+        val pad = (512L - (size % 512L)) % 512L
+        if (pad > 0) skipFully(din, pad)
+    }
+
+    private fun skipFully(din: java.io.DataInputStream, n: Long) {
+        var left = n
+        while (left > 0) {
+            val skipped = din.skip(left)
+            if (skipped <= 0) {
+                if (din.read() < 0) return
+                left -= 1
+            } else {
+                left -= skipped
+            }
+        }
     }
 }

@@ -143,9 +143,16 @@ def has_id(text, rid):
     return re.search(r'android:id="@\+id/' + rid + r'"', text) is not None
 
 
-for row in ("rowTheme", "rowLandscape", "rowScale", "rowImmersive", "rowFilesDir", "rowAccent", "rowLayoutMode"):
+for row in ("rowTheme", "rowLandscape", "rowScale", "rowImmersive", "rowAccent", "rowLayoutMode"):
     check("main layout: " + row + " moved out (appearance)", not has_id(layout, row))
     check("appearance layout: row " + row, has_id(appearance_layout, row))
+
+# v1.5.x：文件保存目录从「外观与显示」挪到设置页「数据与会话」分组 ——
+# 它讲的是数据落在哪，不是外观。这里改成反向断言：外观页不该再有它，
+# 设置页必须承接（含显示路径的 valFilesDir）。
+check("appearance layout: rowFilesDir moved out", not has_id(appearance_layout, "rowFilesDir"))
+check("main layout: rowFilesDir in data section", has_id(layout, "rowFilesDir"))
+check("main layout: valFilesDir shows the path", has_id(layout, "valFilesDir"))
 
 # v1.5.x：设置页也可跟随朝向偏好（平板默认不再被扳成竖屏）
 check("appearance layout: rowSettingsFollow", has_id(appearance_layout, "rowSettingsFollow"))
@@ -159,7 +166,13 @@ for row in ("rowPlugin", "rowAsrApps", "rowVoiceService", "rowTts", "rowPet"):
     check("main layout: " + row + " moved out (extension)", not has_id(layout, row))
     check("extension layout: row " + row, has_id(ext_voice_layout, row))
 
-check("main layout: personalization section", "settings_section_personalization" in layout)
+# v1.5.x MD3：分区标题保留（原结构），组内每行是一条独立分段卡片，
+# 靠 bg_md3_seg_{top,mid,bottom,single} 实现「首行上圆角／中间平角／末行下圆角」。
+# 行仍然是 LinearLayout —— SettingsActivity.rowsOf() 硬依赖该类型。
+check("main layout: MD3 segmented rows", layout.count("bg_md3_seg_") >= 4)
+check("main layout: MD3 section headers kept", layout.count("textAppearanceTitleSmall") >= 3)
+check("main layout: rows stay LinearLayout",
+      layout.count('android:id="@+id/row') == layout.count("bg_md3_seg_"))
 check("main layout: rowAppearance entry", "rowAppearance" in layout)
 check("main layout: rowExtensionVoice entry", "rowExtensionVoice" in layout)
 check("settings code: appearance entry wired", "AppearanceActivity" in settings_kt and "rowAppearance" in settings_kt)
@@ -208,8 +221,13 @@ for i, (pos, name) in enumerate(bak_starts):
     bak_blocks[name][1] = end
 for btn, row in (("btnExport", "rowExportData"), ("btnImport", "rowImportData"), ("btnRecover", "rowRecoverChats")):
     blk = bak_blocks.get(row)
-    check("backup action row %s: pill button %s" % (row, btn), bool(blk) and btn in backup_layout[blk[0]:blk[1]])
-    check("backup action row %s: chevron removed" % row, bool(blk) and "ic_chevron" not in backup_layout[blk[0]:blk[1]])
+    block = backup_layout[blk[0]:blk[1]] if blk else ""
+    # v1.5.x MD3: 子行整行执行动作。原有 TextView pill 没有独立 listener，
+    # 改成可点击 MaterialButton 会拦截父行触摸，造成「按钮看得见但不工作」；
+    # 因此移除伪按钮，保留父行 selectable ripple 作为整行操作 affordance。
+    check("backup action row %s: no dead pill button %s" % (row, btn), bool(blk) and btn not in block)
+    check("backup action row %s: MD3 segmented ripple retained" % row, bool(blk) and "@drawable/bg_md3_seg_" in block)
+    check("backup action row %s: chevron removed" % row, bool(blk) and "ic_chevron" not in block)
 
 # ------------------------------------------------------- 4. 权限徽章（v1.4.58：按钮删除，整行即入口）
 perm_kt = read(os.path.join(JAVA, "PermissionCenterActivity.kt")) if exists(os.path.join(JAVA, "PermissionCenterActivity.kt")) else ""
@@ -254,6 +272,51 @@ for loc in ("values", "values-de", "values-zh-rCN", "values-pt-rBR"):
 check("backup: import error mapping retained (pet probe contract)",
       "not_a_zip" in backup_kt and "import_err_not_zip" in backup_kt)
 check("settings: responsive layout retained", "applyResponsiveLayout()" in settings_kt)
+
+# ------------------------------------------------- 8. 分区标题必须唯一且对得上内容
+# 既有 bug：main 的 ef22cc29 把「扩展与语音」分区的标题写成了
+# settings_section_appearance，页面上于是出现两个「Appearance & display」，
+# 而那个分区里实际装的是 Extension Center / Linux Workspace / Voice & plugins。
+# 锁两件事：①分区标题不得重复；②该分区必须用 extension 那个 key。
+_settings_layout = read(os.path.join(RES, "layout", "activity_settings.xml"))
+# 分区标题的识别必须与样式解耦。
+#
+# 这套设置页换过两轮样式：Material 3 版用 ?attr/textAppearanceTitleSmall 做标题，
+# 旧版用 accent 色 + 13sp + bold 直接写死。探针若只认其中一种，换样式时就会
+# 整片误红（实测：退回旧样式后这段两条断言同时红，而页面本身是对的）。
+#
+# 所以这里只认「settings_section_* 这个字符串被用作 android:text」，并额外要求
+# 它所在的 TextView 具备任一已知标题特征（MD3 的 textAppearance，或旧版的 accent+bold）。
+_SECTION_RE = re.compile(
+    r'android:text="@string/(settings_section_[a-z_]+)"([\s\S]{0,400}?)/>')
+_section_titles = []
+for _m in _SECTION_RE.finditer(_settings_layout):
+    _key, _body = _m.group(1), _m.group(2)
+    _is_header = (
+        "?attr/textAppearanceTitleSmall" in _body
+        or ("@color/accent" in _body and ("bold" in _body or "textStyle" in _body))
+    )
+    if _is_header:
+        _section_titles.append(_key)
+
+check("settings: found the section headers (%d)" % len(_section_titles),
+      len(_section_titles) >= 5)
+_dupes = sorted(t for t in set(_section_titles) if _section_titles.count(t) > 1)
+check("settings: no duplicate section headers (dupes: %s)" % (_dupes or "none"),
+      not _dupes)
+# 核心不变量：Appearance & display 在页面上只能出现一次。
+# 历史 bug（main 的 ef22cc29）：Extension Center / Linux Workspace 那一组
+# 本该有自己的标题，却把标题 key 写成了 settings_section_appearance，
+# 于是页面上出现两个「Appearance & display」。
+_appearance_count = _section_titles.count("settings_section_appearance")
+check("settings: appearance header appears exactly once (got %d)" % _appearance_count,
+      _appearance_count <= 1)
+# Extension Center / Linux Workspace 这两个入口必须存在（标题叫什么叫样式决定，
+# 但入口不能丢 —— 它们是设置页通往扩展中心的唯一路径）。
+check("settings: extension entry row present",
+      "setting_ext" in _settings_layout)
+check("settings: linux workspace row present",
+      "linux_title" in _settings_layout)
 
 print()
 if FAILS:

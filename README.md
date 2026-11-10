@@ -4,20 +4,26 @@
   <img src="docs/promo/dsh-mobile-github.png" alt="DSH Mobile — DeepSeek Harness for Android" width="100%">
 </p>
 
+<h3 align="center">同类项目大多在比拼 UI 打磨和移植完成度。<br>我们在那之外，补上两件更难的事：<b>完整的编译环境</b>与<b>真实的手机操控能力</b>。</h3>
+
 <p align="center">
-  <b>把完整的 Node.js Agent 引擎，以 Android 原生二进制打进 APK。</b><br>
-  不套容器、不装发行版、不要 Root、不要 Termux、不要电脑。<br>
-  <b>装完即用，冷启动 3 秒级。</b>
+  <b>原生启动 2.3 秒 · 容器启动 1.33 秒 · 108 条设备路由 · 1354 项权限声明<br>
+  20 套工具链 · 真 clang / 真 JDK / 真 gradle / 双 rootfs</b>
 </p>
 
 <p align="center">
-  <a href="#-为什么快">为什么快</a> ·
-  <a href="#-架构">架构</a> ·
-  <a href="#-能力全景">能力全景</a> ·
-  <a href="#-路线对比">路线对比</a> ·
+  <a href="#一快是两条路都快">① 启动快</a> ·
+  <a href="#二手机不是聊天对象是执行对象">② 手机权限</a> ·
+  <a href="#三手机上真的能编译">③ 编译环境</a> ·
+  <a href="#-完整能力清单">能力清单</a> ·
   <a href="#-安装">安装</a> ·
   <a href="README_EN.md">English</a> ·
   <a href="README.de.md">Deutsch</a>
+</p>
+
+<p align="center">
+  <i>一位用户试用后的反馈，成了我们决定往哪个方向做深的依据：<br>
+  「界面做得挺好，但没有编译环境和 root，能做的事还是有限。」</i>
 </p>
 
 <!-- 徽章区：左边看"有多少人在用"，右边看"项目是否健康"。 -->
@@ -27,287 +33,494 @@
 
 [![CI](https://github.com/Soodok/Deepseek-Harness-Local-Android/actions/workflows/android-build.yml/badge.svg)](https://github.com/Soodok/Deepseek-Harness-Local-Android/actions/workflows/android-build.yml)
 ![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20~%2016-3ddc84?logo=android&logoColor=white)
-![Engine](https://img.shields.io/badge/engine-dsh%200.2.1--rc.2-4b5563)
+![Engine](https://img.shields.io/badge/engine-dsh%200.2.2--rc.1-4b5563)
 ![Runtime](https://img.shields.io/badge/runtime-bionic%20Node.js-5fa04e?logo=nodedotjs&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-brightgreen)
+![License](https://img.shields.io/badge/license-MIT%20%2B%20runtime%20license-brightgreen)
 [![Last commit](https://img.shields.io/github/last-commit/Soodok/Deepseek-Harness-Local-Android?color=64748b)](https://github.com/Soodok/Deepseek-Harness-Local-Android/commits/main)
 [![QQ](https://img.shields.io/badge/QQ%E7%BE%A4-1128769016-12b7f5?logo=tencentqq&logoColor=white)](https://github.com/Soodok/Deepseek-Harness-Local-Android#%E5%8F%8D%E9%A6%88)
 [![Telegram](https://img.shields.io/badge/Telegram-Join_group-26A5E4?logo=telegram&logoColor=white)](https://t.me/+4VN3pYyH6i8yNDA1)
 
 ---
 
-## ⚡ 为什么快
+## 四个数字，三件事
 
-这是本项目最核心的一条，值得单独讲。
+| 维度 | 我们的做法 |
+|---|---|
+| **原生启动** | **2.3 秒**（低端 3 GB 设备也能跑起来） |
+| **Linux 容器启动** | **1.33 秒**，容器层只占 0.8% |
+| **手机能力接入 Agent** | **108 条路由 / 42 条目录项 / 21 个独立开关** |
+| **手机端编译** | **clang + JDK 17 + gradle + cmake + rustc + go** |
 
-**Android 上的 Agent 方案快不了，原因通常是架构性的。** 它们要么在手机上现搭 Linux 环境（Termux + apt），要么跑一层 proot 容器（glibc rootfs 500 MB～2 GB），要么打包一个冻结的 Termux 快照。这三条路的共同点是——**启动时要做的准备工作太多**：解压 rootfs、挂载伪文件系统、初始化软件源、装载环境变量。
+下面三部分，逐条拆解这三件事背后的实现。
 
-DSH Mobile 走的是另一条路：**没有中间层**。
+---
 
-| 方案 | 跟引擎之间隔了什么 | 冷启动 |
-|---|---|---|
-| Termux 手动配置 | Perl/bash 启动链 + apt + 环境初始化 | 分钟级 |
-| proot + Ubuntu | 内核 → proot 用户态 → glibc → 发行版 → Node | 十几秒起 |
-| 冻结快照 | 解压 rootfs → 修补路径 → 启动 | 数十秒 |
-| **DSH Mobile（本项目）** | **— 直接 `execve` bionic Node** | **3 秒级** |
+## 一、快，是两条路都快
 
-关键在于：**我们把 dsh 需要的整套运行时，编译成 Android 原生（bionic）二进制，直接塞进 APK。** 运行时不需要「启动」，它本来就在那儿。冷启动真正做的事只有三件——解压（仅首启一次）、起 Node、等回环端口就绪。
+把「快」和「能编」同时做好，是这件事里最难的一档。多数方案会先解决其中一个：
 
-### 实测数字
+- **原生运行时**快，但跑不了 glibc 程序，也没有 `apk` / `apt`；
+- **容器或 rootfs**能编，但启动前要先解压、挂载、初始化软件源，慢十几秒。
+
+我们两条路都做到了快，而且**容器这一层几乎不带来额外开销**。
+
+### 路线 A：原生 bionic —— 直接 `execve`，不套中间层
+
+整套 Node.js 运行时被编译成 Android 原生（bionic）二进制，直接打进 APK。**它不需要「搭建」**——没有 rootfs 要铺、没有伪文件系统要挂、没有软件源要初始化。冷启动只剩三件事：解压（仅首启一次）、用 `execve` 启动 Node、等待回环端口就绪。
 
 | 场景 | 设备 | 冷启动到引擎就绪 |
 |---|---|---|
-| 旗舰真机 | 一加 15T（Android 16） | **3.4 秒** |
-| 主流机型 | 各品牌中端 Android | **5 ~ 6 秒** |
+| 真机实测 | 一加 15T（Android 16） | **2.3 秒** |
+| 主流中端 | 各品牌 Android | **5 ~ 6 秒** |
 | 极端低端 | 紫光展锐手表（**3 GB 内存**） | **13 秒** |
-| 模拟器 | x86_64 / 2.5 GB 内存 | **2.2 ~ 2.7 秒** |
+| 模拟器 | x86_64 / 2.5 GB | **2.2 ~ 2.7 秒** |
 
-作为参照：proot 系方案在不少中低端设备上**直接起不来**，主流机型上平均也要十几秒；Termux 手动配置首次需数分钟。
+作为参照：基于 `proot` 的方案在中低端设备上容易受限于内存与启动开销，主流机型上启动通常在十几秒量级；首次手工搭建 Linux 环境则需要数分钟。
 
-> 一台 3 GB 内存的紫光展锐手表能跑起来，本身就是架构的证明——同样的内存，proot + glibc 连 rootfs 都铺不开。
+> 一台 **3 GB 内存**的手表能把整套引擎跑起来——同内存下，`proot` + glibc 连 rootfs 都铺不开。这不是调参调出来的，是架构差异。
 
-### 这些数字是怎么来的
+### 编译缓存：再提速约 20%
 
-不是调参调出来的，是几个设计决策叠加的结果：
+从新版本开始，两条路径都注入了 **Node.js 编译缓存**（`NODE_COMPILE_CACHE`），把 JS 模块的编译产物落到磁盘，下次启动直接复用，省掉重复解析与编译。
 
-| 设计决策 | 换来了什么 |
+干净 A/B 对照（同一模拟器、x86_64、各 3 轮、每轮清场）：
+
+| 状态 | 三轮结果 | 中位数 |
+|---|---|---|
+| **缓存命中** | 3652.2 / 3416.8 / 3385.7 ms | **3416.8 ms** |
+| **缓存清空** | 4540.2 / 4088.8 / 4528.4 ms | **4528.4 ms** |
+
+启动耗时减少 **1111.6 ms，约 24.5%**，缓存落盘体积为 **15 MB**。
+
+有一个必须处理的细节：`NODE_COMPILE_CACHE` 是**懒写盘**的。不注入刷盘器时，跑完一整轮后，缓存目录也只有 **16 KB**——缓存等于不存在。所以我们内置了 `node-compile-cache-flusher.cjs`，在原生与容器两条路径中都注入它，让缓存真正落盘，达到 15 MB。
+
+这是当前唯一还有正收益的启动优化项，已进入产线。
+
+### 路线 B：Linux 容器 —— 端到端中位 **1.33 秒**，容器层只占 **0.8%**
+
+这是最反直觉的一条数据。
+
+在自研容器 `dsh_alpine` 里，**跑一条命令只要 2.4 ms**；「从零 → 进 Linux → 引擎就绪」的端到端耗时**中位数为 1.33 秒**。
+
+拆开看这 1.33 秒花在哪：
+
+| 环节 | 占端到端耗时 |
 |---|---|
-| **bionic 原生运行时**，不走 glibc、不套容器 | 省掉 proot 那层用户态翻译，也省掉 rootfs 解压与挂载 |
-| 运行时**预置进 APK**（125 MB 压缩 / 404 MB 解压 / 14572 个文件） | 首次使用无需额外下载，装完即用，离线可启动 |
-| `targetSdk = 28`（sideload 策略，与 Termux 同款） | 豁免 Android 10+ 的 W^X 限制，可直接 `execve` 私有目录下的二进制 |
-| **CI 收集 + SONAME 去重 + SHA 校验**的运行时流水线 | 每次发布都是可复现产物，不是「我这台机器上能跑」 |
-| 全部 `.so` 按 **16 KB 页对齐** | Android 15+ 的 16 KB 页内核设备直接可用 |
-| 前端注入 **polyfill**（14 个现代 API） | WebView API 门槛从 Chrome 126 拉回到 **85**，国产 ROM 常见的 96 实测可用 |
+| **容器层本身**（路径翻译 + SIGSYS 处理 + ELF 加载） | **0.8%** |
+| 引擎插件加载（Node 侧） | **96%** |
+
+**结论：容器这层几乎不花时间。** 换任何 OS 级方案，瓶颈都在 Node 加载插件所占的那 96%，不在容器——而那 96% 恰恰是唯一无法绕过、也不该绕过的部分。
+
+同一台设备（OPPO PLZ110 / Android 16 / 内核 6.12.38）横向对照：
+
+| 方案 | 进 Linux 跑一条命令 |
+|---|---|
+| **我们的 `dsh_alpine`** | **2.4 ms** |
+| 真 chroot（需 root） | 1.6 ms |
+| `proot`（免 root） | **19 ~ 33 ms** |
+
+我们只比需要 root 的真 `chroot` 慢**约 1 ms**（就是路径翻译与信号处理的成本），但**比 `proot` 快 8 ~ 14 倍**。
+
+内存表现同样干净——跑引擎时与真 `chroot` 几乎等同（容器 180~186 MB vs 真 `chroot` 181~187 MB），容器 loader 自身 RSS 仅 **1.8 MB**。文件 IO 比 `proot` 快约 **30 倍**，syscall 快 **2.7 倍**。
+
+> 换句话说：我们不是「在慢的基础上做优化」，而是**把容器这一层做到了接近零开销**。免 root，却有 root 级的性能。
+
+### 起点为什么能这么快（六条硬约束）
+
+| 决策 | 换来了什么 |
+|---|---|
+| **bionic 原生运行时**，不走 glibc、不套容器 | 省掉用户态翻译，省掉 rootfs 解压与挂载 |
+| **容器用 seccomp + SIGSYS，不用 ptrace** | 省掉 `proot` 的全量 syscall 拦截与用户态模拟 |
+| **编译缓存落盘**（两条路径都注入刷盘器） | 复用 JS 编译产物，再省约 1.1 秒 / 24.5% |
+| 运行时**预置进 APK**（130.8 MB → 解压 418.1 MB / 15292 个文件） | 首启不用下载，装完即用，断网也能启动 |
+| `targetSdk = 28`（sideload 策略） | 豁免 Android 10+ 的 W^X，可直接 `execve` 私有目录二进制 |
+| **CI 收集 + SONAME 去重 + SHA 校验**，全部 `.so` **16 KB 页对齐** | 产物可复现；Android 15+ 的 16 KB 页内核直接可用 |
+
+另有一条：前端注入 **polyfill**，把 WebView 门槛从 Chrome 126 **拉回 85**——国产 ROM 常见的 96 实测可用。
 
 ---
 
-## 🧱 架构
+## 二、手机不是聊天对象，是执行对象
 
-```mermaid
-graph LR
-    A["APK<br/>assets/runtime.zip"] --> B["bionic Node.js<br/>dsh 引擎 + 工具链"]
-    B -->|"execve 直接启动"| C["dsh 引擎进程<br/>127.0.0.1:3080"]
-    C --> D["WebView<br/>原生 App 壳"]
-    C --> E["Agent 工具链<br/>文件 / 终端 / 无障碍"]
-    D -.->|"localhost"| C
+有一批同类项目在某些方面做得比我们好——界面更成熟、移植适配更广。我们也承认这一点。
+
+而「Agent 到底能替你操作多少东西」，是这一层里更难被补上、我们投入最多的部分。
+
+我们的上限是：**只要 Android 肯给，Agent 就能用。**
+
+**1354 项权限声明**，真机实收 **432 项**。提供 **108 条 HTTP 路由**、**42 条自描述目录项**，配有 **21 个独立能力开关**——每项能力都要用户单独点头，不是一把梭全开。
+
+### 它能真正操作这台手机
+
+| 层面 | 能力 |
+|---|---|
+| **看** | 无障碍节点树（含坐标 / 角色 / 可点性）、截图（**不弹 MediaProjection 授权框**）、OCR 兜底、帧差判断、屏幕变化监控 |
+| **动** | 点按 / 长按 / 双击 / 滑动 / 拖拽 / 双指缩放 / 输入 / 按键 / 启动 App / 构造 Intent / 滚动查找 / 滚动收集 / 等待 / 条件分支 |
+| **闭环** | 21 个动作原语组成的 `PICK → ACT → VERIFY → RETRY` 执行器；执行失败时会换锚点、换动作、换路径，并把失败证据（候选列表、截图、原因）交回决策层 |
+| **看见它的手** | `dev hand` 在屏幕上画出 AI 即将点击的点：绿 = 点击 / 橙 = 长按 / 蓝 = 滑动，2.5 秒淡出，不吃触摸事件 |
+| **感知** | 电量 / 温度 / 音量 / 内存 / 网络 / 前台应用 / 加速度 / 陀螺仪 / 光线 / 距离 / 计步 / 磁场 / 气压 |
+| **上下文** | `dev context` 一次返回时间 + 屏幕 + 锁屏 + Doze + 电池 + 网络 + 前台应用 + 通知概况 + 该不该打扰 |
+| **个人数据** | 日历 / 联系人 / 短信 / 通话记录（**四项独立授权**） |
+| **通知** | 列表 / 聚合摘要 / **直接回复（RemoteInput）** |
+| **控制** | WiFi / 蓝牙 / 音量 / 亮度 / 手电筒 / 振动 / 媒体会话 / 定时提醒 / 地理围栏 / NFC 读标签 |
+| **射频** | 蓝牙扫描 + 广播 + GATT + RFCOMM、手机当 BLE 外设、手机冒充蓝牙键盘、HCI 二进制日志解析、WiFi 链路与抓包 |
+| **网络** | 按 App UID 查流量、**按 UID 插防火墙规则断网**（只断目标应用，不断自己） |
+| **虚拟硬件** | 通过 `/dev/uhid` 注册**真实的**键盘 / 鼠标 / 多媒体键——系统分不出它和物理设备 |
+| **系统层** | `root` 门脚本提供 19 个子命令：进程 / 文件 / 属性 / 服务 / 包管理 / 设置 / 网络 / 挂载 / 日志 / 任意命令 |
+
+### Root 不是必需，但给了就是另一台机器
+
+三档身份，从普通到 Root：
+
+| 模式 | 引擎身份 | 能做什么 |
+|---|---|---|
+| **普通** | App 沙箱身份 | 工作区、文件、Shell、Node、PTY、插件、多数常规 Android 能力 |
+| **Shizuku** | App 身份 + shell 桥 | `dumpsys` / `cmd` / `pm` / `am`、部分系统操作 |
+| **Root** | uid 0 | `/dev/uhid` 虚拟输入、UID 级防火墙、Doze 白名单、系统级进程与文件、底层射频 |
+
+**Root 模式下的四条自律**（不是能力限制，是我们自己划的线）：
+
+1. `rm` / `exec` / `prop set` / `pm uninstall` **默认 dry-run**，必须显式传 `confirm=1` 才执行
+2. 关键进程保护：对 `init` / `zygote` / `zygote64` / `system_server` / `surfaceflinger` / `servicemanager` / `logd` / `vold` / `netd` 的操作一律拒绝
+3. `rm` 不真删——移进隔离区 `/data/local/tmp/dsh-root-trash/<batch>/`，`root undo <batch>` 可恢复
+4. **绝不修改 SELinux 策略**：可执行代码里不存在 `setenforce` / `supolicy` / `magiskpolicy` / `sepolicy-inject`
+
+### 这些坑是真机踩出来的，都写进了代码注释
+
+| 现象 | 真因 |
+|---|---|
+| 虚拟 HID 在 App 进程里打不开 | `/dev/uhid` 只放行 `u:r:ksu:s0`；App 却是 `u:r:untrusted_app`。所以虚拟 HID 走引擎侧门脚本，不经桥 |
+| 创建了设备却收不到按键 | 必须留 **200 ms** 等 `InputDispatcher` 注册；急着发出的按键会被丢弃 |
+| 事件抓得到，系统不响应 | 屏幕必须 **Awake**。`Dozing` 下事件能到内核（`getevent` 看得见），但 `InputDispatcher` 不派发 |
+| 音量键在 Consumer 页无效 | 两页 usage 号**不通用**：音量加在 Consumer 页是 **233**，在 Keyboard 页是 **128** |
+| 防火墙规则明明在链上，却读回 null | `iptables -vL` 打印的是 `owner UID match 10360`，**不是**命令行的 `uid-owner`——第一版按后者 grep，结果全空 |
+| 断网后 `ping` 全丢包，判不出成败 | `ping` 需要 ICMP raw socket，普通 uid 拿不到，**有没有规则都 100% 丢包**。必须读规则命中计数 |
+
+### 自描述，不需要背文档
+
+```bash
+dev                    # 列出 9 组能力目录
+dev <能力>             # 看某个能力的用法
+dev <能力> k=v         # 直接执行
+dev api GET /dev/help  # 原始目录 JSON（含 params / body / limits）
+dev raw                # 真实路由表（可核对目录是否漂移）
 ```
 
-**分层职责很清晰**：
-
-- **运行层（本项目负责）**：bionic Node 运行时、前台服务保活、三级权限、扩展中心、原生化 UI
-- **引擎层（上游负责）**：插件体系、WebUI、工具调用链、会话持久化 —— 全部来自官方 dsh，原样保留
-
-**这不是自研 Agent 框架。** 桌面上 dsh 能做的事，这里都能做；插件生态通用，能力上限跟着上游走。
+`dev` 是纯渲染器，从服务端拉目录，**不在脚本里硬编码能力名**。MCP 工具表也从同一份目录派生——**42 个工具，新增端点会自动出现在工具表里，不用维护第二份清单。**
 
 ---
 
-## ✨ 能力全景
+## 三、手机上真的能编译
 
-下面这些不是「功能列表」，而是**为了让桌面级引擎在 Android 上真正跑通，逐项啃下来的硬骨头**。每一项都对应真实的失败现场。
+这是整件事里投入产出最不对称的一块，也是我们最想强调的。
 
-### 🖥️ 真 PTY 终端：原生 C 写出来的
+**20 套工具链，一键装，装完就能编。**
 
-Web 终端看起来简单，实际是全项目最难的一层。上游 `@deepseek-ai/dsh-subprocess-local` 有两处完全不认识 Android：
+### 不是「能跑脚本」，是完整的编译链
 
-1. **进程探测器拒收该平台**。`createProcessInspector()` 只认 `linux` / `darwin` / `win32`，其它平台直接抛 `terminal inspection is unsupported on platform android`。Termux 构建的 node 报告的是 `process.platform === "android"`——**不是 linux**。所以任何终端的 spawn 在第一步就死了。而 Android 有完整 procfs，上游那个 Linux 实现本来就是对的，只是没被选上。
-
-2. **`node-pty` 是空壳**。它没有 Android 预编译产物，官方收集脚本只能塞进一个「一调用就抛错」的占位实现。
-
-我们的做法：
-
-- 补丁让探测器把 `android` 当作 linux 语义（`patch-node-pty-android.py`）
-- **自己写了 581 行 C**：`dsh_pty.c` + `dsh_pty_exec.c`，通过 `posix_spawn` + `openpty` 提供真实的 PTY 能力
-- node-pty 替换成转发到该原生助手的兼容实现
-
-结果是**真有 bash 的终端**：能跑 `top`、能开 vim、能接需要 tty 的交互式命令。不是管道模拟。
-
-> 细节见 [`scripts/patch-node-pty-android.py`](scripts/patch-node-pty-android.py) 头部注释。
-
-### 🔧 14 个 Android 适配补丁：把桌面引擎掰到手机上
-
-这是本项目最不显眼、也最费工的部分。上游引擎默认假设自己跑在 Linux 桌面，每一个「想当然」在 Android 上都是崩溃点：
-
-| 补丁 | 解决的问题 |
-|---|---|
-| `patch-node-pty-android` | PTY 探测器拒收 android 平台；node-pty 空壳 → 桥到原生 C 助手 |
-| `patch-ptc-runtime-android` | PTC 子进程清空环境变量 → `libz.so.1 not found`（Android 没有 ldconfig，只能靠 `LD_LIBRARY_PATH`）；外加 bootstrap 路径映射兜底 |
-| `patch-webview-polyfill` | 前端用了 14 个现代 Web API，旧 WebView 全没有 → 注入 polyfill，门槛从 Chrome 126 降到 85 |
-| `patch-fs-local-android` | 文件系统的路径语义、权限检查假设 Linux 桌面 |
-| `patch-apiproxy` | `openPath` / `openTextFile` 调 `xdg-open` / `open` / `start`，Android 全无 |
-| `patch-attachment-local` | 附件本地存储的路径与 URI 处理 |
-| `patch-bash-sysbashrc` | 装了 Termux 的设备上，bash 去读 `/data/data/com.termux/...` → Permission denied |
-| `patch-curl-wrapper` | `bin/curl` 缺 `LD_LIBRARY_PATH`，依赖库找不到 |
-| `patch-ptc-runtime-android` | 扩展工具链变量（Python/Perl/Git/ImageMagick/Rust…）全部缺失 → PTC 里静默失效 |
-
-**每个补丁都是 fail-fast 的**：上游重构导致锚点没命中就**中止构建**，而不是 WARN 后假装成功——漏打一个补丁意味着某个功能对用户直接不可用，宁可发不出来也不能悄悄坏掉。
-
-### 🔄 运行时换装：两阶段提交，不怕中途被杀
-
-换运行时不能「先删再解压」——那会留下「删完就没」的致命窗口。也不能简单「解压到新目录再换名」：换名要逐个顶层条目做，**任何一次之后被杀，磁盘上就是新旧混合态**。
-
-更阴险的是：混合态**不一定**被完整性检查判为不完整。检查只查「锚点文件在不在 + node 架构对不对」，**新 `bin/` 配旧 `lib/` 完全通得过**。所以「反正不完整会重装」这条兜底是不可靠的——最坏情况是带着错配的运行时启动，然后各种诡异崩溃。
-
-我们的做法（v1.4.26 起）：
-
-1. 解压到 `engine.staging`，`engine/` 全程不动
-2. 校验 staging（锚点文件 + node 可执行位 + **ELF 架构**）
-3. 写一份 **`.runtime-swap` 意图日志**（记录「我要开始换了」）
-4. 逐个顶层条目换名
-5. 保留 `engine.old` 直到引擎首次进入 Healthy
-6. 下次启动若发现意图日志存在但没完成 → **知道是混合态，走恢复**
-
-这是数据库领域的两阶段提交思路，搬到文件系统换装上。低内存被 OEM 杀后台是 Android 常态，没有这套机制，运行时更新就是一场赌博。
-
-> 完整设计与失败矩阵见 [docs/RUNTIME_SWAP.md](docs/RUNTIME_SWAP.md)。
-
-### 🔌 扩展中心：把手机变成工作站
-
-**21 项环境扩展**一键安装：Python、OpenJDK 17、Go、Rust、Ruby、PHP、Lua、Perl、Clang、CMake、Git、SQLite、FFmpeg、ImageMagick、OpenSSH、Vim、ADB 等。
-
-难点不在下载，在**让装完的东西真的能用**：
-
-- **国内镜像自动切换**（清华 TUNA → 中科大 → 北外 → Termux 官方），任何一条挂了自动顺延
-- **依赖闭包递归解析**，逐包 SHA-256 校验，**原子发布**——不会留下半套环境
-- **shebang 自动修复**：Termux 包里的脚本写死 `#!/data/data/com.termux/files/usr/bin/python`，在我们这儿不存在 → 装完自动改写，`env python3` 直接可用
-- **ELF 架构校验**：解压前断言二进制架构与设备匹配，避免装了个 arm64 包到 x86_64 上
-- **Agent 也能自己装**：Root 模式下已实测自装 Android SDK 命令行工具，AI 缺什么补什么
-
-### 🧩 社区插件：整个 dsh 生态搬过来
-
-内置 **3540 个社区插件**目录（23 个分类，中英双语），搜索、看详情、一键装卸，全程不离开 App。
-
-真正的工作量在**判断哪些插件能装**：
-
-- **兼容性三级分类**：纯 JS（能跑）/ 需要原生模块（多半不行）/ 引擎 fork（设计上不兼容），用静态分析 `package.json` 与源码特征判定
-- **3540 条不能一次渲染**：早期版本把全部结果塞进 ScrollView，两万多个 View 直接把主线程压死 → OOM/ANR → 进程被杀 → 引擎看门狗误判重启。现在改增量分页（首屏 30 条 + 滚动追加），并加了 12 项回归探针锁住
-- **pnpm 锁自愈**：store 锁目录属主损坏（Root 残留 000 权限）时删不动，改用 rename 绕开——rename 只改父目录条目，不进入目录内部，属主正常就必成功
-
-### 📱 原生竖屏 UI：不是把桌面缩小
-
-三个客户端插件协同：侧栏全宽、设置面板重构、右侧面板全屏。**信息密度、触控热区、字号层级全部重排**。
-
-这不是「响应式 CSS」级别的适配——是重新设计了手机上的信息架构：什么该藏进二级、什么该常驻、单手握持时拇指能够到哪里。
-
-### 🫧 悬浮窗 · 保活 · 无障碍：手机端真正的增量价值
-
-桌面版给不了的三件事：
-
-**1. 系统级悬浮窗（桌宠）**
-插件驱动的独立 overlay，资源包制（多套素材可换、云端下载、后台服务下载不怕退出页面）、动画链（加权随机动作 / 翻面 / 动画驱动位移）、气泡台词库（六档语义，可自定义措辞）。
-
-**2. 无障碍控制：给 AI 装眼睛和手**
-
-读屏 / 点击 / 输入 / 滑动 / 长按 / 拖拽等 **21 种原语**，实测约 **1.45 秒/步**。
-
-三条铁律是踩血换来的：
-
-- **验证必须是目标状态，不是动作描述**。「点了按钮」没有意义，「页面出现了 X」才有意义。AI 自报成功是最不可信的信号——实测它会对着错误页面的通用标记自认成功
-- **失败要回退到「认得的状态」再重试**，同一步骤连续失败不超过 2 次就换打法
-- **感知分层兜底**：无障碍树 → OCR → 帧差。任何一层都可能缺失（ColorOS 浏览器 / WebView / 游戏拿不到节点树），只有分层才可靠
-
-> 这份经验已整理成 [完整的交接手册](docs/A11Y_AI_CONTROL_HANDBOOK.md)，包含场景分级、原语清单与坑位记录。
-
-**3. 后台不被杀**
-`specialUse` 前台服务 + 指数退避监督器。Android 的 OEM 后台清理是敌对环境，`dataSync` 类型有 6 小时上限，`specialUse` 没有——这个类型选择本身就是研究出来的。
-
-### 🔐 三级权限：渐进式提权
-
-| 模式 | 能力 | 说明 |
+| 分类 | 工具链 | 提供的二进制 |
 |---|---|---|
-| **普通** | 沙箱内运行 | 安全默认，AI 碰不到系统 |
-| **Shizuku** | adb 级操作 | 免 Root，跑命令、保活、杀进程 |
-| **Root** | 完整系统权限 | su 闸门管控，每次提权可见 |
+| **C / C++** | Clang / LLVM | `clang` `clang++` **`make`** |
+| **JVM** | OpenJDK 17 | `java` **`javac`** `jar` |
+| **Android 构建** | android-buildtools | `aapt` `aapt2` **`apksigner`** **`gradle`** `d8` |
+| **构建系统** | CMake | `cmake` |
+| **Rust** | Rust | `rustc` `cargo` |
+| **Go** | Go | `go` `gofmt` |
+| **Python** | Python | `python3` `pip3` |
+| **其他语言** | Ruby / PHP / Lua / Perl | `ruby` `gem` `php` `lua` `perl` |
+| **版本控制** | Git | `git` |
+| **打包** | Archivers | `zip` `unzip` `xz` |
+| **媒体** | FFmpeg / ImageMagick | `ffmpeg` `ffprobe` `magick` `convert` |
+| **数据库** | SQLite | `sqlite3` |
+| **远程** | OpenSSH / ADB | `ssh` `scp` `adb` `fastboot` |
+| **本地推理** | llama.cpp | `llama-server` `llama-cli` `llama-embedding` |
+| **编辑** | Vim | `vim` |
 
-**双身份共存是个真实的坑**：Root 模式下引擎以 uid 0 跑，App 主进程是普通 uid，两者共用 `dsh-home`。我们踩过的一次：每次启动引擎都会递归 `chown` 整棵树，把 root 身份的 pnpm 按 uid 分后缀的锁目录也改错了属主 → 插件装卸全失败、每次重启复发。修法是 chown 之后按目录名的数字后缀把属主还原回去。
+### 三条编译链，都在这台手机上跑通
 
-### 🌐 内置 SSH 远程工作区
+**① 原生 C / C++** —— clang + make + cmake，能编出 `.so`、能编 NDK 工程。
 
-手机连服务器改代码：远端工作区、Web 终端、隧道与 `ssh_*` 工具，全部内置。SSH 私钥可以在应用内生成或从文件管理器手动放入，Agent 直接可用。
+**② Java / Android** —— OpenJDK 17 + gradle + aapt2 + apksigner + d8。**这是一条真能打出 APK 的完整编译链**，我们用它在手机上编过本项目的扩展。
 
-### 🎙️ 语音输入
+这条路有一个很容易踩的坑：`android-buildtools` 内嵌的 gradle 启动脚本在 Android 的 toybox 环境里是**开箱即坏**的——`/system/bin/xargs` 是 toybox 版本，不剥引号，会把 `"-Xmx64m"` 原样传给 JVM，报 `Could not find or load main class "-Xmx64m"`；内嵌 JDK 还把 `user.home` 与 `java.io.tmpdir` 硬编码为某个外部环境的固定路径。我们在安装期打补丁修掉了这些问题（issue #86），现在开箱可用。
 
-双通道识别（离线 PocketSphinx + 云端），发送去重、面板停靠。离线引擎的体积与识别率做了取舍，云端作为补足。
+**③ 更多语言** —— rustc / cargo、go、python、ruby、php、lua、perl，各自采用独立闭包安装，并进行 SHA-256 校验和原子发布。
 
-### ⚙️ 工程化：CI 一手包办
+### 兼容性：两条腿走路，不留缺口
 
-- **双架构矩阵构建**（arm64-v8a / x86_64 × full / noruntime = 8 个 APK 变体）
-- **运行时流水线**：从 Termux 仓库收集 → zod 嵌套去重 → SONAME 别名去重（省 37 MB）→ 打 14 个补丁 → 写 `BUILD.json` → SHA 校验
-- **签名索引**：`runtime-index.json` 用 EC P-256 detached 签名，私钥只在 CI secrets，App 端验签失败直接拒绝（不降级）
-- **15 项回归探针**：每个都对应一次真实事故，PR 阶段就能拦住回归
-- **git 卫生门禁**：推送前自动检查工作区脏、远端有新提交、CRLF 污染、探针目录误加
+第三条重点中，兼容性是最容易被忽略、却最实用的一层：
+
+| 你要跑的 | 走哪条 |
+|---|---|
+| 常规 Node / Python / Go / Rust / C 工具链 | **原生 bionic**（2.3 秒启动，本地工具链直接可用） |
+| 只发布 glibc 构建的预编译 CLI | **Linux 容器**（Ubuntu rootfs，`apt` 装依赖） |
+| 需要 `apk add` / `apt install` 装任意系统软件 | **Linux 容器**（Alpine 或 Ubuntu） |
+| 需要 jemalloc / libnuma 这类 glibc 专有库 | **Linux 容器**（glibc 2.39 完整用户态） |
+
+**两条路线共用同一套引擎代码、同一个 `$DSH_HOME`、同一份工作区。** 切换路线不需要重装、不需要重新配置、不需要第二个 App。
+
+把两条同时打通、还都保持秒级启动，是这件事最难的地方。**我们把两条都做成了开箱可用。**
+
+### 需要 glibc 时：Linux Workspace
+
+**可选加装，默认关闭。** 这是一套**自研的免 root 用户态容器**：
+
+| 特性 | 实现方式 |
+|---|---|
+| 不依赖 `ptrace` | seccomp BPF 捕获指定 syscall + `SIGSYS` handler |
+| 不依赖 user namespace | 固定基址 `0x2000000000`、`ET_EXEC` 非 PIE、自写 ELF loader |
+| 不依赖 `chroot` | 用户态路径翻译，`/proc` `/sys` `/dev` 宿主透传 |
+| 不要求 Root | 全程在 App 沙箱内运行 |
+| 双向端口映射 | seccomp 同时改写 guest 与 host 侧端口 |
+
+首次启动时，容器通过 `self-reexec` 完成 guest 用户态接管，之后运行的就是一个正常的 Linux 进程树。
+
+两套 rootfs 任选：
+
+| 发行版 | libc | 包管理器 | 来源 | 压缩 | 解压 |
+|---|---|---|---:|---:|---:|
+| **Alpine 3.22** | musl | `apk` | **APK 内置，离线可用** | 3,979,016 B | 8,510,313 B |
+| **Ubuntu 24.04 base** | glibc 2.39 | `apt` | 首次联网下载 | 29,936,675 B | 100,784,109 B |
+
+实测：容器启动 **31 ms**；Ubuntu 冷启 **2.6 ~ 4.2 秒**；Alpine 冷启 **0.1 秒级**。Ubuntu 比 Alpine 慢一个量级，是由发行版自身开销（glibc + init 脚本链）决定的，不是加载器缺陷。
+
+**注意**：这不是安全沙箱。它保证兼容性和性能，**不隔离不可信代码**。
+
+### 能编，就能跑
+
+编完直接起本地服务，在手机内的 WebView 中预览：
+
+> 「在当前工作区建个项目，编译它，起个开发服务器，把 127.0.0.1 预览链接发我。」
+
+Agent 会真的执行：建目录 → 写代码 → `make` / `gradle build` → 起服务 → 给你回环链接。
+
+**不提供 X11 / Wayland 桌面**，图形结果走本地 HTTP + WebView 预览。
 
 ---
 
-## 🆚 路线对比
+## 各条路线各自擅长什么
 
-| | Termux 手动配置 | proot + Ubuntu | 冻结快照打包 | **DSH Mobile** |
+先说清楚一件事：**已经有好几个同类项目在某些方面做得比我们好**——界面打磨更成熟、移植适配更广、生态更热闹。这不是客套，是我们判断自己该往哪补的依据。
+
+下面这张表不是排名，是**能力侧重对照**。每一列都有它擅长的场景。
+
+| | 轻量聊天型移植 | 手工搭 Linux 环境 | `proot` 容器 | **本方案** |
 |---|---|---|---|---|
-| 冷启动 | 分钟级 | 十几秒起，部分设备起不来 | 数十秒 | **3 秒级** |
-| 最弱设备 | 需自行折腾 | **3 GB 内存设备基本无望** | 看快照体积 | **3 GB 手表 13 秒** |
-| 安装体验 | 装 Termux、配环境、装依赖 | 装容器与发行版 | 装即用 | **装即用** |
-| 首次可用需下载 | 手动配置 | rootfs 500 MB～2 GB | 无 | **无** |
-| 运行时 | 活环境（可扩展） | 容器内 glibc | 死快照，随包冻结 | **自建 bionic 闭包，CI 收集校验** |
-| 许可证合规 | — | — | ⚠️ 快照打包 GPL 组件，合规存疑 | **仅含 MIT/BSD/ISC/Zlib 组件** |
-| 权限分级 | 无 | 无 | 无 | **三级模式 + su 闸门 + Shizuku adb 桥** |
-| 环境扩展 | 手动装 | apt | 死快照，不可扩展 | **21 项一键装 + AI 自助安装** |
-| Termux 依赖 | 需要 Termux App | 需要 | 快照即 Termux | **零依赖**（硬编码路径已重定位） |
+| 强项 | 上手快、界面轻 | 环境完整、可控性高 | 免 root 跑 Linux 的成熟方案 | 编译环境 + 手机能力**同时**具备 |
+| 需要 Root | 否 | 否 | 否 | **否**（要 Root 时有完整通道） |
+| 需要额外 Linux 环境 | 否 | **是** | 常需要 | **否** |
+| 原生启动 | 轻量场景更快 | 分钟级 | 十几秒起 | **2.3 秒** |
+| 容器启动 | 不适用 | 分钟级 | 需完整 rootfs | **1.33 秒端到端（容器层 0.8%）** |
+| 免 root 容器性能 | — | 不适用 | 成熟可用 | **2.4 ms/命令，接近真 chroot** |
+| 编译缓存加速 | 无 | 无 | 无 | **有（约 24.5%）** |
+| 手机能力接入 Agent | 以界面为主 | 需自己写 | 需自己写 | **108 路由 / 42 目录 / 21 开关** |
+| 手机端编译 C / C++ | 通常不做 | 有 | 有 | **有** |
+| 手机端编译 Java / APK | 通常不做 | 部分 | 部分 | **有（JDK 17 + gradle + aapt2 + apksigner）** |
+| glibc 兼容 | 无 | 是 | 是 | **容器可选（Alpine + Ubuntu 双 rootfs）** |
+| Root 级能力 | 无 | 需外挂 | 需外挂 | **19 个子命令 + 四道自律** |
+| 装完即用 | 是 | 否 | 否 | **是** |
 
-> 路线之间不是替代关系：Termux 系是在 Android 上**搭一个 Linux 环境**再跑 dsh；本项目把 dsh 需要的运行时**打进 APK**。**两条路线跑的是同一个 dsh**，差别在启动路径的长度。
+> 我们的取舍是：**不跟最好的那几个比谁界面更漂亮，而是把「真能干活」这一层补满。**
 >
-> 📄 完整路线剖析见 **[docs/android-agent-routes.zh.md](docs/android-agent-routes.zh.md)**（[English](docs/android-agent-routes.md)）。
+> 如果你要的是尽快跑起来聊两句，轻量方案可能更合适；如果你要在手机上真的编译、真的操作设备，那才是我们擅长的场景。
+
+---
+
+## 📖 完整能力清单
+
+以下是按分组列出的全部能力。前七组对应 `GET /dev/help` 的自描述目录（**42 条目录项 / 36 个唯一路径**），另附几个目录之外但真实存在的路由（`/dev/help`、`/dev/perms/status`、`/dev/perms/revoke`）。
+
+### 感知（5 项）
+
+| 端点 | 能力 |
+|---|---|
+| `GET /dev/status` | 设备总览：电量 / 温度 / 音量 / 屏幕 / 内存 / 网络 / 前台应用 |
+| `GET /dev/ping` | 桥与无障碍是否在线（最快的一次健康检查） |
+| `GET /dev/sensors` | 传感器读数：`type=accel\|gyro\|light\|proximity\|step\|magnet\|pressure` |
+| `GET /dev/notifications` | 当前通知列表（需通知使用权），`limit=20` |
+| `GET /dev/media` | 当前媒体会话：标题 / 艺术家 / 进度 / 播放状态 |
+
+### 个人数据（4 项，各自独立授权）
+
+| 端点 | 能力 |
+|---|---|
+| `GET /dev/calendar` | 查日程，`from` / `to` 为毫秒时间戳 |
+| `GET /dev/contacts` | 搜通讯录，`q=<关键词> limit=20` |
+| `GET /dev/sms` | 读短信，`q=<关键词> limit=20` |
+| `GET /dev/calls` | 通话记录，`limit=20`（需 `READ_CALL_LOG`） |
+
+### 控制（6 项）
+
+| 端点 | 能力 |
+|---|---|
+| `POST /dev/control` | `op=wifi\|bt\|volume\|brightness\|torch\|vibrate`；WiFi / 蓝牙在 Android 10+ 会返回 `user_confirmation_required` |
+| `POST /dev/clipboard` | 剪贴板读写 |
+| `POST /dev/media` | 媒体控制：`op=play\|pause\|toggle\|next\|previous\|stop\|seek\|volume\|stream-volume` |
+| `POST /dev/sms` | 打开短信发送界面（**不直接发送**，由用户确认） |
+| `POST /dev/notify-reply` | 代用户回复可回复的通知（RemoteInput） |
+| `POST /dev/calendar` | 新增日程 |
+
+### 调度（3 项）
+
+| 端点 | 能力 |
+|---|---|
+| `POST /dev/remind` | 建定时提醒，`in_seconds=` 或 `at=<ISO8601>`，`repeat={"kind":"once\|daily\|weekday"}`；不依赖网络，重启后仍在 |
+| `GET /dev/remind-list` | 列出全部提醒 |
+| `POST /dev/remind-cancel` | 取消提醒 |
+
+### 底层射频与感知扩展（16 项）
+
+| 端点 | 能力 | 需 Root |
+|---|---|:---:|
+| `POST /dev/bt` | 蓝牙底层：`op=status\|enable\|disable\|scan\|advertise\|connect\|services\|read\|write\|rfcomm\|log`；`log` 支持 `format=binary` 解析 HCI 抓包 | 部分 |
+| `POST /dev/wifi-radio` | WiFi 底层：`op=status\|scan\|enable\|disable\|link\|capture` | 抓包需 |
+| `POST /dev/net` | 按 App（UID）查流量 / 断网；查询不需 root，封锁需 | 封锁需 |
+| `POST /dev/ble` | 手机当 BLE 外设（GATT Server），别的设备连上来读写你开放的特征值 | |
+| `POST /dev/bt-hid` | 手机冒充蓝牙键盘控制别的设备（HID Device，部分 OEM 会拦） | |
+| `POST /dev/pulse` | 通过振动传递摩斯电码：不用亮屏、不出声就知道结果 | |
+| `GET /dev/context` | 上下文总线：时间 / 屏幕 / 锁屏 / Doze / 电池 / 网络 / 前台应用 / 通知概况 + `should_nudge` | |
+| `POST /dev/nudge` | 主动提醒闸门：静音时段 / 息屏 / 锁屏 / Doze / 同一 key 的 30 分钟冷却，命中任一条件即拒，并回报具体原因 | |
+| `POST /dev/hand` | 「AI 的手」可视化：`op=tap\|path\|clear\|hide\|status\|debugbg` | |
+| `GET /dev/notify-digest` | 通知摘要：按 App 聚合计数 + 最近一条的时间（**不返回正文**） | |
+| `POST /dev/scene` | 传感器场景推断：dark / covered / outdoor / still / moving / walking / running / altitude_change | |
+| `POST /dev/screenwatch` | 屏幕变化检测：只回 `changed_ratio` / `mean_delta` / 变化网格，**不存视频也不存图** | |
+| `POST /dev/doze` | 电池优化白名单自助：`op=add\|remove\|list`，并回报是否真的生效 | |
+| `GET /dev/nfc` | NFC 硬件状态：硬件是否存在 / 系统是否开启 / 前台读标签是否已启动 | |
+| `POST /dev/nfc` | NFC 前台读标签（NDEF 文本与原始字节）；**无刷写、无卡模拟** | |
+| `POST /dev/geofence` | 地理围栏：`op=list\|add\|remove\|clear` | |
+
+### 屏幕与交互（6 项）
+
+| 端点 | 能力 |
+|---|---|
+| `POST /dev/dialog` | 弹窗检测：用几何判据（底部成对按钮）找出系统弹窗与安全按钮 |
+| `POST /dev/verify` | 校验某个动作是否真的生效（前后屏幕对比），`expect=` / `gone=true\|false` / `timeout_ms=` |
+| `GET /dev/record` | 录屏状态：是否拿到授权 / 是否正在录屏 / 已录多久 |
+| `POST /dev/record` | 屏幕录制；`op=audio` 时用 `AudioPlaybackCaptureConfiguration` 录制其他 App 的音频 |
+| `GET /dev/hid` | 虚拟 HID 设备状态：创建状态 / 设备类型 |
+| `POST /dev/hid` | 虚拟 HID 设备：注册真实外设键盘 / 鼠标 / 多媒体键并注入按键；`op=status\|create\|key\|tap\|text\|mouse\|destroy` |
+
+### 权限自助（2 项，另含 revoke 子路由）
+
+| 端点 | 能力 |
+|---|---|
+| `GET /dev/perms` | 权限总览：声明数 / 已获授权数 / 尚缺数（另有 `GET /dev/perms/status` 看进度详情） |
+| `POST /dev/perms` | 授予权限，body `{"force":true}` |
+| `POST /dev/perms/revoke` | 撤销指定权限，body `{"perms":[...]}` |
+
+### 扩展与诊断（1 项）
+
+| 端点 | 能力 |
+|---|---|
+| `GET /diag` | 桥自诊断：端口 / token / 无障碍 / 各能力开关 |
+
+### 21 个独立能力开关
+
+每项能力都要用户单独授权，默认全关。开关保存在 `capabilities` 偏好设置中，键名前缀为 `cap.`：
+
+| 开关 | 覆盖能力 |
+|---|---|
+| `status` | 设备总览、上下文总线 |
+| `sensor` | 传感器读数、场景推断 |
+| `notify` | 主动提醒（nudge） |
+| `notify_read` | 通知列表、通知摘要 |
+| `notify_action` | 代用户回复通知 |
+| `clipboard` | 剪贴板读写 |
+| `control` | 硬件开关、振动、Doze 白名单、弹窗检测、动作校验、「AI 的手」 |
+| `wifi` | WiFi 底层 |
+| `bt` | 蓝牙底层、BLE 外设、蓝牙 HID |
+| `sched` | 定时提醒 |
+| `media` | 媒体会话读写 |
+| `personal_calendar` | 日历读写 |
+| `personal_contacts` | 通讯录 |
+| `personal_sms` | 短信读写 |
+| `personal_calls` | 通话记录 |
+| `personal` | 个人数据总开关 |
+| `rf` | NFC、地理围栏 |
+| `screen_capture` | 屏幕变化监控、录屏 |
+| `hid` | 虚拟 HID 设备 |
+| `net` | 按 UID 查流量与断网 |
+| `root` | 系统级门脚本 |
+
+### 33 个门脚本
+
+门脚本是给 AI 直接调用的命令行入口，比 `dev api` 更省 token、更适合脚本化：
+
+| 门脚本 | 用途 |
+|---|---|
+| `dev` | 统一自描述入口：能力目录、用法、执行、直调 API、查路由表 |
+| `scr` | 屏幕脚本：dump / shot / tap / input / swipe / key / find / changed / batch |
+| `loop` | 本地闭环执行器：多步计划一次下发，`PICK → ACT → VERIFY → RETRY` |
+| `fast` | 无障碍操作期间的「思考开关」，临时关掉干扰 |
+| `root` | 系统级 19 个子命令：`info` `ps` `kill` `cat` `ls` `rm` `undo` `cp` `mv` `chmod` `chown` `prop` `svc` `pm` `settings` `net` `mount` `journal` `exec` |
+| `hid` | 虚拟 HID 一次性执行器：`probe` / `create` / `tap` / `text` / `key` / `mouse` |
+| `mcp` | 设备 MCP server（stdio JSON-RPC）：`serve` / `list` / `selftest` / `probe` |
+| `psx` | 列进程 |
+| `killx` | 按 pid 或名称模式结束进程 |
+| `say` | 朗读文本 |
+| `media` | 控制当前正在播放的媒体 |
+| `notify` | 发通知 |
+| `notify-reply` | 代用户回复一条可回复的通知 |
+| `remind` | 定时提醒 |
+| `bt-radio` | 蓝牙应用层：扫描 / 广播 / GATT / RFCOMM |
+| `wifi-radio` | WiFi 底层（基于 `iw`）：扫描（含隐藏 SSID）/ 链路 / 抓包 |
+| `device-control` | 硬件开关 |
+| `device-status` | 一次性设备快照 |
+| `device-ping` | 最快的健康检查（桥 + 无障碍） |
+| `dev-calendar` / `dev-clip` / `dev-contacts` / `dev-sms` / `dev-phone` | 个人数据各端点 |
+| `dev-dialog` / `dev-verify` | 弹窗检测与动作校验 |
+| `dev-geofence` / `dev-nfc` | 地理围栏与 NFC |
+| `dev-record` / `dev-sensors` | 录屏与传感器 |
+| `getperm` / `grantperm` / `revokeperm` | 权限查询、授予、撤销（只读 / 需 Root） |
+| `_dsh_http.sh` | 公共库：用 bash 内建 `/dev/tcp` 实现 HTTP 客户端，不是独立入口 |
+
+### 21 个动作原语
+
+`loop` 执行器支持的完整动作集：
+
+`tap` `tap_text` `double_tap` `long_press` `swipe` `drag` `pinch` `input` `key` `launch` `intent` `scroll` `scroll_find` `scroll_collect` `set_switch` `collect` `repeat` `repeat_until` `back_to` `sleep` `noop`
 
 ---
 
 ## 📦 安装
 
-**从 Release 下载（推荐）**：前往 [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) 下载 APK，允许安装未知来源应用后安装。手机选 `arm64-v8a`。
-
-### ⚠️ 先认架构，再选包
-
-发布页里同一个版本有多个 APK，**先看架构再看形态**。装错架构会装不上。
-
-> **手机装 `arm64-v8a`，`x86_64` 只给电脑上的模拟器。**
-
-| 你的设备 | 装哪个 | 说明 |
-|---|---|---|
-| 手机（绝大多数） | `arm64-v8a` | 64 位 ARM，正常在售机型都是这个 |
-| 模拟器 | `x86_64` | Android Studio / 蓝叠等电脑模拟器 |
-| 32 位 ARM 老机 | — | **本项目不提供 32 位产物**，无法安装 |
-| 32 位 x86 老模拟器 | — | 同上 |
-
-不确定自己的架构？开启 USB 调试后执行：
+### 1. 确认架构
 
 ```bash
 adb shell getprop ro.product.cpu.abi
 ```
 
-装错时的典型报错是「**应用与手机 CPU 不兼容**」，Android 安装器原文为 `INSTALL_FAILED_NO_MATCHING_ABIS`。这不是应用坏了，换一个架构的包即可。曾有约 7% 的下载量误取了模拟器包，所以这里单独列出来。
+`arm64-v8a` → 手机包；`x86_64` → 模拟器包。
 
-**两种包怎么选**：
+### 2. 选包
 
-| 包 | 体积 | 适合 |
-|---|---|---|
-| **完整包**（`-release.apk`） | ~150 MB | 绝大多数人。运行时预置，装完即用，离线也能启动 |
-| **简单包**（`-release-noruntime.apk`） | ~24 MB | 空间紧张，或想走云端更新运行时。首启需联网下载约 125 MB |
+| 包 | 体积 | 代价 | 适合 |
+|---|---:|---|---|
+| **完整包**（`-release.apk`） | **~161 MB** | 运行时预置，装完即用、离线可启动 | 绝大多数人 |
+| **简单包**（`-noruntime.apk`） | **~34 MB** | 首启联网下载 130.8 MB 运行时（解压后 418.1 MB） | 存储紧张 / 想独立更新运行时 |
+| 源码构建 | 视参数 | 需 JDK 17 / SDK 36 / NDK / CMake / Node / Python | 开发者 |
 
-> 两种包**功能完全相同**，只差运行时是否内置。共用一个签名，可互相覆盖升级。
+两个包跑的是**完全同一套引擎**，差别只是运行时在 APK 里还是在网络上。
 
-### 环境要求
+### 3. 首次启动
 
-- **Android 8.0 ~ 16**（`minSdk 26`）
-- **WebView ≥ Chrome 85**（国产 ROM 常见的 96 实测可用；构建时注入 polyfill，把 API 门槛从 126 拉回 85）
-- 存储：约 720 MB（APK + 解压后运行时）
+1. 引导页选语言 / 朝向 / 主题
+2. 选运行模式：**普通**（不需要 Root）/ Shizuku / Root
+3. 等运行时就位（完整包已内置，只需首次解压；简单包此时联网下载）
+4. 配置模型 API Key 或登录模型服务
+5. 选工作区
 
----
+第一次可以这样测：
 
-## 🚀 快速上手
+> **「在当前工作区建个 `hello.c`，用 clang 编出来跑一下，把输出发我。」**
 
-1. 安装 APK，首次启动走引导（语言 / 朝向 / 主题 / 权限模式）
-2. 等引擎就绪（状态栏显示 `Engine ready`）
-3. 在设置里填入模型 API Key，或登录 DeepSeek 账号
-4. 选一个工作区，开始对话
+### 4. 想操作其他 App
 
-**想做开发任务**：设置 → 扩展中心，装 Python / Git / Node 等；然后告诉 AI 要做什么。
+到系统设置里开启 `DSH Screen Tap` 无障碍服务。Android 13+ 还要确认「允许完全控制设备」。**App 不能静默开启这个权限，必须由你手动点。**
+
+### 5. 想用 Linux 容器
+
+设置里切到 Linux 模式，首次会部署 Alpine（内置，离线）或 Ubuntu（需下载约 30 MB）。两条路径共用同一份工作区与配置。
 
 ---
 
@@ -316,99 +529,121 @@ adb shell getprop ro.product.cpu.abi
 ```bash
 # 前置：JDK 17+、Android SDK 36、Node 22、Python 3
 
-# 1) 收集运行时（从 Termux 仓库拉 bionic 包 + 打 Android 补丁）
-./scripts/build-runtime.sh --abi arm64-v8a --out _runtime_bak/rt-arm64.zip
+# 1) 收集运行时（拉 bionic 包 + 打 Android 适配补丁）
+./scripts/build-runtime.sh --abi arm64-v8a --out dist/runtime-arm64-v8a.zip
 
 # 2) 构建 APK
-gradle :app:assembleDebug -Pabi=arm64-v8a -Ppackage=full \
-       -PruntimeZip=$PWD/_runtime_bak/rt-arm64.zip
+./gradlew :app:assembleDebug -Pabi=arm64-v8a -Ppackage=full \
+  -PruntimeZip="$PWD/dist/runtime-arm64-v8a.zip"
 
 # 输出：app/build/outputs/apk/debug/app-debug.apk
 ```
 
-流水线细节（去重、PTC 补丁、polyfill 注入、`BUILD.json`、索引签名、发布流程）见 **[docs/git-workflow.md](docs/git-workflow.md)** 与 **[docs/RELEASE.md](docs/RELEASE.md)**。
+Windows Git Bash 用 `gradle.bat` 替代 `./gradlew`。
+
+不打包运行时（体积小，首启要下载）：
+
+```bash
+./gradlew :app:assembleDebug -Pabi=arm64-v8a -Ppackage=noruntime
+```
+
+运行时流水线细节见 [docs/CI_RUNTIME_PIPELINE.md](docs/CI_RUNTIME_PIPELINE.md)。
 
 ---
 
 ## 📚 深度文档
 
-每一项能力都有独立文档（设计取舍、实测数据、排障清单）：
-
 | 文档 | 内容 |
 |---|---|
-| [无障碍控制](docs/ACCESSIBILITY.md) | 21 种原语；多层视觉兜底、每步验证；实测 ~1.45 s/步 |
-| [SSH 远程工作区](docs/SSH.md) | 内置 @xiaopb/dsh-hardssh：远端工作区、Web 终端、隧道与 `ssh_*` 工具 |
-| [闭环设计笔记](docs/LOCAL_CLOSED_LOOP.md) | 端侧决策引擎的设计与演进记录 |
-| [竖屏 UI 插件](docs/NARROW_UI.md) | 侧栏全宽 / 设置面板重构 / 右侧面板全屏 |
-| [局域网 WebUI](docs/LAN_WEBUI.md) | 反向代理、6 位验证码、常驻提醒与关闭链路 |
-| [语音输入](docs/VOICE_INPUT.md) | 双通道识别、发送去重、面板停靠与已知问题 |
-| [桌宠](docs/pet/README.md) | 系统级悬浮窗：安装与限制（[使用](docs/pet/PET_GUIDE.md)）、桥插件与内部逻辑（[架构](docs/pet/PET_ARCHITECTURE.md)）、[路线图](docs/pet/PET_ROADMAP.md) |
-| [通知与后台行为](docs/NOTIFICATIONS.md) | AI 操作进度、任务完成、局域网提醒、退出彻底化 |
-| [复杂场景实测](docs/COMPLEX_SCENARIOS.md) | 噪声页面、跨应用任务、失败恢复的实测记录 |
-| [快速路径选择](docs/FAST_PATH_PICKER.md) | 端侧 UI 元素选择与判别 |
-| [Git 工作流](docs/git-workflow.md) | 合并原则、推送通道、发版与验证清单、历史事故教训 |
-| [发布与签名](docs/RELEASE.md) | 正式 key 保管与备份、GitHub Secrets、debug+release 构建、edge / tag 发布 |
-| [版本发布说明归档](docs/release-notes/) | 各版本 `RELEASE_NOTES_*.md`（v1.3.0 起）集中存档 |
+| [docs/CAPABILITY_MAP.md](docs/CAPABILITY_MAP.md) | 手机能力全量盘点、权限档位、实现状态 |
+| [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md) | 无障碍控制、视觉兜底、失败恢复 |
+| [docs/CI_RUNTIME_PIPELINE.md](docs/CI_RUNTIME_PIPELINE.md) | 运行时收集、去重、校验、发布 |
+| [docs/RUNTIME_SWAP.md](docs/RUNTIME_SWAP.md) | 运行时两阶段换装与混合态恢复 |
+| [docs/LAN_WEBUI.md](docs/LAN_WEBUI.md) | 局域网 WebUI 代理与验证码 |
+| [docs/SSH.md](docs/SSH.md) | SSH 远程工作区 |
+| [docs/android-agent-routes.zh.md](docs/android-agent-routes.zh.md) | Android Agent 路线对比长文 |
+| [docs/RELEASE.md](docs/RELEASE.md) | 签名、构建、发布流程 |
 
 ---
 
 ## ⛔ 边界（请知悉）
 
-- **不是端侧大模型**：模型走你配置的 API，本 App 负责 Agent 运行时
-- **不是手机自动化 App**：读屏点击只是 AI 可用的工具之一，不是产品定位
-- **不做金融类应用**（合规红线）
-- **无障碍能力有明确边界**：不注入不可检测的输入 —— 自动化与欺诈之间那条线我们不动
-- **插件生态跟着上游走**：dsh 引擎锁 `0.2.1-rc.5`，上游插件 API 变更我们需要跟进
+**不是端侧大模型。** 模型不在 APK 里，走你配置的 API 或模型服务。
+
+**不是安全沙箱。** Linux Workspace 也一样——它保证兼容性和性能，**不隔离不可信代码**。Root 模式下 Agent 拥有整个设备的读写能力。
+
+**有些权限静默不了**（系统不让，会返回 `user_confirmation_required`，绝不假装成功）：无障碍服务、MediaProjection、Android 13+ 的 WiFi / 蓝牙开关、部分 OEM 的 HID Profile。
+
+**长任务不等于永不中断。** 前台服务 + 监督器尽力保活，但用户强停、极端省电策略、厂商冻结后台（如 `OplusHansManager`）、设备重启、Root 操作杀进程都会断。断了要重新派发。
+
+**无障碍读不全所有界面。** 纯 Canvas、游戏画面、部分受保护页面没有可用节点树，程序会按层降级（节点树 → OCR → 图标几何 → 帧差），但仍不能把所有图形界面变成可靠的结构化信息。
+
+**不该拿它做的事。** 不要用虚拟 HID / 无障碍 / Root 绕过风控、欺骗用户、操作未授权设备。项目**不提供**让注入输入「不可检测」的实现。
 
 ---
 
 ## ❓ FAQ
 
-**Q：为什么 APK 这么大？**
-A：完整包里塞了整套 Node 运行时 + 工具链（125 MB 压缩、404 MB 解压后）。换来的是「装完即用、离线可启动、冷启动 3 秒」。不想这样可以用 24 MB 的简单包。
+**需要 Root 吗？** 不需要。普通模式已经能跑引擎、编译、读文件、用多数常规能力；Root 只是把系统级那一层也打开。
 
-**Q：为什么不走 proot？为什么用 `targetSdk 28`？**
-A：proot 要多一层用户态翻译和 rootfs 解压，直接吃掉启动速度——也就吃掉了低端设备的可用性。`targetSdk 28` 是 sideload 分发策略，与 Termux 同款：豁免 Android 10+ 的 W^X，允许直接 `execve` 私有目录下的二进制。这是冷启动能压到 3 秒的前提之一。
+**Linux Workspace 需要 Root 吗？** 不需要。它用 seccomp 在 App 沙箱内加载 rootfs，不依赖 Root / `ptrace` / user namespace / `chroot`。
 
-**Q：Android 15 / 16 能用吗？**
-A：能。全部 `.so` 按 16 KB 页对齐，适配 16 KB 页内核；界面依赖系统 WebView（需 Chrome 85+）。
+**真的能在手机上编 APK 吗？** 能。OpenJDK 17 + gradle + aapt2 + apksigner + d8 全套，装 `android-buildtools` 扩展即可（其中的 gradle 启动脚本我们已按 issue #86 修好）。
 
-**Q：数据存在哪？卸载会丢吗？**
-A：引擎、凭证、工作区默认在应用私有目录（`files/dsh-home`），并自动外置到共享存储（`Documents/dshdata`，需「所有文件访问」权限）。**授权后卸载重装不丢**；未授权则随应用卸载删除。
+**完整包 161 MB 装了什么？** 整套 bionic Node 运行时——解压后 418.1 MB、15292 个文件。简单包只带清单，首启下载同一个 zip。
 
-**Q：需要 Root 吗？**
-A：不需要。默认普通模式即可完整使用；Shizuku 提供 adb 级能力；Root 是可选增强。
+**为什么不走 `proot`？** 它多了一层用户态翻译，还要解压 rootfs，直接吃掉启动速度。我们用 seccomp 做同样的事，省掉 `ptrace` 那一层：只比需要 root 的真 `chroot` 慢约 1 ms，比 `proot` 快 8~14 倍。
 
-**Q：和 DSHA / 其他移植版的区别？**
-A：都能跑 dsh。差别在运行层架构与启动路径——见上方[路线对比](#-路线对比)，以及 [docs/android-agent-routes.zh.md](docs/android-agent-routes.zh.md)。
+**Alpine 和 Ubuntu 选哪个？** 默认 Alpine（小、离线、快）；需要 glibc-only 的预编译程序或 `apt` 生态，就选 Ubuntu。
+
+**能力「存在」但 Agent 不知道？** 五个条件必须全部满足：① 实现已注册进桥；② 已登记进能力目录；③ 能力开关已由用户授权；④ 环境说明书已升级；⑤ 引擎已重启。自检：
+
+```bash
+dev
+dev api GET /dev/help
+dev api GET /dev/routes
+```
+
+**怎么从电脑访问手机 WebUI？** 在设置里开启局域网 WebUI，启动代理，配合 6 位一次性验证码访问。**这暴露的是能操作文件、执行命令的 Agent，只在可信网络用，用完就关。**
+
+**和手工搭 Linux 环境能一起用吗？** 能。跑的是同一个引擎，差别只在运行层。
 
 ---
 
 ## ⚠️ 免责声明
 
-本项目为社区移植，与 DeepSeek 官方无隶属关系。使用本软件产生的任何后果由使用者自行承担；请遵守当地法律法规与所接入模型服务的条款。
+独立社区项目，与 DeepSeek 官方**无隶属关系**。
+
+只在你拥有或明确获授权的设备上使用。普通 / Shizuku / Root 三档模式的系统边界完全不同；Root 模式下 Agent 生成的命令可能修改或删除系统文件、应用数据、网络规则、设备配置。
+
+使用者自行承担以下风险及后果：数据丢失、应用或系统损坏、设备无法启动、账号或服务条款风险，以及 Root / Shizuku / 无障碍 / 自动化带来的后果。
+
+模型服务商的 API 使用、数据处理、计费规则由你配置的服务端点决定。
 
 ---
 
 ## 反馈
 
-- **Issue**：[提交问题](https://github.com/Soodok/Deepseek-Harness-Local-Android/issues)（请附设备型号、Android 版本、App 版本与复现步骤）
-- **QQ 群**：1128769016
-- **Telegram**：[https://t.me/+4VN3pYyH6i8yNDA1](https://t.me/+4VN3pYyH6i8yNDA1)
-- **Pull Request**：欢迎。合并用 `--no-ff` 保留提交线路，规范见 [docs/git-workflow.md](docs/git-workflow.md)
+- [GitHub Issues](https://github.com/Soodok/Deepseek-Harness-Local-Android/issues)
+- QQ 群：1128769016
+- [Telegram](https://t.me/+4VN3pYyH6i8yNDA1)
+
+提 issue 请附：设备型号、Android 版本、CPU ABI、版本号、当前运行模式、相关权限状态、`logcat`、最小复现步骤、失败时的原始输出。
 
 ---
 
 ## 🙏 贡献者
 
-感谢每一位提交 Issue、PR 与反馈的贡献者 —— 尤其是那些把复现时间线、`/proc` 证据、`ctime` 对比一起附上的报告，它们直接促成了多个架构级修复。
+感谢所有提 Issue、提供复现日志、参与真机测试、提交 PR 的贡献者。完整名单见 [Contributors](https://github.com/Soodok/Deepseek-Harness-Local-Android/graphs/contributors)。
 
-<a href="https://github.com/Soodok/Deepseek-Harness-Local-Android/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Soodok/Deepseek-Harness-Local-Android" alt="Contributors">
-</a>
+也要感谢上游与生态：DeepSeek Harness、AOSP、bionic 工具链、Node.js、ripgrep、OpenSSH、SQLite、FFmpeg、llama.cpp。
 
 ---
 
 ## 许可证
 
-[MIT](./LICENSE) · 第三方组件许可见 [NOTICE](./NOTICE)
+除特别声明外，仓库内容（Kotlin、Java、XML、脚本、探针）均使用 [MIT License](LICENSE)。
+
+`app/src/main/cpp/dsh_alpine.c` 及其运行时实现使用**专有许可证**，条款见 [dsh-linux-runtime LICENSE](https://github.com/Soodok/dsh-linux-runtime/blob/main/LICENSE)。**专有许可不等同于仓库根的 MIT。** 第三方组件原始许可证见 [NOTICE](NOTICE)。
+
+修改 `dsh_alpine` 时必须遵守其专有许可证，且不得引入 GPL / AGPL 或与本项目许可冲突的代码。

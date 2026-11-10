@@ -241,13 +241,16 @@ android {
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
         targetSdk = 28
-        versionCode = 351
+        // v1.5.5-beta.1（2026-11-09）：首次带引导页 v1.7.0 的试发行。
+        // 跨过 1.5.4 线：远端已发布 1.5.4-beta.3（vC 372），分支上还有 1.5.4-beta.5（374）。
+        // versionCode 必须大于已发布的 374，否则已在跑 1.5.4-beta.x 的用户会被判降级、收不到更新。
+        versionCode = 375
         // v1.5.0 起进入 1.5 系列：设备能力（蓝牙报文/WiFi 底层/定时提醒）+ AI 开关 UI。
         // versionName 允许带后缀（Android 不校验格式）。v1.5.0 起 CI 支持两种 tag 形态
         // （见 android-build.yml:68-86）：v1.5.0（正式版，prerelease: false）与
         // v1.5.0-beta.2（试发行，prerelease: true），但 tag 必须与 versionName 完全拼得上
         // （publish-release 的 `test "$GITHUB_REF_NAME" = "v$V"`），所以打 tag 前先确认这里。
-        versionName = "1.5.0-beta.20"
+        versionName = "1.5.5-beta.1"
 
         ndk {
             abiFilters += listOf(targetAbi)
@@ -383,9 +386,22 @@ val hardsshDirProp = (project.findProperty("hardsshDir") as String?)?.takeIf { i
 // v1.5.0：内置「用户态插件」（mobile-layout 等）以 tgz 随 APK 分发，App 首启用
 // `dsh plugin add <tgz>` 装进 profile，之后由 WebUI 插件管理页接管（可开关/升级/卸载）。
 // 目录需含 bundle.json（version/tgz/sha256）与对应 .tgz。
-//   -PmobileLayoutTgzDir=<dir>   CI 用（scripts/pack-mobile-layout.sh 的产物）
-//   本地覆盖优先级：-P 参数 > local-overrides/mobile-layout/ > src/main/assets/mobile-layout/
+//   -PmobileLayoutTgzDir=<dir>      CI 用（scripts/pack-profile-plugin.sh 的产物）
+//   -PsolutionExplorerTgzDir=<dir>  同上，解决方案浏览器
+//   本地覆盖优先级：-P 参数 > local-overrides/<资产目录名>/ > src/main/assets/<资产目录名>/
 val mobileLayoutDirProp = (project.findProperty("mobileLayoutTgzDir") as String?)?.takeIf { it.isNotBlank() }
+val solutionExplorerDirProp = (project.findProperty("solutionExplorerTgzDir") as String?)?.takeIf { it.isNotBlank() }
+
+/**
+ * 内置「用户态插件」资产表：assetRoot → 外部传入目录（可为 null）。
+ *
+ * 加一个新插件 = 这里加一行 + ProfilePluginProvisioner.REGISTRY 加一行 +
+ * CI 的 pack job 加一步。App 侧与构建侧都不再为每个插件单独写逻辑。
+ */
+val bundledProfilePlugins: List<Pair<String, String?>> = listOf(
+    "mobile-layout" to mobileLayoutDirProp,
+    "solution-explorer" to solutionExplorerDirProp,
+)
 val proxyBaseProp = (project.findProperty("proxyBase") as String?) ?: "https://gh-proxy.org/"
 val runtimeUrlBaseProp = (project.findProperty("runtimeUrlBase") as String?)?.takeIf { it.isNotBlank() }
 
@@ -415,8 +431,15 @@ val prepareRuntimeAssets by tasks.registering {
     val zipOverride = runtimeZipProp?.let { file(it) }
     val hardsshOverride = hardsshDirProp?.let { file(it) }
     val mobileLayoutOverride = mobileLayoutDirProp?.let { file(it) }
-    val localMobileLayout = File(projRoot, "local-overrides/mobile-layout")
-    val legacyMobileLayout = file("src/main/assets/mobile-layout")
+    val solutionExplorerOverride = solutionExplorerDirProp?.let { file(it) }
+    // ★合并（2026-11-09）：两条线对「内置插件 tgz 放哪」给了不同答案 ——
+    //   main 走通用 bundledProfilePlugins（mobile-layout 与 solution-explorer 同一套逻辑，
+    //   来源 = -P 参数 > local-overrides/<资产名>/ > src/main/assets/<资产名>/）；
+    //   feat 把 mobile-layout 的 tgz 挪进 vendor/mobile-layout/（避开 AGP 对 src/main/assets
+    //   的自动合并，否则与本任务复制进 runtimeAssetsDir 的同一份触发 Duplicate resources）。
+    //   两者不冲突也不等价：通用循环是结构，vendor/ 只是一个额外来源。
+    //   故保留通用循环，并在它的候选列表里加入 vendor/<资产名>（见下方 pluginOverrides）。
+    val legacyProfilePluginsDir = File(projRoot, "vendor")
     val legacyZip = file("src/main/assets/runtime.zip")
     val legacyHardssh = file("src/main/assets/hardssh")
     outputs.dir(outDir)
@@ -470,15 +493,24 @@ val prepareRuntimeAssets by tasks.registering {
                 )
             }
             val poly = zipText(src, "lib/node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html")
-            val polyOk = poly.contains("legacy-webview polyfill v4") &&
+            // Do not hardcode the polyfill version here (v1.6.3, 4th site).
+            // The same constant used to live in four places (patch script /
+            // build-runtime.sh / runtime-build.yml / here); bumping it to v5 broke
+            // CI three times in a row. Only patch-webview-polyfill.py owns the
+            // version - every validator must accept any vN.
+            val polyVer = Regex("legacy-webview polyfill v[0-9]+").find(poly)?.value
+            val polyOk = polyVer != null &&
                 poly.contains("throwIfAborted") &&
                 poly.contains("AbortSignal.any") &&
                 poly.contains("Promise.withResolvers")
             if (!polyOk) {
                 throw GradleException(
-                    "runtime: ${src.name} lacks the WebView polyfill v4. Build it with scripts/build-runtime.sh.",
+                    "runtime: ${src.name} lacks the WebView polyfill" +
+                        (if (polyVer != null) " (found $polyVer but capability markers are missing)" else "") +
+                        ". Build it with scripts/build-runtime.sh.",
                 )
             }
+            logger.lifecycle("runtime: webview polyfill $polyVer")
 
             src.copyTo(runtimeOut, overwrite = true)
             logger.lifecycle("runtime: embedded ${src.name} (${runtimeOut.length() / 1048576} MB)")
@@ -509,29 +541,41 @@ val prepareRuntimeAssets by tasks.registering {
         }
 
         // 内置用户态插件 tgz（v1.5.0）：原样进 assets，App 首启交给 `dsh plugin add`。
-        // 本地调试把 tgz 丢进 local-overrides/mobile-layout/ 即可覆盖，无需改 CI。
-        val mlSrc = listOfNotNull(
-            mobileLayoutOverride,
-            localMobileLayout.takeIf { it.isDirectory },
-            legacyMobileLayout.takeIf { it.isDirectory },
-        ).firstOrNull { it.isDirectory }
-        val mlOut = File(outDir, "mobile-layout")
-        if (mlSrc != null) {
-            mlSrc.copyRecursively(mlOut, overwrite = true)
-            check(File(mlOut, "bundle.json").isFile) {
-                "mobile-layout: bundle.json missing in ${mlSrc.absolutePath} " +
-                    "(run scripts/pack-mobile-layout.sh)"
+        // 本地调试把 tgz 丢进 local-overrides/<资产目录>/ 即可覆盖，无需改 CI。
+        val pluginOverrides = mapOf(
+            "mobile-layout" to mobileLayoutOverride,
+            "solution-explorer" to solutionExplorerOverride,
+        )
+        for ((assetRoot, overrideDir) in bundledProfilePlugins) {
+            val src = listOfNotNull(
+                pluginOverrides[assetRoot],
+                File(projRoot, "local-overrides/$assetRoot").takeIf { it.isDirectory },
+                // vendor/<资产名>/：feat 线把 mobile-layout 的 tgz 入库到这里，
+                // 不放 src/main/assets/ —— 后者会被 AGP 自动合并一次，而本任务又把它
+                // 复制进 runtimeAssetsDir，两份同名条目直接触发 "Duplicate resources"。
+                File(legacyProfilePluginsDir, assetRoot).takeIf { it.isDirectory },
+                file("src/main/assets/$assetRoot").takeIf { it.isDirectory },
+            ).firstOrNull { it.isDirectory }
+            val dst = File(outDir, assetRoot)
+            if (src != null) {
+                src.copyRecursively(dst, overwrite = true)
+                check(File(dst, "bundle.json").isFile) {
+                    "$assetRoot: bundle.json missing in ${src.absolutePath} " +
+                        "(run scripts/pack-profile-plugin.sh)"
+                }
+                check(dst.listFiles()?.any { it.name.endsWith(".tgz") } == true) {
+                    "$assetRoot: no .tgz in ${src.absolutePath}"
+                }
+                logger.lifecycle("$assetRoot: embedded ${src.absolutePath}")
+            } else {
+                logger.warn(
+                    "$assetRoot: no tgz bundle (searched ${overrideDir ?: "-"}, " +
+                        "${File(projRoot, "local-overrides/$assetRoot").absolutePath}, " +
+                        "${File(legacyProfilePluginsDir, assetRoot).absolutePath}, " +
+                        "${file("src/main/assets/$assetRoot").absolutePath}); " +
+                        "this profile plugin will not be preinstalled",
+                )
             }
-            check(mlOut.listFiles()?.any { it.name.endsWith(".tgz") } == true) {
-                "mobile-layout: no .tgz in ${mlSrc.absolutePath}"
-            }
-            logger.lifecycle("mobile-layout: embedded ${mlSrc.absolutePath}")
-        } else {
-            logger.warn(
-                "mobile-layout: no tgz bundle (searched ${mobileLayoutOverride ?: "-"}, " +
-                    "${localMobileLayout.absolutePath}, ${legacyMobileLayout.absolutePath}); " +
-                    "the mobile layout plugin will not be preinstalled",
-            )
         }
 
         // MANIFEST.json（生成到 build/，不再改写 src/main/assets）
@@ -597,4 +641,18 @@ dependencies {
     // 真机上 dlopen 会失败 —— 本仓库用 scripts/termux-jni 重编了同版本 16 KB 页
     // 对齐的 libtermux.so（jniLibs/ 下），由 packaging.pickFirsts 覆盖 AAR 旧库。
     implementation("com.termux.termux-app:terminal-view:0.118.0")
+    // Material 3（v1.5.x）：设置页外观先做 MD3 试点。组件（MaterialCardView /
+    // MaterialButton / Slider 等）随库分发，不依赖 Play 服务，国内 ROM 可用。
+    // 1.12.0 是最后一个 compileSdk 34 可用的稳定线，与本仓库 compileSdk 36 兼容。
+    //
+    // ★合并说明（2026-11-09）：两侧都有这条依赖但来源不同 ——
+    //   main 经 PR #97 的 MD3 界面需要它；feat 的 MD3 设置页重构也需要它。
+    //   合并后 MD3 主题整包保留，因此这条依赖必须留下，否则 MaterialCardView /
+    //   MaterialAlertDialogBuilder 等全部编译不过。
+    implementation("com.google.android.material:material:1.12.0")
+
+    // 纯 JVM 单元测试（v1.6）：`EndpointCatalog.search()` 这类不碰 Android API
+    // 的逻辑必须能在本机跑，不能只靠 py 探针读源码 —— 探针只能证明「代码长这样」，
+    // 证明不了「跑起来是这个结果」。junit4 + 纯 kotlin stdlib 足够，不引 Robolectric。
+    testImplementation("junit:junit:4.13.2")
 }

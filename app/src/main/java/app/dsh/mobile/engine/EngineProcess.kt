@@ -65,17 +65,43 @@ class EngineProcess private constructor(
                         + "Android=${android.os.Build.VERSION.RELEASE} ${android.os.Build.VERSION.INCREMENTAL}\n",
                 )
                 val buf = ByteArray(4096)
-                while (!closed.get()) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    if (n > 0) {
-                        val chunk = String(buf, 0, n, Charsets.UTF_8)
+                val bb = java.nio.ByteBuffer.wrap(buf)
+                // ⚠️ 不能直接 `String(buf, 0, n, UTF_8)`：read() 的 4096 字节边界会把
+                // 一个 UTF-8 多字节字符（中文 3 字节）从中间切开，两侧各自解出 U+FFFD。
+                // 表现是 engine.log / logcat 里每隔几 KB 出现一个乱码字符，用户导出
+                // 日志时看着像文件损坏。带 CONCAT 的 decoder 会把残缺字节留到下一块。
+                val decoder = Charsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPLACE)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPLACE)
+                val cb = java.nio.CharBuffer.allocate(8192)
+                fun emitDecoded() {
+                    cb.flip()
+                    if (cb.hasRemaining()) {
+                        val chunk = cb.toString()
                         Log.d(TAG, chunk.trim())
-                        // 环形截断与「读全文再重写」都下沉到 EngineLog：
-                        // 旧实现在这里 `readText()` 整篇读入 2MB 再 writeText，
-                        // 在低内存设备上是个明显卡顿点；且与 UI 线程的
-                        // logWebView 写同一文件却互不加锁（见 EngineLog 说明）。
                         EngineLog.append(logFile, chunk)
+                    }
+                }
+                while (!closed.get()) {
+                    bb.clear()
+                    val n = input.read(buf)
+                    val eof = n < 0
+                    bb.limit(if (eof) 0 else n)
+                    do {
+                        cb.clear()
+                        val res = decoder.decode(bb, cb, eof)
+                        emitDecoded()
+                        if (res.isUnderflow) break
+                    } while (true)
+                    if (eof) {
+                        // 收尾：把 decoder 内部最后残留的不完整序列冲出来（按 REPLACE）
+                        do {
+                            cb.clear()
+                            val res = decoder.flush(cb)
+                            emitDecoded()
+                            if (res.isUnderflow) break
+                        } while (true)
+                        break
                     }
                 }
             }
@@ -119,6 +145,34 @@ class EngineProcess private constructor(
         private const val TAG = "EngineProcess"
 
         /**
+         * 原生模式启动 node 时的中转解释器（v1.6.3）。
+         *
+         * 必须是**绝对路径**：`dsh_pty.c` 用 `execve(cmd, ...)`，execve 不搜索 PATH，
+         * 而子进程已 chdir 到 workspaces，那里没有 sh。
+         *
+         * 为什么不直接 execve node：见 spawn() 非 root 分支的注释 —— App 进程
+         * AT_SECURE=1 会让链接器剥掉 LD_LIBRARY_PATH，没有 RPATH 的 runtime node
+         * 会在 execve 那一刻因找不到 libz.so.1 直接死。
+         */
+        private const val SYSTEM_SH = "/system/bin/sh"
+
+        /**
+         * 引擎启动的参数覆盖（Linux 容器模式专用）。
+         *
+         * 为什么需要它：原生模式与容器模式的 argv 结构完全不同 ——
+         * ```
+         * 原生：node --expose-internals <entry> web --patch X --no-open
+         * 容器：dsh_alpine -m /eng:<host> ROOTFS INTERP node --expose-internals /eng/<entry> web ...
+         * ```
+         * 在原有链式 add 里插值会把两种模式搅在一起，且容器的 `-m` 参数必须
+         * 出现在 rootfs 之前（位置敏感）。所以干脆整段替换。
+         */
+        data class Override(
+            val argv: List<String>,
+            val cwd: File,
+        )
+
+        /**
          * fork 引擎进程。
          * @throws EngineStartException execve 失败（含 errno）
          */
@@ -126,6 +180,12 @@ class EngineProcess private constructor(
          * fork 引擎进程。
          * @param suPath 非空时以 su 整体提权启动（Root 模式）：cmd=su, args=-c "<node> ..."，
          *               引擎 node 将以 uid 0 运行。null 则直接 exec node（普通/Shizuku 模式）。
+         * @param override 非空时**完全替换**默认的 argv 构造（Linux 容器模式用）。
+         *                 给了 override 后 [nodeBin] / [entryJs] / [patchPaths] / [extraFlags]
+         *                 都不参与拼装 —— 因为容器模式的 argv 结构完全不同（要带
+         *                 `dsh_alpine ROOTFS INTERP GUEST` 前缀与 `-m` bind 参数），
+         *                 在原有链式 add 里插值只会把两种模式搅在一起。
+         *                 容器模式也不支持 [suPath]（免 root 是它的核心价值），传了会被忽略。
          * @throws EngineStartException execve 失败（含 errno）
          */
         fun spawn(
@@ -137,7 +197,57 @@ class EngineProcess private constructor(
             suPath: String? = null,
             patchPaths: List<String> = emptyList(),
             extraFlags: List<String> = emptyList(),
+            override: Override? = null,
         ): EngineProcess {
+            if (override != null) {
+                // Linux 容器模式：argv 与 cwd 由调用方给全，这里只负责 fork + 日志。
+                //
+                // ⚠️ 关于 su：容器**本身**不需要 root（seccomp 方案的核心价值就是
+                // 非特权运行）。但 App 的 ROOT 模式下，原生引擎历史上以 root 身份
+                // 创建了 dsh-home 里的文件（profiles/web 属主 root:root），容器以
+                // App uid 去写就 EACCES。为了不破坏已有数据、也不让用户手动改权限，
+                // ROOT 模式下容器同样经 su 启动 —— 这样文件属主与原生模式一致，
+                // 用户切换模式时 dsh-home 不需要任何迁移。
+                //
+                // 注意这与「免 root 能力」不矛盾：免 root 指的是**没有 root 的设备
+                // 也能用**（普通模式下 suPath 为 null，容器直接以 App uid 起），
+                // 不是「有 root 也必须不用」。
+                var cmd = override.argv.first()
+                var args = override.argv.drop(1).toTypedArray()
+                if (suPath != null) {
+                    // 与原生模式同一套 su 包装约定：cmd=su 绝对路径，
+                    // args 由 usableSuPrefix 给出（首个元素丢弃），内部再 exec 真命令。
+                    val prefix = Privilege.usableSuPrefix() ?: throw EngineStartException("no usable su (tried -c / 0 / root -c)")
+                    val inner = StringBuilder()
+                    inner.append("exec ").append(shellQuote(cmd))
+                    args.forEach { inner.append(' ').append(shellQuote(it)) }
+                    // su 会把 HOME/PATH 重置成目标用户的，必须自己 export 一次
+                    val homeVar = env.firstOrNull { it.startsWith("HOME=") }?.substringAfter('=')
+                    val pathVar = env.firstOrNull { it.startsWith("PATH=") }?.substringAfter('=')
+                    val dshHomeVar = env.firstOrNull { it.startsWith("DSH_HOME=") }?.substringAfter('=')
+                    val tmpVar = env.firstOrNull { it.startsWith("TMPDIR=") }?.substringAfter('=')
+                    inner.insert(0, buildString {
+                        append("cd ").append(shellQuote(override.cwd.absolutePath))
+                        if (!homeVar.isNullOrEmpty()) append(" && export HOME=").append(shellQuote(homeVar))
+                        if (!pathVar.isNullOrEmpty()) append(" && export PATH=").append(shellQuote(pathVar))
+                        if (!dshHomeVar.isNullOrEmpty()) append(" && export DSH_HOME=").append(shellQuote(dshHomeVar))
+                        if (!tmpVar.isNullOrEmpty()) append(" && export TMPDIR=").append(shellQuote(tmpVar))
+                        append(" && ")
+                    })
+                    cmd = suPath
+                    args = (prefix.drop(1) + inner.toString()).toTypedArray()
+                }
+                val fd = Pty.nativeForkPty(
+                    cmd = cmd,
+                    args = args,
+                    cwd = override.cwd.absolutePath,
+                    env = env,
+                    rows = 40,
+                    cols = 120,
+                )
+                if (fd < 0) throw EngineStartException("fork failed, errno=${-fd}")
+                return EngineProcess(fd, logFile, suPath != null)
+            }
             var cmd = nodeBin.absolutePath
             // patchPaths：App 侧的启动层，按官方 CLI 的 repeatable `--patch` 传入：
             //   ① 内置 SSH 插件的 bundle patch（seam 切换 + SSH 入口）
@@ -197,6 +307,15 @@ class EngineProcess private constructor(
                         "root spawn: env missing HOME/PATH (home=${!homeVar.isNullOrEmpty()}, path=${!pathVar.isNullOrEmpty()})",
                     )
                 }
+                // ⚠️ v1.6.3：su 之后**也必须 export LD_LIBRARY_PATH**。
+                // 与上面 HOME/PATH 同一类问题（su 重置环境），但后果更硬：
+                // runtime 的 node 是 Termux 构建，DT_NEEDED 里有 libz.so.1、libcares.so
+                // 等只存在于 $root/lib 的库。丢掉这个变量，bionic 在 execve 那一刻就报
+                //     CANNOT LINK EXECUTABLE ".../bin/node": library "libz.so.1" not found
+                // 引擎直接死，日志里只有一行 linker 报错（没有崩溃栈，极易误判成别的问题）。
+                // 真机 arm64 一直没暴露是因为那份 node 自带 RPATH；换成没有 RPATH 的
+                // 构建（x86_64）立刻现形。
+                val libPathVar = env.firstOrNull { it.startsWith("LD_LIBRARY_PATH=") }?.substringAfter('=')
                 inner.insert(
                     0,
                     buildString {
@@ -204,6 +323,7 @@ class EngineProcess private constructor(
                         if (!homeVar.isNullOrEmpty()) append(" && export HOME=").append(shellQuote(homeVar))
                         if (!pathVar.isNullOrEmpty()) append(" && export PATH=").append(shellQuote(pathVar))
                         if (!dshHomeVar.isNullOrEmpty()) append(" && export DSH_HOME=").append(shellQuote(dshHomeVar))
+                        if (!libPathVar.isNullOrEmpty()) append(" && export LD_LIBRARY_PATH=").append(shellQuote(libPathVar))
                         if (!bridgeTokenVar.isNullOrEmpty()) append(" && export DSH_BRIDGE_TOKEN=").append(shellQuote(bridgeTokenVar))
                          if (!petTokenVar.isNullOrEmpty()) append(" && export DSH_PET_BRIDGE_TOKEN=").append(shellQuote(petTokenVar))
                          if (!bootIdVar.isNullOrEmpty()) append(" && export DSH_ANDROID_BOOT_ID=").append(shellQuote(bootIdVar))
@@ -223,6 +343,35 @@ class EngineProcess private constructor(
                     ?: throw EngineStartException("no usable su (tried -c / 0 / root -c)")
                 cmd = suPath                                  // 绝对路径，execve 需要
                 args = (prefix.drop(1) + inner.toString()).toTypedArray()
+            } else {
+                // ⚠️ v1.6.3：非 root 模式**必须经 /system/bin/sh 中转**，不能直接 execve node。
+                //
+                // 平台行为（实测，Android 14 / x86_64 模拟器）：App 进程被 bionic 标记
+                // AT_SECURE=1，链接器会**剥掉 LD_LIBRARY_PATH**。而 runtime 的 node 是
+                // Termux 构建，DT_NEEDED 里 libz.so.1 / libcares.so 只存在于 $root/lib，
+                // 于是直接 execve 必然：
+                //     CANNOT LINK EXECUTABLE ".../bin/node": library "libz.so.1" not found
+                // 引擎在 execve 那一刻就死，**没有崩溃栈**，日志里只有一行 linker 报错，
+                // 极容易被误判成「runtime 没装好」或「node 二进制坏了」。
+                //
+                // 经 /system/bin/sh 中转后，sh 本身不是 setuid 程序 → AT_SECURE=0 →
+                // 它 export 的 LD_LIBRARY_PATH 对随后 exec 的 node 生效（实测同一台机器
+                // 上直连失败、经 sh 成功）。`exec` 会**替换** sh 进程，pid 不变，
+                // dsh_pty.c 的 PR_SET_PDEATHSIG 依然有效，没有多一层僵尸外壳。
+                //
+                // 为什么真机 arm64 一直没暴露：那份 node 自带 RPATH，不依赖该变量。
+                // 所以这里不是「为模拟器特判」——它让启动不依赖 runtime 是否编了 RPATH，
+                // 对没有 RPATH 的构建同样是修 bug。
+                val libPathVar = env.firstOrNull { it.startsWith("LD_LIBRARY_PATH=") }?.substringAfter('=')
+                if (!libPathVar.isNullOrEmpty()) {
+                    val inner = StringBuilder("exec ").append(shellQuote(nodeBin.absolutePath))
+                    args.forEach { inner.append(' ').append(shellQuote(it)) }
+                    cmd = SYSTEM_SH
+                    args = arrayOf(
+                        "-c",
+                        "export LD_LIBRARY_PATH=" + shellQuote(libPathVar) + "; " + inner,
+                    )
+                }
             }
             val fd = Pty.nativeForkPty(
                 cmd = cmd,

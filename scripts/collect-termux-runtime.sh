@@ -116,7 +116,24 @@ rm -rf "$ROOT/data"
 # session-persistence-jsonl/sandbox-local/node-addon-system/plugin-manager/app-boot
 # 九个包 sha256 一致），依赖清单也是同样的 86 项，仅版本号整体抬升 ——
 # 故所有锚点天然仍然命中，无需改动任何补丁。
-DSH_VERSION="${DSH_VERSION:-0.2.1-rc.5}"
+# v1.6.1 升级到 0.2.2-rc.1：这次**不一样**，9 个锚点文件里 8 个字节都变了
+# （只有 subprocess-local/lib/index.js 未变），不能再假设锚点天然命中。已用
+# 真实 npm install 解析出的依赖树（654 包，rc.5 是 616 包）逐项实打补丁验证：
+#   · ptc-runtime-android  OLD_SET/ENV_OLD/MAP_OLD 三处仍命中
+#   · fs-local-android     PROBE_OLD 仍命中
+#   · attachment-local     OLD_IMPORTS + SYNC_RE 仍命中（五项校验全过）
+#   · webview-polyfill     ANCHOR_RE（<script type="module">）仍命中
+#   · session-persistence  index.js 的 fs/promises import 行与 worker.cjs 的
+#                          link 调用仍命中
+#   · node-pty-android     runner-launch-*.js 通配仍命中
+#   · apiproxy             **目标包不存在**（rc.5 时就已消失，非本次回归），
+#                          脚本输出 WARN 并跳过；原生 opener 现由
+#                          @deepseek-ai/dsh-native-command 承担，Android 走
+#                          「native path opener is unsupported」分支
+# 依赖清单 86 → 90 项，新增 dsh-experimental-forge-bundle /
+# dsh-experimental-liveshare / dsh-official-bundles /
+# dsh-personalized-recommendations，四者均无原生依赖（无需重新编译 node-pty/koffi）。
+DSH_VERSION="${DSH_VERSION:-0.2.2-rc.1}"
 mkdir -p "$WORK/bundle" && cd "$WORK/bundle"
 printf '{"name":"dsh-runtime","private":true,"dependencies":{"@deepseek-ai/dsh":"%s"}}' \
   "$DSH_VERSION" > package.json
@@ -152,6 +169,13 @@ if command -v python3 >/dev/null 2>&1; then
   # （Android 11 旧 WebView 白屏），v1.2.28 修复。
   export DSH_PATCH_TARGET="$ROOT"
   python3 "$SCRIPTS_DIR/patch-apiproxy.py" || echo "WARN: apiproxy patch failed; openPath falls back to native opener"
+  # ⚠️ 顺序不能反：先降语法门槛，再注入 polyfill。
+  #   patch-webview-syntax-floor.py 用 esbuild --minify 重写入口 chunk，
+  #   若先注入 polyfill（改写的是 dist/index.html，不是 chunk），顺序其实无关；
+  #   但语法转译会重写 assets/*.js，polyfill 只动 index.html，两者互不覆盖。
+  #   放在 polyfill 之后是为了让「polyfill 成功」的日志先出现，便于排查。
+  python3 "$SCRIPTS_DIR/patch-webview-syntax-floor.py" "$ROOT" \
+    || echo "WARN: webview syntax floor patch failed (低版本 WebView 会白屏，需人工确认)"
   python3 "$SCRIPTS_DIR/patch-webview-polyfill.py" || echo "WARN: webview polyfill patch failed"
 fi
 
@@ -286,6 +310,19 @@ python3 "$SCRIPTS_DIR/patch-fs-local-android.py" "$ROOT" || {
 # 但所有子进程起不来。补丁把它加入白名单。详见 scripts/patch-ptc-runtime-android.py。
 python3 "$SCRIPTS_DIR/patch-ptc-runtime-android.py" "$ROOT" || {
   echo "错误：dsh-ptc-runtime-node Android 补丁失败（上游形态已变？），中止构建" >&2
+  exit 1
+}
+
+# [dsh-agent-preset-registry] 会话 preset 引用失效时优雅降级：
+# 会话记录里存着创建时的 agentPreset（agent-preset/selected 事件）。引擎升级后
+# 若该预设被删除/改名，恢复会话时 composeAgent() → presets.resolve() 会抛
+# agent-preset/not-found，而 composeAgent 没有 try/catch —— 于是一个会话的
+# 预设失效会让**整个会话列表**渲染失败（标题变 session id、消息布局错位）。
+# 补丁改为降级到默认预设（会话本体都在），并在返回值里带 fellBackFrom 保持可观测；
+# 默认预设本身也缺失时仍抛错（那种情况没有任何合理组合可用）。
+# 详见 scripts/patch-agent-preset-fallback.py。
+python3 "$SCRIPTS_DIR/patch-agent-preset-fallback.py" "$ROOT" || {
+  echo "错误：dsh-agent-preset-registry 健壮性补丁失败（上游形态已变？），中止构建" >&2
   exit 1
 }
 

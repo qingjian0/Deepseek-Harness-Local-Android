@@ -163,6 +163,35 @@ if os.name != "nt" or have_bash:
 PRINT_ARGV = ('_p() { for a in "$@"; do printf "%s\\n" "$a"; done; }; _p "$@"')
 
 
+# 解析 bash：行为 C 把 PATH 收窄成「假 xargs 目录 + bash 目录 + /usr/bin:/bin」。
+# 两个平台都不能用裸名 `bash`：Android 只有 /system/bin/sh（无 /bin/bash）；
+# Windows 上 shutil.which 返回 `C:\Program Files\Git\usr\bin\bash.EXE`，含空格与卷号。
+# 所以分两个变量：
+#   · BASH      —— 给 subprocess 用，原生路径没问题；
+#   · BASH_DIR  —— 拼进 PATH 用，要 POSIX 形式（PATH 允许空格，shebang 不允许）。
+BASH = shutil.which("bash") or "/bin/bash"
+
+
+def _posix_dir(path):
+    """解释器所在目录的 POSIX 形式（Windows 下用 cygpath 转）。"""
+    d = os.path.dirname(path)
+    if os.name != "nt":
+        return d
+    try:
+        r = subprocess.run(["cygpath", "-u", d], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except OSError:
+        pass
+    return d
+
+
+BASH_DIR = _posix_dir(BASH)
+# 假 xargs 的 shebang 一律走 env：不含空格也不含卷号，Windows(Git Bash) /
+# Linux / Android(Termux) 三处都能落地。
+FAKE_SHEBANG = "#!/usr/bin/env bash"
+
+
 def run_argv(text, env_extra, path_prefix=None):
     body = text.replace('exec "$JAVACMD" "$@"', PRINT_ARGV)
     path = os.path.join(work, "case.sh")
@@ -170,8 +199,9 @@ def run_argv(text, env_extra, path_prefix=None):
     env = dict(os.environ, JAVA_OPTS="", GRADLE_OPTS="")
     env.update(env_extra)
     if path_prefix:
-        env["PATH"] = path_prefix + ":/usr/bin:/bin"
-    r = subprocess.run(["bash", path, "--version"], capture_output=True, text=True, env=env)
+        # 收窄 PATH 的同时保留 bash 所在目录，否则收窄后就再也找不到解释器
+        env["PATH"] = path_prefix + ":" + BASH_DIR + ":/usr/bin:/bin"
+    r = subprocess.run([BASH, path, "--version"], capture_output=True, text=True, env=env)
     return [l for l in r.stdout.splitlines() if l.strip()]
 
 
@@ -213,7 +243,10 @@ fakebin = os.path.join(work, "bin")
 os.makedirs(fakebin)
 fake = os.path.join(fakebin, "xargs")
 io.open(fake, "w", encoding="utf-8", newline="\n").write(
-    "#!/bin/bash\n"
+    # shebang 不能写死路径：Android 无 /bin/bash；Windows 的 which 结果含空格会被
+    # 内核按空格截断（症状正是「补丁把参数全吃了」的假阴性，good == ['--version']）。
+    # 统一走 env，靠 PATH 找到 bash —— run_argv 已把 BASH_DIR 放进 PATH。
+    FAKE_SHEBANG + "\n"
     "while IFS= read -r line; do\n"
     "  set -f\n"
     "  for w in $line; do printf '%s\\n' \"$w\"; done\n"

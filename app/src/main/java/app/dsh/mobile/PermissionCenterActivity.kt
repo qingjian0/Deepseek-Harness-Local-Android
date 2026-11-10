@@ -1,6 +1,6 @@
 package app.dsh.mobile
 
-import android.app.AlertDialog
+import androidx.appcompat.app.AlertDialog
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -73,17 +73,22 @@ class PermissionCenterActivity : ThemedActivity() {
         // 只显示请求的分组（另一组 GONE：视图仍在层级里，findViewById 照常工作，
         // 刷新函数无需判空）。分组子标题一并隐藏：子页顶栏标题已是同文案，再显示
         // 一行小标题纯属重复（v1.4.58 二次修正）。
+        //
+        // ★groupDeviceCaps 必须单独处理（2026-11-09 修复）。它是 groupCaps 的
+        //   **兄弟节点**，不是子节点 —— 布局里三个卡片都是根 ScrollView 的直接孩子。
+        //   只藏 groupCaps 时会剩下 28 个 AI 能力磁贴 + 总览卡 + 批量授权/权限清单
+        //   全都留在屏幕上，于是「运行身份」页里也堆满了权限管理内容，和
+        //   「系统能力」页看起来几乎一样（实测：两页都有 0/28 总览与 6 个能力域）。
         val engineCard = findViewById<View>(R.id.groupEngine)
         val capsCard = findViewById<View>(R.id.groupCaps)
+        val deviceCapsCard = findViewById<View>(R.id.groupDeviceCaps)
+        findViewById<View>(R.id.txtGroupEngineSub).visibility = View.GONE
+        findViewById<View>(R.id.txtGroupCapsSub).visibility = View.GONE
         if (group == GROUP_CAPS) {
             engineCard.visibility = View.GONE
         } else {
-            findViewById<View>(R.id.txtGroupEngineSub).visibility = View.GONE
-        }
-        if (group == GROUP_ENGINE) {
             capsCard.visibility = View.GONE
-        } else {
-            findViewById<View>(R.id.txtGroupCapsSub).visibility = View.GONE
+            deviceCapsCard.visibility = View.GONE
         }
 
         // —— 运行身份：运行权限模式 ——
@@ -133,112 +138,12 @@ class PermissionCenterActivity : ThemedActivity() {
             }
         }
 
-        // —— AI 设备能力开关（v1.4.78 · docs/DEVICE_CAPABILITIES.md） ——
+        // —— AI 能力磁贴（v1.6.0：总览磁贴 + 二级详情） ——
         // 用户显式授权的唯一入口：默认全关，关闭时 AgentBridge 对相应接口 403。
-        // 开关只改「是否允许 AI 用」，不改系统权限；系统权限不满足时开关点不动，
-        // 并提示去哪一张卡里补授权（否则用户会以为开关坏了）。
-        bindCapSwitch(R.id.swCapStatus, R.id.rowCapStatus, CapabilityGate.STATUS, 0)
-        bindCapSwitch(R.id.swCapSensor, R.id.rowCapSensor, CapabilityGate.SENSOR, 0)
-        bindCapSwitch(R.id.swCapNotify, R.id.rowCapNotify, CapabilityGate.NOTIFY, R.string.setting_cap_notify_need)
-        bindCapSwitch(R.id.swCapClip, R.id.rowCapClip, CapabilityGate.CLIPBOARD, 0)
-        bindCapSwitch(R.id.swCapControl, R.id.rowCapControl, CapabilityGate.CONTROL, 0)
-        bindCapSwitch(R.id.swCapSched, R.id.rowCapSched, CapabilityGate.SCHED, 0)
-        bindCapSwitch(R.id.swCapWifi, R.id.rowCapWifi, CapabilityGate.WIFI, 0)
-        bindCapSwitch(R.id.swCapBt, R.id.rowCapBt, CapabilityGate.BT, 0)
-        // 读取他人通知只能由用户在系统里手动授予「通知使用权」，运行时权限拿不到，
-        // 所以权限不足时直接跳该设置页。
-        bindCapSwitch(
-            R.id.swCapNotifyRead,
-            R.id.rowCapNotifyRead,
-            CapabilityGate.NOTIFY_READ,
-            R.string.setting_cap_notify_read_need,
-            Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS,
-        )
-        // 代用户回复通知：与前两者分开授权 —— 回复是「以用户身份对外发言」，后果不可撤回。
-        bindCapSwitch(
-            R.id.swCapNotifyAction,
-            R.id.rowCapNotifyAction,
-            CapabilityGate.NOTIFY_ACTION,
-            R.string.setting_cap_notify_read_need,
-            Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS,
-        )
-        // 媒体控制同样依赖通知使用权（MediaSession 的 MEDIA_CONTENT_CONTROL 拿不到）。
-        bindCapSwitch(
-            R.id.swCapMedia,
-            R.id.rowCapMedia,
-            CapabilityGate.MEDIA,
-            R.string.setting_cap_media_need,
-            Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS,
-        )
-        // 个人数据四项分开授权（v1.5.0-beta.12）。
-        // 旧设计是一个 PERSONAL 总开关：想让 AI 看日程，就得连带把短信与通话记录
-        // 一起打开 —— 把「愿意让 AI 看日程」和「愿意让 AI 看短信」强行等价，
-        // 而这两件事的风险完全不同。现在每项单独确认，且每次读取都会在通知栏留痕
-        // （见 SensitiveAccess）。
-        //
-        // 四项都依赖运行时危险权限；缺时点不动，提示去系统设置里授。
-        bindCapSwitch(
-            R.id.swCapCalendar,
-            R.id.rowCapCalendar,
-            CapabilityGate.PERSONAL_CALENDAR,
-            R.string.setting_cap_personal_need,
-            null,
-        )
-        bindCapSwitch(
-            R.id.swCapContacts,
-            R.id.rowCapContacts,
-            CapabilityGate.PERSONAL_CONTACTS,
-            R.string.setting_cap_personal_need,
-            null,
-        )
-        bindCapSwitch(
-            R.id.swCapSms,
-            R.id.rowCapSms,
-            CapabilityGate.PERSONAL_SMS,
-            R.string.setting_cap_personal_need,
-            null,
-        )
-        bindCapSwitch(
-            R.id.swCapCalls,
-            R.id.rowCapCalls,
-            CapabilityGate.PERSONAL_CALLS,
-            R.string.setting_cap_personal_need,
-            null,
-        )
-        // NFC 与地理围栏：NFC 无法由应用静默开启，缺时直接跳无线设置页。
-        bindCapSwitch(
-            R.id.swCapRf,
-            R.id.rowCapRf,
-            CapabilityGate.RF,
-            R.string.setting_cap_rf_need,
-            Settings.ACTION_NFC_SETTINGS,
-        )
-        // 屏幕录制：受系统授权弹窗约束（每次开始都要用户点头），无前置系统权限。
-        bindCapSwitch(
-            R.id.swCapScreenCapture,
-            R.id.rowCapScreenCapture,
-            CapabilityGate.SCREEN_CAPTURE,
-            0,
-        )
-        // 虚拟 HID 设备（v1.5.0-beta.13）：在系统里注册一个真实外接键盘/鼠标。
-        // 需要 root —— 普通 App 与 shell 都打不开 /dev/uhid。默认关。
-        bindCapSwitch(
-            R.id.swCapHid,
-            R.id.rowCapHid,
-            CapabilityGate.HID,
-            R.string.setting_cap_hid_need,
-            null,
-        )
-        // 按 UID 断网 / 查流量（v1.5.0-beta.17）：能整体切断别的 App 的网络，
-        // 所以与 WiFi/蓝牙分开授权、默认关闭；封锁需 root，查询只需 Usage Access。
-        bindCapSwitch(
-            R.id.swCapNet,
-            R.id.rowCapNet,
-            CapabilityGate.NET,
-            R.string.setting_cap_net_need,
-            null,
-        )
-
+        // 交互分工：磁贴上的开关直接切换（快路径）；点磁贴其余区域进二级详情，
+        // 说明文字只在详情里出现 —— 这样 20 项才能在 1.4 屏内排完（原列表形态
+        // 真机实测 4.9 屏，一屏只能看到 4 项）。
+        for (spec in capSpecs()) bindCapSwitch(spec)
 
         // 一键授予全部权限（v1.5.0-beta.9）：无差别尝试 Manifest 里声明的每一个权限。
         // 有 root/Shizuku 时才有意义；两者都没有时按钮会如实提示无法授予。
@@ -334,6 +239,20 @@ class PermissionCenterActivity : ThemedActivity() {
         permissions: Array<out String>,
         grantResults: IntArray,
     ) {
+        if (requestCode == REQ_CAP_RUNTIME) {
+            // 能力磁贴的运行时权限回来了：重绘全部磁贴，让刚拿到权限的那一格从「待授权」
+            // 变成可点。不在这里顺手把开关打开 —— 授权 ≠ 同意把能力交给 AI，两件事分开。
+            refreshCapSwitches()
+            val any = grantResults.any {
+                it == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+            Toast.makeText(
+                this,
+                getString(if (any) R.string.cap_perm_granted else R.string.cap_perm_denied),
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
         if (requestCode == REQ_MIC) {
             refreshMicRow()
             val ok = grantResults.isNotEmpty() &&
@@ -483,10 +402,13 @@ class PermissionCenterActivity : ThemedActivity() {
             label: String, sub: String, mode: PrivMode,
             enabled: Boolean, checked: Boolean,
         ): LinearLayout {
-            val radio = android.widget.RadioButton(this).apply {
+            val radio = com.google.android.material.radiobutton.MaterialRadioButton(this).apply {
                 isChecked = checked
                 isEnabled = enabled
                 isClickable = false   // 由整行接管点击
+                buttonTintList = android.content.res.ColorStateList.valueOf(
+                    getColor(R.color.md3_primary),
+                )
             }
             val textCol = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -559,7 +481,7 @@ class PermissionCenterActivity : ThemedActivity() {
             if (rootOk) "" else getString(R.string.setting_root_status_no),
             PrivMode.ROOT, rootOk, current == PrivMode.ROOT))
 
-        privPickDialog = AlertDialog.Builder(this)
+        privPickDialog = md3Dialog()
             .setTitle(getString(R.string.priv_pick_title))
             .setView(box)
             .setNegativeButton(android.R.string.cancel, null)
@@ -584,7 +506,7 @@ class PermissionCenterActivity : ThemedActivity() {
     }
 
     private fun warnRootSwitch(next: () -> Unit) {
-        AlertDialog.Builder(this)
+        md3Dialog()
             .setTitle(getString(R.string.ob_priv_root_warn_title))
             .setMessage(getString(R.string.ob_priv_root_warn))
             .setCancelable(false)
@@ -626,97 +548,559 @@ class PermissionCenterActivity : ThemedActivity() {
             show()
         }
 
-    /**
-     * 绑定一个 AI 能力开关。
-     *
-     * 设计要点：**点击行为永远一致**（切换开关），是否可用只在渲染时体现。
-     * 早期实现按「系统权限不满足」分支把 row 的点击改弹提示 —— 结果用户从上方
-     * 卡片补授权限返回后，开关虽已置为可用，点击却仍只弹提示（行为没跟着恢复）。
-     * 改为：点击一律 toggle，权限不满足时由 toggle 自己弹提示。
-     *
-     * @param needHintRes 系统权限不满足时要提示的文案；0 表示该能力无额外系统门槛。
-     * @param settingsAction 非空时，权限不满足会提示并跳该系统设置页（如通知使用权
-     *        只能由用户在系统里手动授予，运行时弹窗拿不到）。
-     */
-    private fun bindCapSwitch(
-        switchId: Int,
-        rowId: Int,
+    // --------------------------------------------------------- AI 能力磁贴
+
+    /** 一项 AI 能力的视图与系统门槛描述（v1.6.0）。 */
+    private data class CapSpec(
+        /** CapabilityGate 里的能力名（持久化键与 403 判定都用它）。 */
+        val cap: String,
+        /** 磁贴右上角的开关。 */
+        val sw: Int,
+        /** 磁贴容器：点它进二级详情。 */
+        val row: Int,
+        /** 磁贴底部状态文字（已开启 / 未开启 / 待授权）。 */
+        val state: Int,
+        val title: Int,
+        /** 说明文字，只在二级详情里显示。 */
+        val sub: Int,
+        /** 系统门槛不满足时的提示；0 = 该能力无额外系统门槛。 */
+        val need: Int = 0,
+        /** 非空时，门槛不满足会跳该系统设置页（如通知使用权只能手动授予）。 */
+        val action: String? = null,
+    )
+
+    /** 一个域：标题、右上角「已开 n/m」计数、该域下的能力。 */
+    private data class CapDomain(val label: Int, val count: Int, val items: List<CapSpec>)
+
+    private fun spec(
         cap: String,
-        needHintRes: Int,
-        settingsAction: String? = null,
-    ) {
-        val sw = findViewById<android.widget.Switch>(switchId)
-        val row = findViewById<View>(rowId)
+        sw: Int,
+        row: Int,
+        state: Int,
+        title: Int,
+        sub: Int,
+        need: Int = 0,
+        action: String? = null,
+    ) = CapSpec(cap, sw, row, state, title, sub, need, action)
+
+    /**
+     * 六个域的能力清单（顺序即界面顺序）。
+     *
+     * 为什么分域而不是一列平铺：20 项排成一列时，「短信在哪」要靠滚动找；按
+     * 设备/通知/控制/个人数据/屏幕/网络系统分组后，每个域右上角的「已开 n/m」
+     * 能直接回答「这一类我开放了多少」，不用逐格数。
+     *
+     * 每一项都必须是**独立**开关：旧设计把日历/联系人/短信/通话捆成一个
+     * PERSONAL 总开关，等于逼用户为了看日程把短信也交出去。
+     */
+    private fun capDomains(): List<CapDomain> = listOf(
+        CapDomain(
+            R.string.setting_cap_domain_env, R.id.txtDomEnv,
+            listOf(
+                spec(
+                    CapabilityGate.STATUS, R.id.swCapStatus, R.id.rowCapStatus,
+                    R.id.stCapStatus, R.string.setting_cap_status, R.string.setting_cap_status_sub,
+                ),
+                spec(
+                    CapabilityGate.SENSOR, R.id.swCapSensor, R.id.rowCapSensor,
+                    R.id.stCapSensor, R.string.setting_cap_sensor, R.string.setting_cap_sensor_sub,
+                ),
+            ),
+        ),
+        CapDomain(
+            R.string.setting_cap_domain_notify, R.id.txtDomNotify,
+            listOf(
+                spec(
+                    CapabilityGate.NOTIFY, R.id.swCapNotify, R.id.rowCapNotify,
+                    R.id.stCapNotify, R.string.setting_cap_notify, R.string.setting_cap_notify_sub,
+                    R.string.setting_cap_notify_need,
+                ),
+                // 读取他人通知只能由用户在系统里手动授予「通知使用权」，运行时权限拿不到。
+                spec(
+                    CapabilityGate.NOTIFY_READ, R.id.swCapNotifyRead, R.id.rowCapNotifyRead,
+                    R.id.stCapNotifyRead, R.string.setting_cap_notify_read,
+                    R.string.setting_cap_notify_read_sub,
+                    R.string.setting_cap_notify_read_need, Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS,
+                ),
+                // 代用户回复：与前两者分开授权 —— 这是「以用户身份对外发言」，不可撤回。
+                spec(
+                    CapabilityGate.NOTIFY_ACTION, R.id.swCapNotifyAction, R.id.rowCapNotifyAction,
+                    R.id.stCapNotifyAction, R.string.setting_cap_notify_action,
+                    R.string.setting_cap_notify_action_sub,
+                    R.string.setting_cap_notify_read_need, Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS,
+                ),
+                // 媒体控制同样依赖通知使用权（MEDIA_CONTENT_CONTROL 拿不到）。
+                spec(
+                    CapabilityGate.MEDIA, R.id.swCapMedia, R.id.rowCapMedia,
+                    R.id.stCapMedia, R.string.setting_cap_media, R.string.setting_cap_media_sub,
+                    R.string.setting_cap_media_need, Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS,
+                ),
+            ),
+        ),
+        CapDomain(
+            R.string.setting_cap_domain_control, R.id.txtDomControl,
+            listOf(
+                spec(
+                    CapabilityGate.CONTROL, R.id.swCapControl, R.id.rowCapControl,
+                    R.id.stCapControl, R.string.setting_cap_control, R.string.setting_cap_control_sub,
+                ),
+                spec(
+                    CapabilityGate.SCHED, R.id.swCapSched, R.id.rowCapSched,
+                    R.id.stCapSched, R.string.setting_cap_sched, R.string.setting_cap_sched_sub,
+                ),
+                spec(
+                    CapabilityGate.WIFI, R.id.swCapWifi, R.id.rowCapWifi,
+                    R.id.stCapWifi, R.string.setting_cap_wifi, R.string.setting_cap_wifi_sub,
+                ),
+                spec(
+                    CapabilityGate.BT, R.id.swCapBt, R.id.rowCapBt,
+                    R.id.stCapBt, R.string.setting_cap_bt, R.string.setting_cap_bt_sub,
+                ),
+            ),
+        ),
+        CapDomain(
+            R.string.setting_cap_domain_personal, R.id.txtDomPersonal,
+            listOf(
+                spec(
+                    CapabilityGate.PERSONAL_CALENDAR, R.id.swCapCalendar, R.id.rowCapCalendar,
+                    R.id.stCapCalendar, R.string.setting_cap_personal_calendar,
+                    R.string.setting_cap_personal_calendar_sub, R.string.setting_cap_personal_need,
+                ),
+                spec(
+                    CapabilityGate.PERSONAL_CONTACTS, R.id.swCapContacts, R.id.rowCapContacts,
+                    R.id.stCapContacts, R.string.setting_cap_personal_contacts,
+                    R.string.setting_cap_personal_contacts_sub, R.string.setting_cap_personal_need,
+                ),
+                spec(
+                    CapabilityGate.PERSONAL_SMS, R.id.swCapSms, R.id.rowCapSms,
+                    R.id.stCapSms, R.string.setting_cap_personal_sms,
+                    R.string.setting_cap_personal_sms_sub, R.string.setting_cap_personal_need,
+                ),
+                spec(
+                    CapabilityGate.PERSONAL_CALLS, R.id.swCapCalls, R.id.rowCapCalls,
+                    R.id.stCapCalls, R.string.setting_cap_personal_calls,
+                    R.string.setting_cap_personal_calls_sub, R.string.setting_cap_personal_need,
+                ),
+            ),
+        ),
+        CapDomain(
+            R.string.setting_cap_domain_input, R.id.txtDomInput,
+            listOf(
+                // 屏幕录制受系统授权弹窗约束（每次开始都要用户点头），无前置系统权限。
+                spec(
+                    CapabilityGate.SCREEN_CAPTURE, R.id.swCapScreenCapture, R.id.rowCapScreenCapture,
+                    R.id.stCapScreenCapture, R.string.setting_cap_screen_capture,
+                    R.string.setting_cap_screen_capture_sub,
+                ),
+                // 虚拟 HID：在系统里注册一个真实外接键盘，需要 root。
+                spec(
+                    CapabilityGate.HID, R.id.swCapHid, R.id.rowCapHid,
+                    R.id.stCapHid, R.string.setting_cap_hid, R.string.setting_cap_hid_sub,
+                    R.string.setting_cap_hid_need,
+                ),
+                spec(
+                    CapabilityGate.CLIPBOARD, R.id.swCapClip, R.id.rowCapClip,
+                    R.id.stCapClip, R.string.setting_cap_clip, R.string.setting_cap_clip_sub,
+                ),
+            ),
+        ),
+        CapDomain(
+            R.string.setting_cap_domain_system, R.id.txtDomSystem,
+            listOf(
+                // NFC 无法由应用静默开启，缺时直接跳无线设置页。
+                spec(
+                    CapabilityGate.RF, R.id.swCapRf, R.id.rowCapRf,
+                    R.id.stCapRf, R.string.setting_cap_rf, R.string.setting_cap_rf_sub,
+                    R.string.setting_cap_rf_need, Settings.ACTION_NFC_SETTINGS,
+                ),
+                // 按 UID 断网：唯一能整体切断别的 App 网络的能力，封锁需 root。
+                spec(
+                    CapabilityGate.NET, R.id.swCapNet, R.id.rowCapNet,
+                    R.id.stCapNet, R.string.setting_cap_net, R.string.setting_cap_net_sub,
+                    R.string.setting_cap_net_need,
+                ),
+                // 系统级操作 / root shell：本项目权限最大的一档，仅 ROOT 模式可用。
+                spec(
+                    CapabilityGate.ROOT, R.id.swCapRoot, R.id.rowCapRoot,
+                    R.id.stCapRoot, R.string.setting_cap_root, R.string.setting_cap_root_sub,
+                    R.string.setting_cap_root_need,
+                ),
+                // 读取其他 App 私有数据。与 root shell **分开授权**：
+                // root 是「能操作系统」，这个是「能看别人存了什么」——
+                // 用户可能愿意让 AI 帮他还原设置，但不愿让它翻聊天数据库。
+                spec(
+                    CapabilityGate.APPDATA, R.id.swCapAppdata, R.id.rowCapAppdata,
+                    R.id.stCapAppdata, R.string.setting_cap_appdata,
+                    R.string.setting_cap_appdata_sub,
+                    R.string.setting_cap_appdata_need,
+                ),
+                // Shizuku / ADB shell 通道。与 root 互斥但不等价：root 靠「引擎本身
+                // uid 0」走门脚本直连；Shizuku 靠 App 进程的 binder，必须经桥中转。
+                spec(
+                    CapabilityGate.SHIZUKU, R.id.swCapShizuku, R.id.rowCapShizuku,
+                    R.id.stCapShizuku, R.string.setting_cap_shizuku,
+                    R.string.setting_cap_shizuku_sub,
+                    R.string.setting_cap_shizuku_need,
+                ),
+                // 事件流两项（v1.6.x）。默认关，且**只有它们会在每次被读取时弹告警**。
+                // 与 CAP.CONTROL 分开：控制是「代我操作」，这两项是「看我做了什么」。
+                spec(
+                    CapabilityGate.INPUTWATCH, R.id.swCapInputwatch, R.id.rowCapInputwatch,
+                    R.id.stCapInputwatch, R.string.setting_cap_inputwatch,
+                    R.string.setting_cap_inputwatch_sub,
+                    R.string.setting_cap_inputwatch_need,
+                ),
+                spec(
+                    CapabilityGate.KEYWATCH, R.id.swCapKeywatch, R.id.rowCapKeywatch,
+                    R.id.stCapKeywatch, R.string.setting_cap_keywatch,
+                    R.string.setting_cap_keywatch_sub,
+                    R.string.setting_cap_keywatch_need,
+                ),
+            ),
+        ),
+        /*
+         * ★Linux 容器域（v1.6.x）。
+         *
+         * 这一域收的是「AI 能对这台手机做的、与运行环境有关」的能力：
+         * 在容器里跑命令、装/卸应用、看位置、拍照。
+         *
+         * ⚠️ 前三项（packages/location/camera）的能力代码与文案早就写好了，
+         * 但**权限中心一直没引用它们** —— 用户根本看不到开关，只能靠有人手改
+         * prefs 才能用。这里一并补上，否则那三个端点等于不存在。
+         *
+         * 顺序按「动静」排：Linux 是最大的（能跑任意命令），然后是装应用
+         * （会改变这台机器上有什么），最后两个是读位置/拍照（只看不写）。
+         */
+        CapDomain(
+            R.string.setting_cap_domain_linux, R.id.txtDomLinux,
+            listOf(
+                // 容器内执行命令：能力上等价于给一个 shell，所以放这一域第一格。
+                spec(
+                    CapabilityGate.LINUX, R.id.swCapLinux, R.id.rowCapLinux,
+                    R.id.stCapLinux, R.string.setting_cap_linux,
+                    R.string.setting_cap_linux_sub,
+                ),
+                // 装/卸应用：install 仍强制走系统确认页（不提供静默安装）。
+                // 列出应用不需要任何系统权限，所以它的门槛提示说的是「装才要授权」——
+                // 点开关时直接跳「安装未知应用」页，而不是弹一句无从下手的提示。
+                spec(
+                    CapabilityGate.PACKAGES, R.id.swCapPackages, R.id.rowCapPackages,
+                    R.id.stCapPackages, R.string.setting_cap_packages,
+                    R.string.setting_cap_packages_sub,
+                    R.string.setting_cap_packages_need,
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                ),
+                // 位置与相机是**运行时权限**：缺权时 permissionAvailable 返 false，
+                // 开关会置灰；点它先当场弹系统授权框（requestCapPerm），被永久拒绝
+                // 时再退回文案 + 应用详情页。
+                spec(
+                    CapabilityGate.LOCATION, R.id.swCapLocation, R.id.rowCapLocation,
+                    R.id.stCapLocation, R.string.setting_cap_location,
+                    R.string.setting_cap_location_sub,
+                    R.string.setting_cap_location_need,
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                ),
+                spec(
+                    CapabilityGate.CAMERA, R.id.swCapCamera, R.id.rowCapCamera,
+                    R.id.stCapCamera, R.string.setting_cap_camera,
+                    R.string.setting_cap_camera_sub,
+                    R.string.setting_cap_camera_need,
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                ),
+            ),
+        ),
+    )
+
+    private fun capSpecs(): List<CapSpec> = capDomains().flatMap { it.items }
+
+    /**
+     * 绑定一个能力磁贴（v1.6.0）。
+     *
+     * 交互分工（这是与旧版最大的不同）：
+     *  - **开关本体**直接切换，不弹任何东西 —— 高频操作要一步到位；
+     *  - **磁贴其余区域**进二级详情，说明文字、系统门槛、状态都放那里。
+     *
+     * 旧版把「切换」绑在整行上，说明文字又必须常驻，于是每行都得占 130dp 以上，
+     * 20 项就是 4.9 屏。拆开之后每格只有标题 + 状态，一屏能放进 8~9 格。
+     */
+    private fun bindCapSwitch(spec: CapSpec) {
+        val sw = findViewById<com.google.android.material.materialswitch.MaterialSwitch>(spec.sw)
+        val row = findViewById<View>(spec.row)
 
         val hint: () -> Unit = {
-            if (needHintRes != 0) {
-                Toast.makeText(this, getString(needHintRes), Toast.LENGTH_LONG).show()
+            // 相机/定位是运行时权限：先当场向系统要一次（弹系统授权框），
+            // 被永久拒绝时系统不再弹窗、请求会立刻返回，这时才落到文案 + 跳转设置页。
+            if (!requestCapPerm(spec.cap) && spec.need != 0) {
+                Toast.makeText(this, getString(spec.need), Toast.LENGTH_LONG).show()
             }
-            if (settingsAction != null) {
-                runCatching { startActivity(Intent(settingsAction)) }
-            }
+            if (spec.action != null) openCapSettings(spec.action)
         }
 
-        val toggle: () -> Unit = {
-            if (needHintRes != 0 && !CapabilityGate.permissionAvailable(this, cap)) {
-                hint()
-            } else {
-                val next = !CapabilityGate.enabled(this, cap)
-                CapabilityGate.setEnabled(this, cap, next)
-                sw.isChecked = next
-            }
-        }
-
+        // 开关是快路径：点它只切换，不弹详情。
         sw.setOnCheckedChangeListener { _, checked ->
-            // 用户手点才会走到这里；与存储值不一致才写盘（refresh 的赋值不会写）。
-            if (checked != CapabilityGate.enabled(this, cap)) {
-                if (needHintRes != 0 && !CapabilityGate.permissionAvailable(this, cap)) {
-                    sw.isChecked = CapabilityGate.enabled(this, cap)
+            if (checked != CapabilityGate.enabled(this, spec.cap)) {
+                if (spec.need != 0 && !CapabilityGate.permissionAvailable(this, spec.cap)) {
+                    sw.isChecked = CapabilityGate.enabled(this, spec.cap)
                     hint()
                 } else {
-                    CapabilityGate.setEnabled(this, cap, checked)
+                    CapabilityGate.setEnabled(this, spec.cap, checked)
+                    renderCapTile(spec)
+                    refreshCapOverview()
                 }
             }
         }
-        row.setOnClickListener { toggle() }
-        renderCapSwitch(sw, cap)
+
+        // 点磁贴其余区域进详情：说明文字只在这里出现。
+        row.setOnClickListener { showCapDetail(spec) }
+        renderCapTile(spec)
     }
 
-    /** 单个开关的渲染：值来自存储，可用性来自系统权限。 */
-    private fun renderCapSwitch(sw: android.widget.Switch, cap: String) {
-        val ok = CapabilityGate.permissionAvailable(this, cap)
-        sw.isChecked = CapabilityGate.enabled(this, cap)
+    /**
+     * 一个磁贴的渲染：开关值 + 底部状态文字 + 门槛不满足时的视觉弱化。
+     *
+     * 状态用**文案与色彩双重编码**（不只靠开关位置）：色盲用户、以及「开着但系统
+     * 没给权限」这种中间态，光看开关是分不出来的。
+     */
+    private fun renderCapTile(spec: CapSpec) {
+        val sw = findViewById<com.google.android.material.materialswitch.MaterialSwitch>(spec.sw) ?: return
+        val on = CapabilityGate.enabled(this, spec.cap)
+        val ok = CapabilityGate.permissionAvailable(this, spec.cap)
+        sw.isChecked = on
         sw.isEnabled = ok
         sw.alpha = if (ok) 1f else 0.4f
+
+        val st = findViewById<TextView>(spec.state) ?: return
+        when {
+            !ok -> {
+                st.text = getString(R.string.setting_cap_state_blocked)
+                st.setTextColor(getColor(R.color.warning))
+            }
+            on -> {
+                st.text = getString(R.string.state_on)
+                st.setTextColor(getColor(R.color.success))
+            }
+            else -> {
+                st.text = getString(R.string.state_off)
+                st.setTextColor(getColor(R.color.text_secondary))
+            }
+        }
     }
 
-    /** 从系统设置页返回后同步开关的真实状态（权限可能刚被授予或撤销）。 */
-    private fun refreshCapSwitches() {
-        val pairs = listOf(
-            R.id.swCapStatus to CapabilityGate.STATUS,
-            R.id.swCapSensor to CapabilityGate.SENSOR,
-            R.id.swCapNotify to CapabilityGate.NOTIFY,
-            R.id.swCapClip to CapabilityGate.CLIPBOARD,
-            R.id.swCapControl to CapabilityGate.CONTROL,
-            R.id.swCapSched to CapabilityGate.SCHED,
-            R.id.swCapWifi to CapabilityGate.WIFI,
-            R.id.swCapBt to CapabilityGate.BT,
-            R.id.swCapNotifyRead to CapabilityGate.NOTIFY_READ,
-            R.id.swCapNotifyAction to CapabilityGate.NOTIFY_ACTION,
-            R.id.swCapMedia to CapabilityGate.MEDIA,
-            R.id.swCapCalendar to CapabilityGate.PERSONAL_CALENDAR,
-            R.id.swCapContacts to CapabilityGate.PERSONAL_CONTACTS,
-            R.id.swCapSms to CapabilityGate.PERSONAL_SMS,
-            R.id.swCapCalls to CapabilityGate.PERSONAL_CALLS,
-            R.id.swCapRf to CapabilityGate.RF,
-            R.id.swCapScreenCapture to CapabilityGate.SCREEN_CAPTURE,
-            R.id.swCapHid to CapabilityGate.HID,
-            R.id.swCapNet to CapabilityGate.NET,
-        )
-        for ((id, cap) in pairs) {
-            val sw = runCatching { findViewById<android.widget.Switch>(id) }.getOrNull() ?: continue
-            renderCapSwitch(sw, cap)
+    /**
+     * 这一格的「系统门槛提示」现在该不该显示。
+     *
+     * 与 [CapabilityGate.permissionAvailable] 故意不同：那个决定**开关能不能点**，
+     * 这个决定**要不要提示还缺什么**。应用管理是最典型的分离场景 —— 列出已装应用
+     * 不需要任何系统权限（开关必须可点），但安装需要「安装未知应用」授权（提示必须
+     * 出现）。若两者共用一个判据，要么开关被误置灰，要么提示永远不出现。
+     */
+    private fun capNeedActive(spec: CapSpec): Boolean {
+        if (spec.need == 0) return false
+        if (spec.cap == CapabilityGate.PACKAGES) {
+            return Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()
         }
+        return !CapabilityGate.permissionAvailable(this, spec.cap)
+    }
+
+    /**
+     * 运行时权限的当场申请（v1.6.x）。
+     *
+     * 为什么需要：相机与定位是**运行时权限**，而权限中心此前只会弹一句 Toast
+     * 「去系统设置里授予」—— 用户被引导离开 App，多跳一层，还容易以为开关坏了。
+     * 这里在开关点亮的瞬间直接调 requestPermissions，系统授权框当场弹出。
+     *
+     * 返回 false 表示「本次没能发起申请」：该能力不需要运行时权限（如 Linux / 应用列表），
+     * 或者已被永久拒绝（系统不再弹窗，只能去设置页）—— 调用方据此决定是否再弹文案。
+     */
+    private fun requestCapPerm(cap: String): Boolean {
+        val perms = when (cap) {
+            CapabilityGate.CAMERA -> arrayOf(android.Manifest.permission.CAMERA)
+            CapabilityGate.LOCATION -> arrayOf(
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            )
+            // 其余能力没有可在此申请的运行时权限：有的靠系统设置页（通知使用权），
+            // 有的靠 root/Shizuku，有的根本不需要系统权限。返回 false 让调用方走文案。
+            else -> return false
+        }
+        val missing = perms.filter {
+            checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) return false
+        // shouldShowRequestPermissionRationale=false 且已被拒绝过一次时，系统不会再弹窗，
+        // 直接返回空结果 —— 那种情况让调用方提示「去设置页」，避免用户点了没反应。
+        requestPermissions(missing.toTypedArray(), REQ_CAP_RUNTIME)
+        return true
+    }
+
+    /**
+     * 跳到系统设置页补权限。
+     *
+     * 有一类 action **必须**带 `package:` data，否则会打开一张与目标无关的列表：
+     *   · `ACTION_APPLICATION_DETAILS_SETTINGS` 不带 data → 「所有应用」列表；
+     *   · `ACTION_MANAGE_UNKNOWN_APP_SOURCES` 不带 data → 直接抛
+     *     ActivityNotFoundException（系统要求按包授权，没有全局页）。
+     * 通知使用权 / NFC 这类全局设置页反而不接受 data，所以只能按 action 分开处理。
+     */
+    private fun openCapSettings(action: String) {
+        val perPackage = action == Settings.ACTION_APPLICATION_DETAILS_SETTINGS ||
+            action == Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES
+        val intent = if (perPackage) {
+            Intent(action, android.net.Uri.parse("package:$packageName"))
+        } else {
+            Intent(action)
+        }
+        runCatching { startActivity(intent) }
+    }
+
+    /**
+     * 二级详情：说明 + 系统门槛 + 允许开关。
+     *
+     * 这里复用 showPrivDialog 的圆角背景与自绘布局，保持两种对话框观感一致。
+     */
+    private fun showCapDetail(spec: CapSpec) {
+        val on = CapabilityGate.enabled(this, spec.cap)
+        val ok = CapabilityGate.permissionAvailable(this, spec.cap)
+
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(16), dp(20), dp(8))
+        }
+
+        box.addView(TextView(this).apply {
+            text = getString(spec.title)
+            textSize = 17f
+            setTextColor(getColor(R.color.text_primary))
+        })
+        box.addView(TextView(this).apply {
+            text = getString(spec.sub)
+            textSize = 13f
+            setTextColor(getColor(R.color.text_secondary))
+            setPadding(0, dp(8), 0, 0)
+        })
+        // 「门槛提示」与「开关能否点」是两件事：应用管理的开关始终可点（列出应用本来
+        // 就不需要权限），但「安装未知应用」没授权时安装会 403 —— 那条提示属于安装，
+        // 不属于开关本身，所以单独用 capNeedActive 判定，不跟着 ok 走。
+        if (capNeedActive(spec)) {
+            box.addView(TextView(this).apply {
+                text = getString(spec.need)
+                textSize = 13f
+                setTextColor(getColor(R.color.warning))
+                setPadding(0, dp(10), 0, 0)
+            })
+            // 磁贴上的开关在缺权时是置灰的（点不动），所以「去补权限」必须在这里给一个
+            // 明确的入口：否则用户看到的是「有个说明文字，但什么也点不了」。
+            box.addView(TextView(this).apply {
+                text = getString(R.string.setting_cap_grant_now)
+                textSize = 14f
+                setTextColor(getColor(R.color.accent))
+                setPadding(0, dp(12), 0, 0)
+                setOnClickListener {
+                    if (!requestCapPerm(spec.cap)) {
+                        Toast.makeText(
+                            this@PermissionCenterActivity,
+                            getString(spec.need),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                    if (spec.action != null) openCapSettings(spec.action)
+                }
+            })
+        }
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(16), 0, dp(4))
+        }
+        val label = TextView(this).apply {
+            text = getString(R.string.setting_cap_detail_allow)
+            textSize = 15f
+            setTextColor(getColor(if (ok) R.color.text_primary else R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val sw = com.google.android.material.materialswitch.MaterialSwitch(this).apply {
+            isChecked = on
+            isEnabled = ok
+            alpha = if (ok) 1f else 0.4f
+        }
+        row.addView(label)
+        row.addView(sw)
+        box.addView(row)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(box)
+            .setNegativeButton(getString(R.string.setting_cap_detail_close), null)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_rounded)
+        dialog.show()
+
+        sw.setOnCheckedChangeListener { _, checked ->
+            if (!checked) {
+                CapabilityGate.setEnabled(this, spec.cap, false)
+                renderCapTile(spec)
+                refreshCapOverview()
+                return@setOnCheckedChangeListener
+            }
+            if (spec.need != 0 && !CapabilityGate.permissionAvailable(this, spec.cap)) {
+                // 系统权限不满足：开关弹回，并当场提示去哪补 —— 否则用户会以为开关坏了。
+                // 能运行时申请的（相机/定位）直接弹系统授权框，不必让用户自己翻设置页。
+                sw.isChecked = false
+                if (!requestCapPerm(spec.cap)) {
+                    Toast.makeText(this, getString(spec.need), Toast.LENGTH_LONG).show()
+                }
+                if (spec.action != null) openCapSettings(spec.action)
+            } else {
+                CapabilityGate.setEnabled(this, spec.cap, true)
+                renderCapTile(spec)
+                refreshCapOverview()
+            }
+        }
+    }
+
+    /**
+     * 总览卡的三个数字：已开启 / 总数、百分比、系统授权进度。
+     *
+     * 「已开启」只算真正可用的（开关开 + 系统权限在），否则用户会看到一个
+     * 开了但用不了的数字，比不显示更误导。
+     */
+    private fun refreshCapOverview() {
+        val all = capSpecs()
+        val enabled = all.count { CapabilityGate.can(this, it.cap) }
+        val total = all.size
+        findViewById<TextView>(R.id.txtCapTotal)?.text = "$enabled / $total"
+        val pct = if (total == 0) 0 else enabled * 100 / total
+        findViewById<TextView>(R.id.txtCapPct)?.text = "$pct%"
+        findViewById<android.widget.ProgressBar>(R.id.barCapProgress)?.progress = pct
+
+        // 系统授权四项（无障碍 / 文件 / 通知 / 麦克风）单独计数：它们不由这些开关控制，
+        // 混进同一进度条会把「AI 能力开了多少」讲成「系统给了多少」，两件事分开报。
+        val grants = listOf(
+            DshAccessibilityService.isEnabled(),
+            if (Build.VERSION.SDK_INT >= 30) android.os.Environment.isExternalStorageManager()
+            else checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED,
+            if (Build.VERSION.SDK_INT >= 33) checkSelfPermission(
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED else true,
+            hasMicPermission(),
+        ).count { it }
+
+        findViewById<TextView>(R.id.txtCapOverviewSub)?.text = getString(
+            R.string.setting_cap_overview_sub, enabled, total, grants, 4,
+        )
+
+        // 每个域的分母来自 XML 构建出的磁贴数，分子只算真正可用的。
+        for (domain in capDomains()) {
+            val n = domain.items.count { CapabilityGate.can(this, it.cap) }
+            findViewById<TextView>(domain.count)?.text = "$n/${domain.items.size}"
+        }
+    }
+
+    /** 从系统设置页返回后同步全部磁贴与总览（权限可能刚被授予或撤销）。 */
+    private fun refreshCapSwitches() {
+        for (spec in capSpecs()) renderCapTile(spec)
+        refreshCapOverview()
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
@@ -743,5 +1127,8 @@ class PermissionCenterActivity : ThemedActivity() {
 
         /** 麦克风权限请求码 */
         private const val REQ_MIC = 4203
+
+        /** 能力磁贴的运行时权限请求码（相机 / 定位） */
+        private const val REQ_CAP_RUNTIME = 4204
     }
 }
