@@ -386,7 +386,7 @@ async function apply(ctx) {
       wheel: { type: "number", description: "For op=mouse: wheel clicks." },
     },
     output,
-    execute: (args = {}) => {
+    execute: async (args = {}) => {
       const op = args.op || "status";
       if (op === "status") return runHid(["probe"]);
       if (op === "wake") {
