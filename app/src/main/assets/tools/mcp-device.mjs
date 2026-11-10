@@ -367,6 +367,7 @@ function withoutPayload(value) {
 }
 
 async function runTool(tools, name, rawArgs) {
+  const toolStartedAt = performance.now();
   const tool = tools.find((t) => t.name === name);
   if (!tool) {
     return {
@@ -402,7 +403,11 @@ async function runTool(tools, name, rawArgs) {
   }
 
   try {
+    const bridgeStartedAt = performance.now();
     const { status, value, raw } = await bridgeCall(entry.method, entry.path, query, body);
+    const bridgeMs = Math.round(performance.now() - bridgeStartedAt);
+    const totalMs = Math.round(performance.now() - toolStartedAt);
+    process.stderr.write(`[tool-perf] ${name} ${entry.method} ${entry.path} bridge_ms=${bridgeMs} total_ms=${totalMs}\n`);
     const ok = status >= 200 && status < 300 && !(value && value.ok === false);
     const image = ok ? imageBlockOf(entry, value) : undefined;
     const head = ok
