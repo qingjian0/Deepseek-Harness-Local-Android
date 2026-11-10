@@ -408,12 +408,12 @@ async function runTool(tools, name, rawArgs) {
     const { status, value, raw } = await bridgeCall(entry.method, entry.path, query, body);
     const bridgeMs = Math.round(performance.now() - bridgeStartedAt);
     const totalMs = Math.round(performance.now() - toolStartedAt);
+    const ok = status >= 200 && status < 300 && !(value && value.ok === false);
     if (TOOL_PERF_ENABLED) {
       process.stderr.write(
-        `[tool-perf] ${name} op=${entry.id} ${entry.method} ${entry.path} http_status=${status} result=ok bridge_ms=${bridgeMs} total_ms=${totalMs}\\n`,
+        `[tool-perf] ${name} op=${entry.id} ${entry.method} ${entry.path} http_status=${status} result=${ok ? "ok" : "error"} bridge_ms=${bridgeMs} total_ms=${totalMs}\\n`,
       );
     }
-    const ok = status >= 200 && status < 300 && !(value && value.ok === false);
     const image = ok ? imageBlockOf(entry, value) : undefined;
     const head = ok
       ? `${entry.method} ${entry.path} → ${status}`
