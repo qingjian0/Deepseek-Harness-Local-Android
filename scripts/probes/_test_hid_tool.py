@@ -86,6 +86,10 @@ if os.path.isfile(PLUGIN):
     chk('request("GET", "/dev/hid")' not in pl and 'request("POST", "/dev/hid"' not in pl,
         "device_hid does NOT go through the bridge")
     chk("hid_script_missing" in pl, "missing-script error is explicit")
+    chk("if (result.timedOut)" in pl and 'error: value.error || "hid_helper_timeout"' in pl,
+        "valid helper JSON cannot mask a process timeout")
+    chk('process.env.DSH_TOOL_PERF === "1"' in pl and "if (TOOL_PERF_ENABLED)" in pl,
+        "bridge timing logs are opt-in")
     chk('"KEYCODE_WAKEUP"' in pl or "KEYCODE_WAKEUP" in pl, "wake op implemented")
     # 别名要写进 tool description，AI 才知道能用名字
     for al in ("vol+", "mute", "play", "enter"):
