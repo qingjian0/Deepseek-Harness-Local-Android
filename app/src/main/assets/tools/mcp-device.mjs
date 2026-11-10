@@ -57,6 +57,7 @@ const BRIDGE_PORT = process.env.DSH_BRIDGE_PORT || "3083";
 
 /** Per-call timeout for bridge requests. Tool calls that hit the UI can be slow. */
 const CALL_TIMEOUT_MS = 60_000;
+const TOOL_PERF_ENABLED = process.env.DSH_TOOL_PERF === "1";
 
 /**
  * Endpoints that run a whole multi-step program inside one HTTP request.
@@ -407,7 +408,11 @@ async function runTool(tools, name, rawArgs) {
     const { status, value, raw } = await bridgeCall(entry.method, entry.path, query, body);
     const bridgeMs = Math.round(performance.now() - bridgeStartedAt);
     const totalMs = Math.round(performance.now() - toolStartedAt);
-    process.stderr.write(`[tool-perf] ${name} ${entry.method} ${entry.path} bridge_ms=${bridgeMs} total_ms=${totalMs}\n`);
+    if (TOOL_PERF_ENABLED) {
+      process.stderr.write(
+        `[tool-perf] ${name} op=${entry.id} ${entry.method} ${entry.path} http_status=${status} result=ok bridge_ms=${bridgeMs} total_ms=${totalMs}\\n`,
+      );
+    }
     const ok = status >= 200 && status < 300 && !(value && value.ok === false);
     const image = ok ? imageBlockOf(entry, value) : undefined;
     const head = ok
@@ -424,7 +429,11 @@ async function runTool(tools, name, rawArgs) {
     };
   } catch (e) {
     const failedAfterMs = Math.round(performance.now() - toolStartedAt);
-    process.stderr.write(`[tool-perf] ${name} ${entry.method} ${entry.path} failed_after_ms=${failedAfterMs}\n`);
+    if (TOOL_PERF_ENABLED) {
+      process.stderr.write(
+        `[tool-perf] ${name} op=${entry.id} ${entry.method} ${entry.path} http_status=0 result=error failed_after_ms=${failedAfterMs}\\n`,
+      );
+    }
     const msg = e && e.name === "AbortError"
       ? `bridge did not answer within ${CALL_TIMEOUT_MS / 1000}s — the phone may be asleep ` +
         "(the app process is frozen while the screen is off); wake it and retry"
