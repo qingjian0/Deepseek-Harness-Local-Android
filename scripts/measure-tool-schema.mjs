@@ -31,7 +31,7 @@ function findMagicOffsets(buf) {
   return offsets;
 }
 
-function decodeCumulativeFrames(buf) {
+function decodeZstdFrameChain(buf) {
   const offsets = findMagicOffsets(buf);
   const eventsBySeq = new Map();
   let decodedFrames = 0;
@@ -130,7 +130,7 @@ function runSelfTest() {
     Buffer.from(events.map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8"),
   );
   const fixture = Buffer.concat([frame(first), frame(second)]);
-  const decoded = decodeCumulativeFrames(fixture);
+  const decoded = decodeZstdFrameChain(fixture);
   const messageCount = decoded.events.filter((event) => event.type === "assistant/message").length;
   const attemptCount = decoded.events.filter((event) => event.type === "assistant/attempt").length;
   if (decoded.frameCandidates !== 2 || decoded.decodedFrames !== 2 ||
@@ -174,7 +174,7 @@ try {
   process.exit(2);
 }
 
-const decoded = decodeCumulativeFrames(buf);
+const decoded = decodeZstdFrameChain(buf);
 if (decoded.events.length === 0) {
   process.stderr.write(
     "No DSH session events decoded from zstd frame chain " +
