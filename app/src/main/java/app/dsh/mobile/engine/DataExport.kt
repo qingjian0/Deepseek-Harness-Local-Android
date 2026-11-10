@@ -306,6 +306,7 @@ object DataExport {
                     if (path == userPromptTarget) {
                         val payload = zf.getInputStream(e).use { it.readBytes() }
                         userPromptRestored = UserPromptRepository.restoreBackup(ctx, payload)
+                        if (userPromptRestored) UserPromptContextAdapter.refreshAsync(ctx)
                         continue
                     }
                     if (allowedRoots.none { path.startsWith(it + File.separator) }) continue

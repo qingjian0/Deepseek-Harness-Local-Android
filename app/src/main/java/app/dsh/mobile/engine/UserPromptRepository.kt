@@ -61,11 +61,13 @@ object UserPromptRepository {
         if (!isValidBackupPayload(bytes)) throw IOException("invalid user prompt backup")
         synchronized(migrationLock) {
             val p = prefs(context)
-            if (p.contains(KEY_CONTENT) || p.contains(KEY_ENABLED)) return false
+            val restoreContent = !p.contains(KEY_CONTENT)
+            val restoreEnabled = !p.contains(KEY_ENABLED)
+            if (!restoreContent && !restoreEnabled) return false
             val json = JSONObject(bytes.toString(Charsets.UTF_8))
-            val edit = p.edit().putString(KEY_CONTENT, json.getString("content"))
-                .putBoolean(KEY_ENABLED, json.getBoolean("enabled"))
-                .putBoolean(KEY_MIGRATED, true)
+            val edit = p.edit().putBoolean(KEY_MIGRATED, true)
+            if (restoreContent) edit.putString(KEY_CONTENT, json.getString("content"))
+            if (restoreEnabled) edit.putBoolean(KEY_ENABLED, json.getBoolean("enabled"))
             if (!edit.commit()) throw IOException("cannot restore user prompt settings")
             return true
         }
