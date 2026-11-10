@@ -114,6 +114,46 @@ function schemaSummary(tools) {
   };
 }
 
+function runSelfTest() {
+  const first = [
+    { seq: 1, type: "request/header", data: { reason: "initial", header: { tools: [{ name: "demo", description: "test", parameters: { type: "object" } }] } } },
+    { seq: 2, type: "assistant/attempt", data: {} },
+  ];
+  const second = [
+    ...first,
+    { seq: 3, type: "assistant/attempt", data: {} },
+  ];
+  const frame = (events) => zlib.zstdCompressSync(
+    Buffer.from(events.map((event) => JSON.stringify(event)).join("\\n") + "\\n", "utf8"),
+  );
+  const fixture = Buffer.concat([frame(first), frame(second)]);
+  const decoded = decodeCumulativeFrames(fixture);
+  if (decoded.frameCandidates !== 2 || decoded.decodedFrames !== 2 ||
+      decoded.rawEvents !== 5 || decoded.uniqueEvents !== 3 ||
+      decoded.duplicateEvents !== 2 ||
+      decoded.events.filter((event) => event.type === "assistant/attempt").length !== 2) {
+    throw new Error("cumulative snapshot fixture did not deduplicate as expected: " +
+      JSON.stringify({
+        frameCandidates: decoded.frameCandidates,
+        decodedFrames: decoded.decodedFrames,
+        rawEvents: decoded.rawEvents,
+        uniqueEvents: decoded.uniqueEvents,
+        duplicateEvents: decoded.duplicateEvents,
+      }));
+  }
+  process.stdout.write("PASS cumulative zstd snapshots: 2 frames, 5 raw events, 3 unique events\\n");
+}
+
+if (process.argv[2] === "--self-test") {
+  try {
+    runSelfTest();
+  } catch (error) {
+    process.stderr.write("Self-test failed: " + error.message + "\\n");
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 const file = process.argv[2];
 if (!file) {
   process.stderr.write("Usage: node scripts/measure-tool-schema.mjs <session.v4.jsonl.zstd>\n");
