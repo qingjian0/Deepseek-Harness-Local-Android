@@ -411,7 +411,7 @@ async function runTool(tools, name, rawArgs) {
     const ok = status >= 200 && status < 300 && !(value && value.ok === false);
     if (TOOL_PERF_ENABLED) {
       process.stderr.write(
-        `[tool-perf] ${name} op=${entry.id} ${entry.method} ${entry.path} http_status=${status} result=${ok ? "ok" : "error"} bridge_ms=${bridgeMs} total_ms=${totalMs}\\n`,
+        `[tool-perf] ${name} op=${entry.id} ${entry.method} ${entry.path} http_status=${status} result=${ok ? "ok" : "error"} bridge_ms=${bridgeMs} total_ms=${totalMs}\n`,
       );
     }
     const image = ok ? imageBlockOf(entry, value) : undefined;
@@ -431,7 +431,7 @@ async function runTool(tools, name, rawArgs) {
     const failedAfterMs = Math.round(performance.now() - toolStartedAt);
     if (TOOL_PERF_ENABLED) {
       process.stderr.write(
-        `[tool-perf] ${name} op=${entry.id} ${entry.method} ${entry.path} http_status=0 result=error failed_after_ms=${failedAfterMs}\\n`,
+        `[tool-perf] ${name} op=${entry.id} ${entry.method} ${entry.path} http_status=0 result=error failed_after_ms=${failedAfterMs}\n`,
       );
     }
     const msg = e && e.name === "AbortError"
