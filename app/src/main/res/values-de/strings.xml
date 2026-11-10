@@ -133,12 +133,14 @@
     <string name="setting_plugin">Community-Plugins</string>
     <string name="setting_plugin_sub">dsh-Ökosystem-Plugins mit einem Klick installieren</string>
     <string name="setting_user_prompt">Eigene Anweisungen</string>
-    <string name="setting_user_prompt_sub">Eigene dauerhafte Anweisungen ergänzend zur eingebauten Umgebungsbeschreibung</string>
-    <string name="user_prompt_intro">Diese Anweisungen werden an die eingebaute Umgebungsbeschreibung der App angehängt und gelten für jede neue Sitzung. Die App überschreibt sie nie, auch bei Updates nicht. Du kannst die KI auch bitten, hier für dich zu schreiben.</string>
+    <string name="setting_user_prompt_sub">Eigene dauerhafte Anweisungen verwalten und ihre Einfügung unabhängig aktivieren</string>
+    <string name="setting_user_prompt_toggle">Eigene Anweisungen in neue Sitzungen einfügen</string>
+    <string name="user_prompt_intro">Deine Anweisungen werden unabhängig in den App-Einstellungen gespeichert und bei aktivierter Option für neue Sitzungen in AGENTS.md eingefügt. App-Updates überschreiben sie nicht. Du kannst die KI auch bitten, hier für dich zu schreiben.</string>
     <string name="user_prompt_placeholder">Zum Beispiel: Antworte immer auf Deutsch. Oder: Wenn ich "sichern" sage, kopiere den Arbeitsbereich in den Documents-Ordner.</string>
     <string name="user_prompt_save">Speichern</string>
     <string name="user_prompt_saved">Gespeichert. Gilt in neuen Sitzungen.</string>
-    <string name="user_prompt_path">Gespeichert im Nutzerabschnitt von AGENTS.md (von der App verwaltet, deiner wird nie überschrieben)</string>
+    <string name="user_prompt_toggle_failed">Einstellung konnte nicht gespeichert werden. Bitte erneut versuchen.</string>
+    <string name="user_prompt_path">Unabhängig in den App-Einstellungen gespeichert; bei Aktivierung in AGENTS.md eingefügt</string>
 
     <!-- Datei-Editor in der App (v1.4.0, Issue #25). Der Button "Konfigurationsdatei
          öffnen" übergibt den Pfad an einen Desktop-Texteditor, den Android nicht hat;

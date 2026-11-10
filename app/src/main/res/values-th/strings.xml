@@ -115,12 +115,14 @@
     <string name="setting_plugin">ปลั๊กอินชุมชน</string>
     <string name="setting_plugin_sub">คลิกเดียวติดตั้งปลั๊กอินระบบนิเวศ dsh</string>
     <string name="setting_user_prompt">คำแนะนำผู้ใช้</string>
-    <string name="setting_user_prompt_sub">เพิ่มคำแนะนำในการยืนของคุณเองที่ด้านบนของคำแนะนำสภาพแวดล้อมในตัว</string>
-    <string name="user_prompt_intro">คำแนะนำเหล่านี้จะผนวกเข้ากับคู่มือสภาพแวดล้อมในตัวของแอปและนำไปใช้กับทุกเซสชันใหม่</string>
+    <string name="setting_user_prompt_sub">จัดการคำแนะนำถาวรและเปิดหรือปิดการแทรกได้อย่างอิสระ</string>
+    <string name="setting_user_prompt_toggle">แทรกคำแนะนำผู้ใช้ในเซสชันใหม่</string>
+    <string name="user_prompt_intro">คำแนะนำของคุณจะถูกจัดเก็บแยกต่างหากในการตั้งค่าแอป และแทรกลงใน AGENTS.md สำหรับเซสชันใหม่เมื่อเปิดใช้งาน การอัปเดตแอปจะไม่เขียนทับเนื้อหานี้</string>
     <string name="user_prompt_placeholder">เช่น ให้ตอบเป็นภาษาจีนเสมอ</string>
     <string name="user_prompt_save">บันทึก</string>
     <string name="user_prompt_saved">บันทึกแล้ว</string>
-    <string name="user_prompt_path">เก็บไว้ในส่วนผู้ใช้ของ AGENTS.md (จัดการโดยแอป ของคุณจะไม่ถูกเขียนทับ)</string>
+    <string name="user_prompt_toggle_failed">บันทึกการตั้งค่าไม่สำเร็จ โปรดลองอีกครั้ง</string>
+    <string name="user_prompt_path">จัดเก็บแยกต่างหากในการตั้งค่าแอป และแทรกลงใน AGENTS.md เมื่อเปิดใช้งาน</string>
     <string name="file_editor_title">ไฟล์</string>
     <string name="file_editor_save">บันทึก</string>
     <string name="file_editor_saved">บันทึกแล้ว</string>

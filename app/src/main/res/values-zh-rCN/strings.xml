@@ -130,12 +130,14 @@
     <string name="setting_plugin">社区插件</string>
     <string name="setting_plugin_sub">一键安装 dsh 生态插件</string>
     <string name="setting_user_prompt">自定义指令</string>
-    <string name="setting_user_prompt_sub">在自带的环境说明之上，补写你自己的长期指令</string>
-    <string name="user_prompt_intro">这里的指令会追加到应用自带的环境说明之后，对每个新会话生效。应用永不覆盖你写的内容，升级也会原样保留。也可以直接让 AI 帮你写到这里。</string>
+    <string name="setting_user_prompt_sub">管理自己的长期指令，可独立控制是否注入新会话</string>
+    <string name="setting_user_prompt_toggle">将自定义指令注入新会话</string>
+    <string name="user_prompt_intro">自定义指令独立保存在应用设置中。开启后会注入 AGENTS.md 并对新会话生效；关闭后不再注入。应用升级不会覆盖你的指令。也可以直接让 AI 帮你写到这里。</string>
     <string name="user_prompt_placeholder">例如：始终用中文回答。或者：我说「备份」时，把工作区复制到 Documents 目录。</string>
     <string name="user_prompt_save">保存</string>
     <string name="user_prompt_saved">已保存，新会话生效</string>
-    <string name="user_prompt_path">保存在 AGENTS.md 的用户段（由应用管理，你的内容永不被覆盖）</string>
+    <string name="user_prompt_toggle_failed">设置保存失败，请重试</string>
+    <string name="user_prompt_path">独立保存在应用设置中；开启后注入 AGENTS.md</string>
 
     <!-- 应用内文件编辑页（v1.4.0，issue #25）。上游「打开配置文件」把路径交给桌面
          文本编辑器，Android 没有对应程序；引擎现在把这个请求转到本页。 -->

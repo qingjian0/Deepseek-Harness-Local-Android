@@ -762,8 +762,9 @@ class EngineSupervisor(private val ctx: Context) {
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
                 step("guardian-restore")
 
+                // UserPromptContextAdapter 先迁移旧数据，再调用 AgentContextSeed.ensure(ctx)，最后渲染用户段。
                 // 三项互不依赖的启动准备任务并行执行：
-                //  - AgentContextSeed 只写 dsh-home/AGENTS.md；
+                //  - UserPromptContextAdapter 先迁移独立偏好，再协调 AgentContextSeed 与用户段渲染；
                 //  - LogJanitor 只裁剪 *.log / plugin-manager operation 日志；
                 //  - AgentBridge 绑定独立 loopback socket，并启动 sessions 轮询器。
                 // 它们都在 owner-fix 与 orphan-reap 之后，且全部 await 完成后才允许 runtime install。
@@ -781,7 +782,7 @@ class EngineSupervisor(private val ctx: Context) {
                     }
                 val initResults = supervisorScope {
                     listOf(
-                        async { runParallelInit("agent-seed") { AgentContextSeed.ensure(ctx) } },
+                        async { runParallelInit("agent-seed") { UserPromptContextAdapter.ensure(ctx) } },
                         async { runParallelInit("log-sweep") { LogJanitor.sweep(ctx); Unit } },
                         async { runParallelInit("bridge") { AgentBridge.start(ctx) } },
                     ).awaitAll()

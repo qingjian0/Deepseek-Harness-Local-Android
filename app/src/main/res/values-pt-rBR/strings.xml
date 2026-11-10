@@ -111,12 +111,14 @@
     <string name="setting_plugin">Plugins da comunidade</string>
     <string name="setting_plugin_sub">Instale plugins do ecossistema dsh com um toque</string>
     <string name="setting_user_prompt">Instruções do usuário</string>
-    <string name="setting_user_prompt_sub">Adicione suas próprias instruções permanentes ao guia de ambiente integrado</string>
-    <string name="user_prompt_intro">Estas instruções são acrescentadas ao guia de ambiente integrado do app e se aplicam a todas as novas sessões. O app nunca substitui o que você escrever aqui, e as atualizações mantêm o conteúdo como está. Você também pode pedir à IA que escreva aqui por você.</string>
+    <string name="setting_user_prompt_sub">Gerencie suas instruções permanentes e controle a injeção independentemente</string>
+    <string name="setting_user_prompt_toggle">Injetar instruções do usuário em novas sessões</string>
+    <string name="user_prompt_intro">Suas instruções são armazenadas separadamente nas configurações do app e inseridas no AGENTS.md para novas sessões quando ativadas. Atualizações do app não substituem seu conteúdo. Você também pode pedir à IA que escreva aqui por você.</string>
     <string name="user_prompt_placeholder">Por exemplo: sempre responda em português do Brasil. Ou: quando eu disser “fazer backup”, copie o espaço de trabalho para a pasta Documents.</string>
     <string name="user_prompt_save">Salvar</string>
     <string name="user_prompt_saved">Salvo. Entra em vigor nas novas sessões.</string>
-    <string name="user_prompt_path">Armazenado na seção do usuário do AGENTS.md (gerenciado pelo app; o que é seu nunca é substituído)</string>
+    <string name="user_prompt_toggle_failed">Não foi possível salvar esta configuração. Tente novamente.</string>
+    <string name="user_prompt_path">Armazenado separadamente nas configurações do app; inserido no AGENTS.md quando ativado</string>
     <string name="file_editor_title">Arquivo</string>
     <string name="file_editor_save">Salvar</string>
     <string name="file_editor_saved">Salvo</string>

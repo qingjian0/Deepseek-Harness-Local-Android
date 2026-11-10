@@ -533,13 +533,12 @@
 
                     </LinearLayout>
 
-                    <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:layout_marginStart="4dp"
-                        android:src="@drawable/ic_chevron"
-                        android:contentDescription="@null"
-                        app:tint="?attr/colorOnSurface" />
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/swUserPrompt"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:contentDescription="@string/setting_user_prompt_toggle" />
                 </LinearLayout>
                 <LinearLayout
                     android:id="@+id/rowBackup"
