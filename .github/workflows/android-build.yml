@@ -504,6 +504,10 @@ jobs:
             ARGS+=(-PruntimeZip="${{ github.workspace }}/runtime-dist/runtime.zip")
           fi
           gradle -p . assembleDebug "${ARGS[@]}" --stacktrace 2>&1 | tee build-${{ matrix.abi }}-${{ matrix.package }}.log
+          # Run the pure JVM regression suite once per workflow (not once per ABI/package matrix cell).
+          if [ "${{ matrix.abi }}" = "arm64-v8a" ] && [ "${{ matrix.package }}" = "noruntime" ]; then
+            gradle -p . testDebugUnitTest "${ARGS[@]}" --stacktrace 2>&1 | tee build-unit-tests.log
+          fi
           if [ -n "${DSH_RELEASE_STORE_PASSWORD:-}" ] && [ -f keystore/dsh-release.keystore ]; then
             # -PrequireReleaseSigning=true：正式包缺私钥时必须失败，不能产出
             # app-release-unsigned.apk 让发布链路误当正式包上传。
