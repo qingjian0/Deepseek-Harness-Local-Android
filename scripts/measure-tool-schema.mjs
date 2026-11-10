@@ -12,7 +12,9 @@
  * arguments/results, credentials, and schema text are never emitted.
  *
  * Usage:
- *   node scripts/measure-tool-schema.mjs /path/to/session.v4.jsonl.zstd
+ *   # DSH appends to the active session log; copy it first for a stable measurement.
+ *   cp /path/to/session.v4.jsonl.zstd /tmp/session.snapshot.jsonl.zstd
+ *   node scripts/measure-tool-schema.mjs /tmp/session.snapshot.jsonl.zstd
  */
 import fs from "node:fs";
 import zlib from "node:zlib";
@@ -225,7 +227,7 @@ for (const event of events) {
     activeHeader = event?.data?.header;
     continue;
   }
-  if (event?.type !== requestType) continue;
+  if (event?.type !== requestCountBasis) continue;
   const tools = activeHeader?.tools ?? [];
   const bytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
   if (tools.length > 0) requestsWithTools++;
