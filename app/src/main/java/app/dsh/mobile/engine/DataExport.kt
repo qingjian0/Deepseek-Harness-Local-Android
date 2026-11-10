@@ -63,6 +63,7 @@ object DataExport {
         out: OutputStream,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
     ): Summary {
+        UserPromptRepository.migrateLegacyIfNeeded(ctx)
         val home = EngineConfig.dshHome(ctx)
         log(ctx, "start: home=${home.absolutePath}")
         try {
@@ -279,7 +280,7 @@ object DataExport {
                     val path = dest.canonicalPath
                     if (path == registryTarget) { hasRegistry = true; continue }
                     if (path == userPromptTarget) {
-                        if (e.size > 256 * 1024) throw ImportException("user prompt backup too large")
+                        if (e.size > 4 * 1024 * 1024) throw ImportException("user prompt backup too large")
                         val payload = zf.getInputStream(e).use { it.readBytes() }
                         if (!UserPromptRepository.isValidBackupPayload(payload)) {
                             throw ImportException("invalid_user_prompt_backup")

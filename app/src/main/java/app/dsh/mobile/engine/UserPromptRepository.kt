@@ -12,7 +12,7 @@ object UserPromptRepository {
     private const val KEY_ENABLED = "user_prompt_enabled"
     private const val KEY_MIGRATED = "user_prompt_migrated"
     private const val BACKUP_SCHEMA = 1
-    private const val MAX_BACKUP_BYTES = 256 * 1024
+    private const val MAX_BACKUP_BYTES = 4 * 1024 * 1024
     private val migrationLock = Any()
 
     private fun prefs(context: Context): SharedPreferences =
@@ -42,10 +42,13 @@ object UserPromptRepository {
         }
     }
 
-    fun backupPayload(context: Context): ByteArray =
-        JSONObject().put("schemaVersion", BACKUP_SCHEMA)
+    fun backupPayload(context: Context): ByteArray {
+        val bytes = JSONObject().put("schemaVersion", BACKUP_SCHEMA)
             .put("content", content(context)).put("enabled", isEnabled(context))
             .toString().toByteArray(Charsets.UTF_8)
+        if (bytes.size > MAX_BACKUP_BYTES) throw IOException("user prompt backup too large")
+        return bytes
+    }
 
     fun isValidBackupPayload(bytes: ByteArray): Boolean {
         if (bytes.size > MAX_BACKUP_BYTES) return false

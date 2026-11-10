@@ -241,9 +241,8 @@ class SettingsActivity : ThemedActivity() {
         }
 
 
-        // 自定义指令（v1.3.2，issue #19）：在 App 的环境说明之上补写用户自己的长期指令。
-        // 落点是 AGENTS.md 的用户段 —— 引擎只加载这一个 user-global 指令文件，
-        // 分段管理后升级 App 不会丢用户内容，用户改指令也不会让环境说明变旧。
+        // 自定义指令独立存储在 SharedPreferences；开关只控制是否渲染到 AGENTS.md。
+        // 编辑入口始终保留，AGENTS.md 只是引擎读取的运行时注入文件。
         val rowUserPrompt = findViewById<LinearLayout>(R.id.rowUserPrompt)
         val swUserPrompt = findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.swUserPrompt)
         swUserPrompt.isChecked = UserPromptRepository.isEnabled(this)
