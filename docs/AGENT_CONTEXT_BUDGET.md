@@ -209,3 +209,26 @@ Durable state 至少分为：
 - 所有运行时补丁必须有锚点校验、幂等性测试、版本门禁和回归测试；上游锚点漂移时 fail closed。
 
 下一步执行顺序：先完成 P0 未完成项，确认当前 runtime 的实际 preset 与 token meter/compaction 组合，再进入 P1。
+
+## 7. 上游默认组合的进一步核查（2026-11-11）
+
+额外检查了 `deepseek-ai/deepseek-harness` 当前上游 `master` 的 `packages/bundle/base/cordis.patch.yml`。这是当前上游主线证据，**不能自动等同于 fork 打包的 `0.2.2-rc.1`**，但揭示了最值得优先验证的配置：
+
+- `@deepseek-ai/dsh-tool-executor-native` 默认启用。
+- `@deepseek-ai/dsh-tool-executor-ptc` 明确 `disabled: true`。
+- `@deepseek-ai/dsh-token-meter` 已挂载。
+- `@deepseek-ai/dsh-compaction-basic` 已挂载。
+- `@deepseek-ai/dsh-compaction-tool-result-pruner` 已挂载，默认阈值 8192 字符，保留头 4096 / 尾 1024 字符。
+- `@deepseek-ai/dsh-agent-instructions` 的读取上限为 65536 字节；这是上限，不代表每轮一定注入 64 KiB。
+
+因此，当前不能把问题简单归因于“DSH 没有压缩机制”。上游 base 已经有 token meter、自动 compaction 和工具结果修剪。更可能需要优先验证的是：**移动端实际使用的 Agent preset 是否仍以 native executor 向模型暴露完整工具集合，以及提示词/动态上下文的真实长度。**
+
+### P0 优先验证顺序调整
+
+1. 在 fork 当前打包的 `0.2.2-rc.1` runtime 中检查实际 `cordis.patch.yml` / resolved composition，确认 native 与 PTC executor 的启用状态。
+2. 记录一次真实模型请求的 tool count、schema bytes、token meter 读数、system prompt tokens、history tokens。
+3. 对相同任务做 native 与 PTC A/B：不仅比较 schema tokens，还比较 PTC SDK tokens、成功率、执行轮数、延迟和失败恢复。
+4. 检查 `AGENTS.md`、persona、runtime context 的实际注入字节数/token 数，区分“读取上限”和“实际注入量”。
+5. 只有确认现有 compaction 配置未生效或阈值不适合小上下文模型时，才调整其触发参数；不重复实现一套 compaction。
+
+**当前架构判断更新：第一优先级不是新写 Context Manager，而是先核实并优化工具执行器呈现方式（native vs PTC），同时测量真实 prompt 构成。**
