@@ -5,8 +5,12 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Build
+import android.os.CancellationSignal
 import app.dsh.mobile.engine.CapabilityGate
 import org.json.JSONObject
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executor
 
 /**
  * 当前地理位置查询（`/dev/location`）。
@@ -60,6 +64,7 @@ object LocationCap {
             return 403 to err(ERR_DISABLED, "location")
         }
         val coarse = query.split('&').any { it == "coarse=true" || it == "coarse=1" }
+        val freshRequested = query.split('&').any { it == "fresh=true" || it == "fresh=1" }
         val mgr = ctx.getSystemService(LocationManager::class.java)
             ?: return 503 to err("location service unavailable")
 
@@ -112,6 +117,58 @@ object LocationCap {
                 best = cand
             } else if (cand.acc > 0 && cur.acc > 0 && cur.acc > cand.acc * 10) {
                 best = cand
+            }
+        }
+
+        // YuanQi wake-time callers request a one-shot fix. Android 11+ exposes
+        // getCurrentLocation(); request all enabled providers concurrently and
+        // wait at most 8 seconds. A timeout falls back only to the cached fix
+        // above; the caller still enforces its stricter event-time freshness.
+        if (freshRequested && enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val activeProviders = order.filter { provider ->
+                provider in providers && runCatching { mgr.isProviderEnabled(provider) }.getOrDefault(false)
+            }
+            if (activeProviders.isNotEmpty()) {
+                val latch = CountDownLatch(activeProviders.size)
+                val signals = activeProviders.map { CancellationSignal() }
+                val freshFixes = java.util.Collections.synchronizedList(mutableListOf<Fix>())
+                activeProviders.forEachIndexed { index, provider ->
+                    try {
+                        mgr.getCurrentLocation(
+                            provider,
+                            signals[index],
+                            Executor { command -> command.run() },
+                        ) { loc ->
+                            try {
+                                if (loc != null) {
+                                    freshFixes += Fix(
+                                        provider = provider,
+                                        lat = loc.latitude,
+                                        lon = loc.longitude,
+                                        acc = if (loc.hasAccuracy()) loc.accuracy else -1f,
+                                        age = (System.currentTimeMillis() - loc.time).coerceAtLeast(0L),
+                                        hasAlt = loc.hasAltitude(),
+                                        alt = if (loc.hasAltitude()) loc.altitude else 0.0,
+                                    )
+                                }
+                            } finally {
+                                latch.countDown()
+                            }
+                        }
+                    } catch (_: SecurityException) {
+                        latch.countDown()
+                    } catch (_: RuntimeException) {
+                        latch.countDown()
+                    }
+                }
+                runCatching { latch.await(8, TimeUnit.SECONDS) }
+                signals.forEach { runCatching { it.cancel() } }
+                val current = synchronized(freshFixes) {
+                    freshFixes.minWithOrNull(
+                        compareBy<Fix> { it.age }.thenBy { if (it.acc > 0) it.acc else Float.MAX_VALUE },
+                    )
+                }
+                if (current != null) best = current
             }
         }
 
