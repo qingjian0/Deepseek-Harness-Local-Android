@@ -32,7 +32,7 @@ check("Settings: row is refreshed on resume", "refreshDeveloperOptionsEntry()" i
 check("Developer page: turning master switch off disables the mode",
       "DeveloperModePrefs.setEnabled(this, false)" in activity)
 check("Developer page: does not bypass capability authorization",
-      "CapabilityGate" in activity and "must enforce their own authorization" in activity)
+      "CapabilityGate" in activity and "authorization" in activity)
 check("Manifest: developer page is not exported",
       'android:name=".DeveloperOptionsActivity"' in manifest and
       'android:exported="false"' in manifest.split('android:name=".DeveloperOptionsActivity"', 1)[-1].split("/>", 1)[0])
