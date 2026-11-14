@@ -44,12 +44,14 @@ class AboutActivity : ThemedActivity() {
         // Hidden developer options: seven quick taps on the version label.
         // The short window prevents accidental taps from accumulating over time.
         var versionTapCount = 0
-        var lastVersionTapAt = 0L
+        var firstVersionTapAt = 0L
         findViewById<TextView>(R.id.txtVersion).setOnClickListener {
             if (DeveloperModePrefs.isEnabled(this)) return@setOnClickListener
             val now = SystemClock.elapsedRealtime()
-            if (now - lastVersionTapAt > 5_000L) versionTapCount = 0
-            lastVersionTapAt = now
+            if (versionTapCount == 0 || now - firstVersionTapAt > 5_000L) {
+                versionTapCount = 0
+                firstVersionTapAt = now
+            }
             versionTapCount += 1
             if (versionTapCount >= 7) {
                 versionTapCount = 0
