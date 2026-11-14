@@ -373,6 +373,7 @@ class SettingsActivity : ThemedActivity() {
         // 从外观页返回时偏好可能已变（开关/朝向），重新对齐一次；值未变时是空操作
         OrientationPrefs.applyToSettingsPage(this)
         refreshUpdateEntrySub()
+        refreshDeveloperOptionsEntry()
         // 子页里改过主题/强调色/布局：回到本页立即重建，保证视觉与偏好一致（v1.4.56）
         if (appliedTheme != ThemePref.get(this) ||
             appliedAccent != Accent.current(this).argb ||
