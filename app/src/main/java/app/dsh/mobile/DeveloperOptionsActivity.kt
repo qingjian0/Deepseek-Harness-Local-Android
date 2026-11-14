@@ -89,13 +89,26 @@ class DeveloperOptionsActivity : ThemedActivity() {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        val top = TextView(this).apply {
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(10), dp(20), dp(10))
+        }
+        toolbar.addView(TextView(this).apply {
+            text = "‹"
+            textSize = 32f
+            setTextColor(resolveTextColor())
+            gravity = Gravity.CENTER
+            setPadding(0, 0, dp(16), 0)
+            setOnClickListener { finish() }
+            contentDescription = getString(R.string.settings_back)
+        })
+        toolbar.addView(TextView(this).apply {
             text = getString(R.string.developer_options_title)
             textSize = 20f
             setTextColor(resolveTextColor())
-            setPadding(dp(20), dp(18), dp(20), dp(10))
-        }
-        page.addView(top)
+        })
+        page.addView(toolbar)
         page.addView(scroll, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f,
         ))
