@@ -123,6 +123,11 @@ class DeveloperOptionsActivity : ThemedActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        OrientationPrefs.applyToSettingsPage(this)
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun resolveColor(attr: Int, fallback: Int): Int {
