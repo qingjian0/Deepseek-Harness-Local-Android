@@ -1,11 +1,12 @@
 /** dsh-android device capability tools. */
 import fs from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const name = "android-device-tools";
 const inject = ["tools"];
+const TOOL_PERF_ENABLED = process.env.DSH_TOOL_PERF === "1";
 
 async function loadDefineTool() {
   // ⚠️ 不能用 new URL(import.meta.url).pathname：
@@ -29,20 +30,31 @@ async function loadDefineTool() {
 }
 
 async function request(method, endpoint, body) {
+  const startedAt = performance.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
+  const op = body && typeof body === "object" && typeof body.op === "string" ? body.op : "-";
+  let httpStatus = 0;
+  let outcome = "error";
   try {
     const headers = { "X-DSH-Token": process.env.DSH_BRIDGE_TOKEN || "" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const response = await fetch(`http://127.0.0.1:3083${endpoint}`, {
       method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal,
     });
+    httpStatus = response.status;
     const text = await response.text();
     let value;
     try { value = JSON.parse(text); } catch { value = { ok: response.ok, text }; }
+    outcome = response.ok && value?.ok !== false ? "ok" : "error";
     return { ...value, http_status: response.status };
   } finally {
     clearTimeout(timer);
+    if (TOOL_PERF_ENABLED) {
+      process.stderr.write(
+        `[tool-perf] bridge ${method} ${endpoint} op=${op} http_status=${httpStatus} result=${outcome} elapsed_ms=${Math.round(performance.now() - startedAt)}\n`,
+      );
+    }
   }
 }
 
@@ -59,7 +71,39 @@ const output = {
  * 进程**里，该进程本身就是 root（uid 0 / u:r:ksu:s0），可以直接 exec 脚本，
  * 完全不需要提权。这是唯一可靠的路。
  */
-function runHid(args) {
+async function runProcess(command, args, timeoutMs) {
+  return new Promise((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    let killTimer;
+    const child = spawn(command, args, {
+      env: { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const append = (current, chunk) => (current + chunk.toString()).slice(-16_384);
+    child.stdout.on("data", (chunk) => { stdout = append(stdout, chunk); });
+    child.stderr.on("data", (chunk) => { stderr = append(stderr, chunk); });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => child.kill("SIGKILL"), 1000);
+    }, timeoutMs);
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      resolve({ ...result, stdout: stdout.trim(), stderr: stderr.trim(), timedOut });
+    };
+    child.once("error", (error) => finish({ status: 1, error: error.message }));
+    child.once("close", (status, signal) => finish({ status: status ?? 1, signal }));
+  });
+}
+
+/** Run HID helper without blocking the Node.js event loop. */
+async function runHid(args) {
   const home = process.env.DSH_HOME || "";
   const candidates = [
     home ? path.join(home, "tools", "hid.mjs") : "",
@@ -70,21 +114,31 @@ function runHid(args) {
   if (!script) {
     return { ok: false, error: "hid_script_missing", tried: candidates };
   }
-  const result = spawnSync(process.execPath, [script, ...args], {
-    encoding: "utf8",
-    timeout: 30000,
-    env: { ...process.env },
-  });
-  const out = (result.stdout || "").trim();
-  const err = (result.stderr || "").trim();
+  const result = await runProcess(process.execPath, [script, ...args], 30000);
   let parsed;
-  try { parsed = JSON.parse(out); } catch { parsed = null; }
+  try { parsed = JSON.parse(result.stdout); } catch { parsed = null; }
+  // A helper can print valid JSON and then hang until the timeout fires. Never
+  // let that partial success hide the process timeout from the caller.
+  if (result.timedOut) {
+    const value = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : { result: parsed };
+    return {
+      ...value,
+      ok: false,
+      timed_out: true,
+      process_status: result.status,
+      error: value.error || "hid_helper_timeout",
+      stderr: (result.error || result.stderr).slice(0, 2000),
+    };
+  }
   if (parsed) return parsed;
   return {
     ok: result.status === 0,
     status: result.status,
-    stdout: out.slice(0, 2000),
-    stderr: err.slice(0, 2000),
+    timed_out: false,
+    stdout: result.stdout.slice(0, 2000),
+    stderr: (result.error || result.stderr).slice(0, 2000),
   };
 }
 
@@ -101,12 +155,7 @@ async function apply(ctx) {
       fields: { type: "string", description: "Optional comma-separated fields; omitted returns the complete snapshot." },
     },
     output,
-    execute: async () => {
-      const ping = await request("GET", "/dev/ping");
-      if (ping.ok !== true) return ping;
-      const status = await request("GET", "/dev/status");
-      return { ...status, bridge: ping };
-    },
+    execute: async () => request("GET", "/dev/status"),
   }));
   ctx.tools.register(defineTool({
     name: "device_control",
@@ -375,15 +424,13 @@ async function apply(ctx) {
       wheel: { type: "number", description: "For op=mouse: wheel clicks." },
     },
     output,
-    execute: (args = {}) => {
+    execute: async (args = {}) => {
       const op = args.op || "status";
       if (op === "status") return runHid(["probe"]);
       if (op === "wake") {
         // 屏幕必须 Awake，否则 InputDispatcher 丢弃注入的按键。
-        const r = spawnSync("/system/bin/input", ["keyevent", "KEYCODE_WAKEUP"], {
-          encoding: "utf8", timeout: 10000,
-        });
-        return { ok: r.status === 0, action: "wakeup", stderr: (r.stderr || "").trim().slice(0, 500) };
+        const r = await runProcess("/system/bin/input", ["keyevent", "KEYCODE_WAKEUP"], 10000);
+        return { ok: r.status === 0 && !r.timedOut, action: "wakeup", timed_out: r.timedOut, stderr: (r.error || r.stderr).slice(0, 500) };
       }
       if (op === "mouse") {
         const a = ["mouse"];
