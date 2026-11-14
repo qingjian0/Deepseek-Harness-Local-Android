@@ -48,7 +48,7 @@ object LocationCap {
         val lat: Double,
         val lon: Double,
         val acc: Float,
-        val age: Long,
+        val timeMs: Long,
         val hasAlt: Boolean,
         val alt: Double,
     )
@@ -106,7 +106,7 @@ object LocationCap {
                 lat = loc.latitude,
                 lon = loc.longitude,
                 acc = if (loc.hasAccuracy()) loc.accuracy else -1f,
-                age = System.currentTimeMillis() - loc.time,
+                timeMs = loc.time,
                 hasAlt = loc.hasAltitude(),
                 alt = if (loc.hasAltitude()) loc.altitude else 0.0,
             )
@@ -146,7 +146,7 @@ object LocationCap {
                                         lat = loc.latitude,
                                         lon = loc.longitude,
                                         acc = if (loc.hasAccuracy()) loc.accuracy else -1f,
-                                        age = (System.currentTimeMillis() - loc.time).coerceAtLeast(0L),
+                                        timeMs = loc.time,
                                         hasAlt = loc.hasAltitude(),
                                         alt = if (loc.hasAltitude()) loc.altitude else 0.0,
                                     )
@@ -165,7 +165,8 @@ object LocationCap {
                 signals.forEach { runCatching { it.cancel() } }
                 val current = synchronized(freshFixes) {
                     freshFixes.minWithOrNull(
-                        compareBy<Fix> { it.age }.thenBy { if (it.acc > 0) it.acc else Float.MAX_VALUE },
+                        compareByDescending<Fix> { it.timeMs }
+                            .thenBy { if (it.acc > 0) it.acc else Float.MAX_VALUE },
                     )
                 }
                 if (current != null) best = current
@@ -182,6 +183,9 @@ object LocationCap {
                 .put("permission", if (fine) "fine" else "coarse")
                 .toString()
 
+        val responseAt = System.currentTimeMillis()
+        val ageMs = (responseAt - fix.timeMs).coerceAtLeast(0L)
+
         CapabilityGate.audit(ctx, "dev.location:${fix.provider}")
 
         // 精度降级只截小数位，不做模糊网格 —— 后者会让「离我多远」这类计算失效。
@@ -197,15 +201,16 @@ object LocationCap {
             .put("lon", lon)
             .put("provider", fix.provider)
             .put("precision", if (coarse) "coarse" else "fine")
-            .put("age_ms", fix.age)
+            .put("age_ms", ageMs)
+            .put("fix_time_ms", fix.timeMs)
             .put("providers", providers)
             .put("location_enabled", enabled)
             .put("permission", if (fine) "fine" else "coarse")
-            .put("at", System.currentTimeMillis())
+.put("at", responseAt)
         if (fix.acc > 0) out.put("accuracy_m", fix.acc.toDouble())
         if (fix.hasAlt) out.put("altitude_m", fix.alt)
         // 采信提示：超过 5 分钟的缓存坐标不该被当成「当前位置」直接用于决策。
-        out.put("stale", fix.age > 5 * 60 * 1000)
+        out.put("stale", ageMs > 5 * 60 * 1000)
         return 200 to out.toString()
     }
 
