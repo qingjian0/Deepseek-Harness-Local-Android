@@ -1630,4 +1630,13 @@ Packages: %2$s</string>
     <string name="linux_diag_dns_log_tail">Proxy log (engine/dns.log) tail:</string>
     <string name="linux_diag_no_dns_log">&lt;no file - the proxy never started&gt;</string>
     <string name="linux_diag_unreadable">&lt;unreadable&gt;</string>
+
+    <string name="developer_options_title">Developer options</string>
+    <string name="developer_options_sub">Optional tools and advanced controls</string>
+    <string name="developer_options_intro">A small collection of optional tools for curious users and advanced configuration.</string>
+    <string name="developer_options_enabled_sub">Turn off to hide developer options again.</string>
+    <string name="developer_options_security_note">Enabling this menu does not grant Root, Shizuku, or other system permissions. Each operation still requires its own authorization.</string>
+    <string name="developer_options_unlocked">Developer options enabled. Find them under Settings → System.</string>
+    <string name="developer_options_disabled_toast">Developer options hidden. Tap the version information seven times to show them again.</string>
+
 </resources>

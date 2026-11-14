@@ -1577,4 +1577,13 @@
     <string name="linux_diag_dns_log_tail">ท้ายบันทึกพร็อกซี (engine/dns.log):</string>
     <string name="linux_diag_no_dns_log">&lt;ไม่มีไฟล์ - พร็อกซีไม่เคยเริ่มทำงาน&gt;</string>
     <string name="linux_diag_unreadable">&lt;อ่านไม่ได้&gt;</string>
+
+    <string name="developer_options_title">ตัวเลือกสำหรับนักพัฒนา</string>
+    <string name="developer_options_sub">เครื่องมือเสริมและการควบคุมขั้นสูง</string>
+    <string name="developer_options_intro">ชุดเครื่องมือเสริมสำหรับผู้ที่สนใจและการตั้งค่าขั้นสูง</string>
+    <string name="developer_options_enabled_sub">ปิดเพื่อซ่อนตัวเลือกสำหรับนักพัฒนาอีกครั้ง</string>
+    <string name="developer_options_security_note">การเปิดเมนูนี้ไม่ได้ให้สิทธิ์ Root, Shizuku หรือสิทธิ์ระบบอื่น ๆ แต่ละการดำเนินการยังต้องตรวจสอบการอนุญาตแยกต่างหาก</string>
+    <string name="developer_options_unlocked">เปิดตัวเลือกสำหรับนักพัฒนาแล้ว ดูได้ที่ การตั้งค่า → ระบบ</string>
+    <string name="developer_options_disabled_toast">ซ่อนตัวเลือกสำหรับนักพัฒนาแล้ว แตะข้อมูลเวอร์ชัน 7 ครั้งเพื่อเปิดอีกครั้ง</string>
+
 </resources>

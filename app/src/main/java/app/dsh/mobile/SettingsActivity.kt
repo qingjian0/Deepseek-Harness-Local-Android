@@ -256,6 +256,7 @@ class SettingsActivity : ThemedActivity() {
         // 状态，**不额外发起网络检查**——检查节奏仍由调度器管（冷启动/前台>24h）。
         // onResume 里刷新：从升级子页回来（可能已忽略/已下载）副标题能跟上。
         refreshUpdateEntrySub()
+        refreshDeveloperOptionsEntry()
         findViewById<LinearLayout>(R.id.rowUpdate).setOnClickListener {
             startActivity(Intent(this, UpdateSettingsActivity::class.java))
         }
@@ -319,6 +320,16 @@ class SettingsActivity : ThemedActivity() {
         findViewById<LinearLayout>(R.id.rowAbout).setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java))
         }
+
+        findViewById<LinearLayout>(R.id.rowDeveloperOptions).setOnClickListener {
+            startActivity(Intent(this, DeveloperOptionsActivity::class.java))
+        }
+        refreshDeveloperOptionsEntry()
+    }
+
+    private fun refreshDeveloperOptionsEntry() {
+        findViewById<View>(R.id.rowDeveloperOptions)?.visibility =
+            if (DeveloperModePrefs.isEnabled(this)) View.VISIBLE else View.GONE
     }
 
     /** 从包管理器读取 versionName（AGP 8+ 默认关闭 BuildConfig，避免依赖它） */
@@ -362,6 +373,7 @@ class SettingsActivity : ThemedActivity() {
         // 从外观页返回时偏好可能已变（开关/朝向），重新对齐一次；值未变时是空操作
         OrientationPrefs.applyToSettingsPage(this)
         refreshUpdateEntrySub()
+        refreshDeveloperOptionsEntry()
         // 子页里改过主题/强调色/布局：回到本页立即重建，保证视觉与偏好一致（v1.4.56）
         if (appliedTheme != ThemePref.get(this) ||
             appliedAccent != Accent.current(this).argb ||
