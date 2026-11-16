@@ -17,7 +17,7 @@ val appVersionSuffix = (project.findProperty("APP_VERSION_SUFFIX") as String?) ?
 if (!appApplicationId.matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\\\.[A-Za-z][A-Za-z0-9_]*)+"))) {
     throw GradleException("Invalid APP_APPLICATION_ID: $appApplicationId")
 }
-if (appVersionSuffix.any { it.isWhitespace() || it == '/' || it == '\\\\' }) {
+if (appVersionSuffix.any { it.isWhitespace() || it == '/' || it == '\\' }) {
     throw GradleException("APP_VERSION_SUFFIX must not contain whitespace or path separators")
 }
 
