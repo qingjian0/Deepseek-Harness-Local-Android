@@ -10,6 +10,17 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Fork identity overrides: defaults preserve the upstream package and version exactly.
+val appApplicationId = (project.findProperty("APP_APPLICATION_ID") as String?)
+    ?.takeIf { it.isNotBlank() } ?: "app.dsh.mobile"
+val appVersionSuffix = (project.findProperty("APP_VERSION_SUFFIX") as String?) ?: ""
+if (!appApplicationId.matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\\\.[A-Za-z][A-Za-z0-9_]*)+"))) {
+    throw GradleException("Invalid APP_APPLICATION_ID: $appApplicationId")
+}
+if (appVersionSuffix.any { it.isWhitespace() || it == '/' || it == '\\\\' }) {
+    throw GradleException("APP_VERSION_SUFFIX must not contain whitespace or path separators")
+}
+
 // 构建目标 ABI 可由 -Pabi=x86_64 覆盖（CI 双架构矩阵 / 模拟器测试用），默认真机 arm64
 val targetAbi = (project.findProperty("abi") as String?) ?: "arm64-v8a"
 
@@ -236,7 +247,7 @@ android {
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
-        applicationId = "app.dsh.mobile"
+        applicationId = appApplicationId
         minSdk = 26
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
@@ -285,7 +296,7 @@ android {
         // （见 android-build.yml:68-86）：v1.5.0（正式版，prerelease: false）与
         // v1.5.0-beta.2（试发行，prerelease: true），但 tag 必须与 versionName 完全拼得上
         // （publish-release 的 `test "$GITHUB_REF_NAME" = "v$V"`），所以打 tag 前先确认这里。
-        versionName = "1.6.0-beta.15"
+        versionName = "1.6.0-beta.15$appVersionSuffix"
 
         ndk {
             abiFilters += listOf(targetAbi)
