@@ -54,7 +54,7 @@ NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}"
 GH_PROXY="${GH_PROXY:-}"
 
 # 包名 → 环境变量前缀：@xiaopb/dsh-solution-explorer → XIAOPB_DSH_SOLUTION_EXPLORER
-ENV_PREFIX="$(printf '%s' "$PKG" | sed 's/^@//' | tr 'a-z-' 'A-Z_' | tr -cd 'A-Z0-9_')"
+ENV_PREFIX="$(printf '%s' "$PKG" | sed 's/^@//' | sed 's#/#_#g' | tr 'a-z-' 'A-Z_' | tr -cd 'A-Z0-9_')"
 VERSION_VAR="${ENV_PREFIX}_VERSION"
 TGZ_VAR="${ENV_PREFIX}_TGZ"
 VERSION_SPEC="${PLUGIN_VERSION:-${!VERSION_VAR:-latest}}"
