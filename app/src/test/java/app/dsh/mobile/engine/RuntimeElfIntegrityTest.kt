@@ -27,7 +27,7 @@ class RuntimeElfIntegrityTest {
     }
 
     @Test fun nonElfFileIsRejected() {
-        assertEquals("not ELF", RuntimeElfIntegrity.inspectHeader(ByteArray(20), 20, 183))
+        assertEquals("not ELF", RuntimeElfIntegrity.inspectHeader(ByteArray(64), 64, 183))
     }
 
     @Test fun wrongAbiIsRejected() {
