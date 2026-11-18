@@ -6,13 +6,14 @@ import org.junit.Test
 
 class RuntimeElfIntegrityTest {
 
-    private fun elf64(machine: Int): ByteArray = ByteArray(20).apply {
+    private fun elf64(machine: Int): ByteArray = ByteArray(64).apply {
         this[0] = 0x7f.toByte()
         this[1] = 'E'.code.toByte()
         this[2] = 'L'.code.toByte()
         this[3] = 'F'.code.toByte()
         this[4] = 2
         this[5] = 1
+        this[16] = 3
         this[18] = (machine and 0xff).toByte()
         this[19] = ((machine ushr 8) and 0xff).toByte()
     }
