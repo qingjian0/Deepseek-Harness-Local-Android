@@ -655,6 +655,7 @@
     <string name="boot_step_userdata">Связывание пользовательских данных</string>
     <string name="boot_step_spawn">Запуск процесса движка</string>
     <string name="boot_step_health">Ожидание проверки состояния</string>
+    <string name="boot_step_port_allocation">Выбор портов приложения</string>
     <string name="setting_boot_trace">Последний запуск</string>
     <string name="setting_boot_trace_sub">Тайминги и количество файлов последнего запуска</string>
     <string name="boot_trace_title">Подробности последнего запуска</string>
