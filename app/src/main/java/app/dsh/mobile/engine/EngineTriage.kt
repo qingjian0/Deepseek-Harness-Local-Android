@@ -487,8 +487,16 @@ object EngineTriage {
         // 都弱 —— 前面六类是我们直接观测到的失败原因，而体检报的是「环境有毛病」，
         // 不一定就是这次起不来的直接原因。所以只在前面都没命中时才用它。
         facts.selfCheck?.let { report ->
-            val bad = report.items.filter {
-                it.status == SelfCheck.Item.Status.WARN || it.status == SelfCheck.Item.Status.FAIL
+            val bad = report.items.filter { item ->
+                val actionableStatus =
+                    item.status == SelfCheck.Item.Status.WARN || item.status == SelfCheck.Item.Status.FAIL
+                // These are real user-facing notices, but neither explains an engine boot failure:
+                // All-Files-Access is optional (EngineConfig has an app-private fallback), and a
+                // first-ever boot may not have created the profile manifest yet.
+                val optionalStorageNotice = item.id == "storage.allfiles"
+                val profileNotInitializedYet = facts.neverBooted &&
+                    item.id == "profile" && item.detail == "not created yet"
+                actionableStatus && !optionalStorageNotice && !profileNotInitializedYet
             }
             if (bad.isNotEmpty()) {
                 // 按体检项的 id 前缀反推最贴近的 cause，让界面上的修复按钮对得上
