@@ -654,6 +654,7 @@
     <string name="boot_step_userdata">链接用户数据</string>
     <string name="boot_step_spawn">拉起引擎进程</string>
     <string name="boot_step_health">等待健康检查</string>
+    <string name="boot_step_port_allocation">选择应用端口</string>
     <string name="setting_boot_trace">上次启动</string>
     <string name="setting_boot_trace_sub">查看最近一次启动各阶段耗时与文件加载量</string>
     <string name="boot_trace_title">上次启动详情</string>
