@@ -2135,6 +2135,59 @@ object EndpointCatalog {
                 ),
             )
         ),
+        Triple(
+            "LSPosed Hook", "由 DSH Agent 管理 dsh-gpt 模块的运行时观测与规则", listOf(
+                e(
+                    "hook-status", "GET", "/hook/status",
+                    "读取 dsh-gpt Provider 连通性、目标进程观测状态、Hook 启停状态与配置版本",
+                    examples = listOf("dev api GET /hook/status"),
+                    limits = "① providerReachable 只表示 DSH 能访问模块 Provider，不代表目标进程已启动；targetObserved 才表示收到过目标进程事件。" +
+                        "\n② 需要安装并启用 dsh-gpt LSPosed 模块，目标包为 com.openai.chatgpt。",
+                ),
+                e(
+                    "hook-events", "GET", "/hook/events",
+                    "读取增量 Hook 元数据事件（规则 ID、类、方法、签名、耗时与异常类型）",
+                    params = "since=<上次 sequence>；limit=1..500（默认 100）",
+                    examples = listOf("dev api GET '/hook/events?since=0&limit=100'"),
+                    limits = "① 仅元数据，不包含方法参数、返回值、HTTP headers、cookies 或请求/响应正文。" +
+                        "\n② 事件缓冲有容量上限，超出后最旧事件会被淘汰。",
+                ),
+                e(
+                    "hook-rules", "GET|POST", "/hook/rules",
+                    "读取或更新 dsh-gpt 声明式 Hook 规则；POST 提交完整配置快照",
+                    body = "{\"schemaVersion\":1,\"targetPackage\":\"com.openai.chatgpt\",\"rules\":[]}",
+                    examples = listOf(
+                        "dev api GET /hook/rules",
+                        "dev api POST /hook/rules '{\"schemaVersion\":1,\"targetPackage\":\"com.openai.chatgpt\",\"rules\":[]}'",
+                    ),
+                    limits = "① 仅允许 targetPackage=com.openai.chatgpt；每份配置最多 64 条规则。" +
+                        "\n② 规则由模块端再次校验，目标进程通常在 3 秒内轮询并应用。" +
+                        "\n③ 只允许声明式类名、方法名、参数类型与采样率，不接受任意代码。",
+                ),
+                e(
+                    "hook-discover", "POST", "/hook/discover",
+                    "在目标进程 ClassLoader 中发现 com.openai.* 类与方法签名（只读元数据）",
+                    body = "{\"prefix\":\"com.openai.\",\"limit\":100}",
+                    examples = listOf(
+                        "dev api POST /hook/discover '{\"prefix\":\"com.openai.\",\"limit\":100}'",
+                        "dev api POST /hook/discover '{\"className\":\"com.openai.auth.a\",\"limit\":100}'",
+                    ),
+                    limits = "① 不执行发现到的方法，不读取参数、返回值、字段或应用内容。" +
+                        "\n② 目标进程未运行、ClassLoader 索引不可用或 12 秒内未返回时会明确报错。",
+                ),
+                e(
+                    "hook-control", "POST", "/hook/control",
+                    "启用或停用 dsh-gpt Hook 回调，不卸载 LSPosed 模块",
+                    body = "{\"enabled\":true}",
+                    examples = listOf(
+                        "dev api POST /hook/control '{\"enabled\":true}'",
+                        "dev api POST /hook/control '{\"enabled\":false}'",
+                    ),
+                    limits = "① 停用会解除模块当前安装的 Hook；重新启用时按保存的规则快照重新应用。" +
+                        "\n② 需要 dsh-gpt 模块已安装并能被 DSH Provider 访问。",
+                ),
+            )
+        ),
     )
 
     /** 全部条目拍平。 */
