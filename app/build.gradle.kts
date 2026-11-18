@@ -236,7 +236,7 @@ android {
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
-        applicationId = "app.dsh.mobile"
+        applicationId = "dsh.dsh.mobile"
         minSdk = 26
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
@@ -367,7 +367,7 @@ android {
         release {
             isMinifyEnabled = false
             // 调试用开关：-PdebuggableRelease=true 时给 release 包开 android:debuggable，
-            // 让 `adb run-as app.dsh.mobile` 能读 files/engine/engine.log、能替换引擎目录。
+            // 让 `adb run-as dsh.dsh.mobile` 能读 files/engine/engine.log、能替换引擎目录。
             // 签名与 versionCode 都不变，因此可以 `adb install -r` 覆盖正式包、数据不丢。
             // CI 不传该属性 → 正式产物仍是 debuggable=false。
             isDebuggable = (project.findProperty("debuggableRelease") == "true")
