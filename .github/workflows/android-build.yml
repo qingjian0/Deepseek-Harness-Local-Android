@@ -627,7 +627,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          V=$(python3 -c 'import re; from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; m=re.search("versionName *= *[\\\"]([^\\\"]+)[\\\"]",g); assert m, "versionName not found"; print(m.group(1).replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))' | head -1)
+          V=$(python3 -c 'from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; key="versionName = "+chr(34); i=g.index(key)+len(key); print(g[i:g.index(chr(34),i)].replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))' | head -1)
           REF="${GITHUB_REF_NAME//\//-}"
           if [ "$REF" = "v$V" ]; then
             BASE="dsh-android-${REF}-${{ matrix.abi }}"
@@ -810,7 +810,7 @@ jobs:
       - name: 读取版本号
         id: ver
         run: |
-          V=$(python3 -c 'import re; from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; m=re.search("versionName *= *[\\\"]([^\\\"]+)[\\\"]",g); assert m, "versionName not found"; print(m.group(1).replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))')
+          V=$(python3 -c 'from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; key="versionName = "+chr(34); i=g.index(key)+len(key); print(g[i:g.index(chr(34),i)].replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))')
           C=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "versionCode=$C" >> "$GITHUB_OUTPUT"
@@ -826,7 +826,7 @@ jobs:
         run: |
           set -euo pipefail
           ls -lh apk/
-          V=$(python3 -c 'import re; from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; m=re.search("versionName *= *[\\\"]([^\\\"]+)[\\\"]",g); assert m, "versionName not found"; print(m.group(1).replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))' | head -1)
+          V=$(python3 -c 'from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; key="versionName = "+chr(34); i=g.index(key)+len(key); print(g[i:g.index(chr(34),i)].replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))' | head -1)
           REF="${GITHUB_REF_NAME//\//-}"
           for abi in arm64-v8a x86_64; do
             BASE="dsh-android-${REF}-${abi}-v${V}"
@@ -918,7 +918,7 @@ jobs:
         id: ver
         run: |
           set -euo pipefail
-          V=$(python3 -c 'import re; from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; m=re.search("versionName *= *[\\\"]([^\\\"]+)[\\\"]",g); assert m, "versionName not found"; print(m.group(1).replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))')
+          V=$(python3 -c 'from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; key="versionName = "+chr(34); i=g.index(key)+len(key); print(g[i:g.index(chr(34),i)].replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))')
           test "$GITHUB_REF_NAME" = "v$V" || {
             echo "::error::tag $GITHUB_REF_NAME does not match v$V — bump versionName/versionCode first"
             exit 1
@@ -945,7 +945,7 @@ jobs:
         run: |
           set -euo pipefail
           ls -lh apk/
-          V=$(python3 -c 'import re; from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; m=re.search("versionName *= *[\\\"]([^\\\"]+)[\\\"]",g); assert m, "versionName not found"; print(m.group(1).replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))' | head -1)
+          V=$(python3 -c 'from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; key="versionName = "+chr(34); i=g.index(key)+len(key); print(g[i:g.index(chr(34),i)].replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))' | head -1)
           REF="${GITHUB_REF_NAME//\//-}"
           for abi in arm64-v8a x86_64; do
             if [ "$REF" = "v$V" ]; then BASE="dsh-android-${REF}-${abi}"; else BASE="dsh-android-${REF}-${abi}-v${V}"; fi
@@ -1137,7 +1137,7 @@ jobs:
         run: |
           set -euo pipefail
           ls -lh apk/
-          V=$(python3 -c 'import re; from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; m=re.search("versionName *= *[\\\"]([^\\\"]+)[\\\"]",g); assert m, "versionName not found"; print(m.group(1).replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))' | head -1)
+          V=$(python3 -c 'from pathlib import Path; g=Path("app/build.gradle.kts").read_text(); p={k.strip():v.strip() for k,v in (line.split("=",1) for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#"))}; key="versionName = "+chr(34); i=g.index(key)+len(key); print(g[i:g.index(chr(34),i)].replace("${forkBuildIdentity.versionSuffix}",p.get("versionSuffix","")))' | head -1)
           REF="${GITHUB_REF_NAME//\//-}"
           for abi in arm64-v8a x86_64; do
             if [ "$REF" = "v$V" ]; then BASE="dsh-android-${REF}-${abi}"; else BASE="dsh-android-${REF}-${abi}-v${V}"; fi
