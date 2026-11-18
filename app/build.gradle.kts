@@ -3,6 +3,7 @@ import java.security.MessageDigest
 import java.security.cert.CertificateFactory
 import java.util.Base64
 import java.util.Properties
+import java.util.zip.ZipFile
 
 // Fork-only identity lives outside upstream-owned files. Keep namespace stable so
 // upstream Kotlin package paths and manifest class names remain untouched.
@@ -23,7 +24,6 @@ private val forkBuildIdentity: ForkBuildIdentity = run {
     }
     ForkBuildIdentity(appId, suffix)
 }
-import java.util.zip.ZipFile
 
 plugins {
     id("com.android.application")
