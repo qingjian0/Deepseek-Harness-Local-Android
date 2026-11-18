@@ -1029,6 +1029,13 @@ class EngineSupervisor(private val ctx: Context) {
                         // Shizuku 模式：引擎就绪后启动 ADB 级访问桥（shz 包装器回呼用）；其他模式自动关停
                         withContext(Dispatchers.IO) {
                             ShizukuHttpBridge.start(ctx, activePort)
+                            // Restart the optional LAN proxy only after the actual upstream port is known.
+                            // The proxy runs independently from the engine and must not keep a stale upstream.
+                            LanWebProxy.stop()
+                            if (app.dsh.mobile.DshApp.lanWebEnabled(ctx)) {
+                                LanWebProxy.setContext(ctx)
+                                LanWebProxy.start(app.dsh.mobile.DshApp.lanWebPassword(ctx))
+                            }
                         }
                         // 阻塞等待进程退出（被杀/崩溃）。Healthy 后退出视为资源类偶发，
                         // 不计入 guardian（那是普通退避该管的事，与配置无关）。
