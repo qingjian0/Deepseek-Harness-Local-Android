@@ -1,4 +1,0 @@
-# Adds the Hook controls to the DSH Agent tool registry.
-- insert:
-    - id: dsh-gpt-hook-agent
-      name: '@dsh-external/dsh-gpt-hook-agent'
