@@ -84,24 +84,15 @@ object EnginePortManager {
             val ports = runCatching { ServicePortConfig.portsForOffset(offset) }.getOrNull() ?: break
             val cfg = config(context)
             val enginePort = if (cfg.mode == Mode.EXACT) cfg.exact else cfg.start
-            val required = buildSet {
-                add(ports.engine)
-                add(ports.engine + 2)
-                add(ports.agentBridge)
-                add(ports.embedding)
-                add(ports.lanWeb)
-                add(ports.remoteAccess)
-                add(enginePort)
-                add(enginePort + 2)
-            }
-            if (required.all(::canBind)) {
+            if (isPortBlockAvailable(ports, enginePort, ::canBind)) {
                 selectedPorts = ports
                 selectedEnginePort = enginePort
                 break
             }
 
-            offset += 1000
-            ServicePortConfig.setOffset(context, offset)
+            val nextOffset = nextBlockOffset(offset) ?: break
+            if (runCatching { ServicePortConfig.setOffset(context, nextOffset) }.isFailure) break
+            offset = nextOffset
             ServicePortConfig.activate(context)
         }
 
@@ -113,6 +104,25 @@ object EnginePortManager {
             return Selection(port, port, port, "exact; application port block offset +${ports.offset}")
         }
         return Selection(port, port, port, "application port block offset +${ports.offset}")
+    }
+
+    internal fun isPortBlockAvailable(
+        ports: ServicePortConfig.Ports,
+        enginePort: Int,
+        available: (Int) -> Boolean,
+    ): Boolean {
+        val required = listOf(
+            ports.engine, ports.engine + 2, ports.agentBridge,
+            ports.embedding, ports.lanWeb, ports.remoteAccess,
+            enginePort, enginePort + 2,
+        ).distinct()
+        return required.all(available)
+    }
+
+    /** Port-block fallback is deliberately coarse: one collision moves every listener by 1000. */
+    internal fun nextBlockOffset(offset: Int): Int? {
+        val next = offset + 1000
+        return next.takeIf { runCatching { ServicePortConfig.portsForOffset(it) }.isSuccess }
     }
 
     internal fun findCandidate(start: Int, end: Int, searchEnd: Int, available: (Int) -> Boolean): Pair<Int, Int>? {
