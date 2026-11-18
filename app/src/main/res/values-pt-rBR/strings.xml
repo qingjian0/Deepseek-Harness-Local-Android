@@ -584,6 +584,7 @@
     <string name="boot_step_userdata">Vincular os dados do usuário</string>
     <string name="boot_step_spawn">Iniciar o processo do motor</string>
     <string name="boot_step_health">Aguardar a verificação de integridade</string>
+    <string name="boot_step_port_allocation">Selecionar portas do aplicativo</string>
     <string name="setting_boot_trace">Última inicialização</string>
     <string name="setting_boot_trace_sub">Duração e contagem de arquivos da inicialização mais recente</string>
     <string name="boot_trace_title">Detalhes da última inicialização</string>
