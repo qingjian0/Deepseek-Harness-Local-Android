@@ -47,14 +47,17 @@ class DeveloperOptionsActivity : ThemedActivity() {
     private fun refreshPortSummary() {
         val c = EnginePortManager.config(this)
         val actual = EnginePortManager.currentPort(this)
-        val mode = if (c.mode == EnginePortManager.Mode.AUTO) "自动端口段 ${c.start}-${c.end}（搜索至 ${c.searchEnd}）" else "精确端口 ${c.exact}"
+        val mode = if (c.mode == EnginePortManager.Mode.AUTO) {
+            getString(R.string.developer_port_auto_summary, c.start, c.end, c.searchEnd)
+        } else getString(R.string.developer_port_exact_summary, c.exact)
         val reason = EnginePortManager.lastReason(this)
-        findViewById<android.widget.TextView>(R.id.txtEnginePortSummary).text = "$mode · 当前实际端口：$actual · $reason"
+        findViewById<android.widget.TextView>(R.id.txtEnginePortSummary).text =
+            getString(R.string.developer_port_actual_summary, mode, actual, reason)
     }
 
     private fun showPortSettings() {
         val c = EnginePortManager.config(this)
-        val choices = arrayOf("自动端口段", "精确端口")
+        val choices = arrayOf(getString(R.string.developer_port_auto), getString(R.string.developer_port_exact))
         AlertDialog.Builder(this).setTitle(R.string.developer_port_title)
             .setItems(choices) { _, which ->
                 val exactMode = which == 1
@@ -62,7 +65,7 @@ class DeveloperOptionsActivity : ThemedActivity() {
                 val input = EditText(this).apply {
                     inputType = InputType.TYPE_CLASS_TEXT
                     setSingleLine(true); setText(initial)
-                    hint = if (exactMode) "8080" else "3080-3090,8000"
+                    hint = getString(if (exactMode) R.string.developer_port_exact_hint else R.string.developer_port_auto_hint)
                 }
                 AlertDialog.Builder(this)
                     .setTitle(if (exactMode) R.string.developer_port_exact else R.string.developer_port_auto)
@@ -72,7 +75,7 @@ class DeveloperOptionsActivity : ThemedActivity() {
                             val value = input.text.toString().trim()
                             if (exactMode) EnginePortManager.setExact(this, value.toInt()) else {
                                 val parts = value.split(',', '-').map { it.trim().toInt() }
-                                require(parts.size == 3) { "格式应为 起始-结束,搜索上限" }
+                                require(parts.size == 3) { getString(R.string.developer_port_format_error) }
                                 EnginePortManager.setAuto(this, parts[0], parts[1], parts[2])
                             }
                             refreshPortSummary()
