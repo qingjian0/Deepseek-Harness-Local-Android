@@ -26,12 +26,12 @@ def verify(path: str, abi: str):
         for basename in REQUIRED:
             name = f"lib/{basename}"
             data = resolve_entry(archive, name)
-            if len(data) < 20:
+            if len(data) < 64:
                 raise ValueError(f"{name}: resolved payload is only {len(data)} bytes")
             if data[:4] != b"\x7fELF":
                 raise ValueError(f"{name}: resolved payload is not ELF")
-            if data[4] != 2 or data[5] != 1:
-                raise ValueError(f"{name}: expected little-endian ELF64")
+            if data[4] != 2 or data[5] != 1 or data[16] != 3 or data[17] != 0:
+                raise ValueError(f"{name}: expected little-endian ELF64 ET_DYN shared object")
             machine = int.from_bytes(data[18:20], "little")
             if machine != expected:
                 raise ValueError(f"{name}: e_machine={machine}, expected {expected}")
