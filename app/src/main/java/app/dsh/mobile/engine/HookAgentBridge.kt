@@ -133,7 +133,7 @@ object HookAgentBridge {
             throw IllegalStateException("Module provider rejected the discovery request")
         }
 
-        // The target process polls independently; keep this bounded below the bridge socket timeout.
+        // The target process polls independently; stay within the Agent plugin's 15-second client timeout.
         val deadline = SystemClock.elapsedRealtime() + 12_000L
         while (SystemClock.elapsedRealtime() < deadline) {
             val result = call(context, METHOD_DISCOVERY_RESULT, Bundle().apply {
@@ -170,6 +170,8 @@ object HookAgentBridge {
 
     private inline fun guarded(block: () -> String): Pair<Int, String> = try {
         200 to block()
+    } catch (t: java.util.concurrent.TimeoutException) {
+        504 to JSONObject().put("ok", false).put("error", "target_process_timeout").put("message", t.message).toString()
     } catch (t: SecurityException) {
         403 to JSONObject().put("ok", false).put("error", "provider_denied").put("message", t.message).toString()
     } catch (t: IllegalArgumentException) {
