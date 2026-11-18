@@ -103,6 +103,8 @@ class EngineSupervisor(private val ctx: Context) {
     }
 
     @Volatile private var activePort: Int = EnginePortManager.currentPort(ctx)
+    /** The application port block is selected once per supervisor lifetime; app-owned listeners remain bound across engine retries. */
+    @Volatile private var portBlockSelected: Boolean = false
 
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state
@@ -674,7 +676,6 @@ class EngineSupervisor(private val ctx: Context) {
         // 没有总预算 —— 用户实测能空转 20 分钟以上，界面一直停在准备阶段。
         var userVisibleBootT0 = System.currentTimeMillis()
         while (kotlinx.coroutines.currentCoroutineContext().isActive && !stopping) {
-            ServicePortConfig.activate(ctx)
             // 总时限检查：一旦超预算，收敛为 Failed 并说清发生了什么。
             // 预算只约束「从空闲/停止状态到引擎可用」的这一段连续尝试，两个重置点：
             //   ① 引擎进入 Healthy/SafeMode（成功收尾，见下方 ready 分支）
@@ -760,6 +761,19 @@ class EngineSupervisor(private val ctx: Context) {
                 step("home-owner-check")
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
                 step("guardian-restore")
+
+                // Select the complete application port block before AgentBridge / RemoteAccess bind.
+                // Keep it stable across supervisor retries: those app-owned listeners stay alive,
+                // so probing them again would mistake our own sockets for foreign conflicts.
+                if (!portBlockSelected) {
+                    mark("port-allocation")
+                    val selection = withContext(Dispatchers.IO) { EnginePortManager.select(ctx) }
+                    activePort = selection.port
+                    EnginePortManager.remember(ctx, selection)
+                    portBlockSelected = true
+                    Log.i(TAG, "engine port selected: ${selection.port} (${selection.reason})")
+                    step("port-allocation")
+                }
 
                 // 三项互不依赖的启动准备任务并行执行：
                 //  - AgentContextSeed 只写 dsh-home/AGENTS.md；
@@ -880,10 +894,6 @@ class EngineSupervisor(private val ctx: Context) {
                 withContext(Dispatchers.IO) { ProfilePluginProvisioner.ensureAll(ctx) }
                 step("profile-plugins")
                 mark("spawn")
-                val portSelection = withContext(Dispatchers.IO) { EnginePortManager.select(ctx) }
-                activePort = portSelection.port
-                EnginePortManager.remember(ctx, portSelection)
-                Log.i(TAG, "engine port selected: ${portSelection.port} (${portSelection.reason})")
                 val proc = withContext(Dispatchers.IO) { spawnEngine(bootId) }
                 process = proc
                 step("spawn")
