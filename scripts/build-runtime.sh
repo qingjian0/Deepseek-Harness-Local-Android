@@ -53,10 +53,25 @@ verify_zip() {
 
   test -x "$tmp/bin/bash" || { echo "错误：缺少 bin/bash" >&2; return 1; }
   test -x "$tmp/bin/rg" || { echo "错误：缺少 bin/rg" >&2; return 1; }
-  for so in libreadline.so.8 libhistory.so.8 libncursesw.so.6 libncurses.so.6 \
+  for so in libreadline.so.8 libz.so.1 libssl.so libhistory.so.8 libncursesw.so.6 libncurses.so.6 \
             libiconv.so libpcre2-8.so; do
-    test -e "$tmp/lib/$so" || { echo "错误：SONAME 库 lib/$so 缺失" >&2; return 1; }
+    test -s "$tmp/lib/$so" || { echo "错误：SONAME 库 lib/$so 缺失或为 0 字节" >&2; return 1; }
   done
+  python3 - "$tmp" "$ABI" <<'PYELF'
+import os, sys
+root, abi = sys.argv[1], sys.argv[2]
+want = {"arm64-v8a": 183, "x86_64": 62}[abi]
+for name in ("libreadline.so.8", "libz.so.1", "libssl.so"):
+    path = os.path.join(root, "lib", name)
+    with open(path, "rb") as f:
+        head = f.read(20)
+    if len(head) < 20 or head[:4] != b"\\x7fELF" or head[4] != 2 or head[5] != 1:
+        raise SystemExit(f"invalid ELF shared library: {name} ({os.path.getsize(path)} bytes)")
+    got = int.from_bytes(head[18:20], "little")
+    if got != want:
+        raise SystemExit(f"wrong ABI for {name}: e_machine={got}, expected={want}")
+print("runtime shared-library ELF checks OK")
+PYELF
   test -x "$tmp/bin/pnpm" || { echo "错误：缺少 bin/pnpm" >&2; return 1; }
   test -x "$tmp/bin/curl" || { echo "错误：缺少 bin/curl" >&2; return 1; }
   test -e "$tmp/usr/bin/.keep" || { echo "错误：usr/bin 丢失" >&2; return 1; }
