@@ -161,7 +161,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/dsh-gpt-hook-agent/package"
-          cp -R vendor/dsh-gpt-hook-agent/package/. "$RUNNER_TEMP/dsh-gpt-hook-agent/package/"
+          cp -R profile-plugin-src/dsh-gpt-hook-agent/package/. "$RUNNER_TEMP/dsh-gpt-hook-agent/package/"
           tar -czf "$RUNNER_TEMP/dsh-gpt-hook-agent.tgz" -C "$RUNNER_TEMP/dsh-gpt-hook-agent" package
 
       - name: 打包 ${{ matrix.pkg }}（上游 Release tgz 或本地 bundle 契约校验）
