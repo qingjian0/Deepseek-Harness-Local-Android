@@ -120,6 +120,12 @@ check("超时会删掉半个备份文件", "out.delete()" in bseg)
 check("端口冲突不会按监听端口误杀外部进程",
       "foreign listeners are never killed" in sup and "reclaimPortByPort" not in sup)
 check("端口回退由分配器负责", "EnginePortManager.select(ctx)" in sup)
+check("端口整组分配发生在 AgentBridge 监听之前",
+      sup.index("EnginePortManager.select(ctx)") < sup.index("AgentBridge.start(ctx)"))
+check("监督循环重试不会重新分配已由本 App 持有的服务端口",
+      sup.count("EnginePortManager.select(ctx)") == 1 and "portBlockSelected" in sup)
+check("插件健康探针有 20 秒硬截止且进程退出即停止等待",
+      "System.currentTimeMillis() + 20_000L" in sup and "while (System.currentTimeMillis() < deadline && !proc.exitFuture.isDone)" in sup)
 
 print("\n=== 5. Root 模式提示 ===")
 onb = open(ONB, encoding="utf-8").read()
