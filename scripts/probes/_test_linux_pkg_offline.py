@@ -194,20 +194,26 @@ ok("D4 装包与刷新索引失败都附诊断（端口 + resolv.conf + 代理�
    + ("" if _d4_has_install else "，没有装包失败点"))
 
 print()
-print("=== E. 内置插件仍只有两个且都有 bundle 契约 ===")
+print("=== E. 内置 profile 插件均有 bundle 契约 ===")
 
 # ★别数 BundledProfilePlugin( 的出现次数：data class 定义那一行也算一次，
 # 实测会得 3 而不是 2（第一条断言就这样假红过）。改成数 REGISTRY 列表里的
 # `pkg = ` 赋值，那才是真正的条目。
 _reg = re.search(r"private val REGISTRY = listOf\((.*?)\n    \)", PROV, re.S)
 _entries = _reg.group(1).count("pkg = ") if _reg else 0
-ok("E1 REGISTRY 仍是两条内置插件",
-   _entries == 2,
+ok("E1 REGISTRY 含三条内置插件",
+   _entries == 3,
    "实际条目数=" + str(_entries) + "（data class 定义不算条目）")
 
 ok("E2 solution-explorer 标记了 hasNpmDependencies",
    "hasNpmDependencies = true" in PROV,
    "离线判定要按声明判断；剥掉声明后这条会自然走离线路径")
+
+ok("E3 dsh-gpt Hook Agent 首装默认启用",
+   "pkg = DSH_GPT_HOOK_AGENT_PKG" in PROV
+   and 'assetRoot = "dsh-gpt-hook-agent"' in PROV
+   and "enabledOnFirstRun = { true }" in PROV,
+   "Hook Agent 应作为用户可管理的 profile bundle 安装，并在首次安装时启用")
 
 print()
 print("%d checks, %d failed" % (checks, failed))
