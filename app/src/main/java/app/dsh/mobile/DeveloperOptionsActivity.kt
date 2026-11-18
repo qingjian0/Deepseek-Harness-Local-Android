@@ -42,6 +42,9 @@ class DeveloperOptionsActivity : ThemedActivity() {
                 finish()
             }
         }
+        findViewById<android.view.View>(R.id.rowPromptManagement).setOnClickListener {
+            startActivity(android.content.Intent(this, PromptManagementActivity::class.java))
+        }
     }
 
     private fun refreshPortSummary() {

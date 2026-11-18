@@ -307,12 +307,10 @@ class SettingsActivity : ThemedActivity() {
         }
 
 
-        // 自定义指令（v1.3.2，issue #19）：在 App 的环境说明之上补写用户自己的长期指令。
-        // 落点是 AGENTS.md 的用户段 —— 引擎只加载这一个 user-global 指令文件，
-        // 分段管理后升级 App 不会丢用户内容，用户改指令也不会让环境说明变旧。
-        findViewById<LinearLayout>(R.id.rowUserPrompt).setOnClickListener {
-            startActivity(Intent(this, UserPromptActivity::class.java))
-        }
+        // 自定义指令入口已统一迁入开发者模式；保留原有布局 ID 以兼容上游布局，
+        // 但普通设置页不再显示该入口。数据与 UserPromptActivity 编辑逻辑不变。
+        findViewById<LinearLayout>(R.id.rowUserPrompt).visibility = View.GONE
+        findViewById<LinearLayout>(R.id.rowBackup).setBackgroundResource(R.drawable.bg_md3_seg_top)
 
         // —— 数据：备份与恢复子页（v1.4.46：导出/导入/恢复对话/配置文件收拢）——
         // 双端同步的入口与点击在 [applyPeerSyncEntry] 里一并处理（v1.6.0-beta.6）。

@@ -1906,4 +1906,24 @@
     <string name="developer_options_security_note">การเปิดเมนูนี้ไม่ได้ให้สิทธิ์ Root, Shizuku หรือสิทธิ์ระบบอื่น ๆ แต่ละการดำเนินการยังต้องตรวจสอบการอนุญาตแยกต่างหาก</string>
     <string name="developer_options_unlocked">เปิดตัวเลือกสำหรับนักพัฒนาแล้ว ดูได้ที่ การตั้งค่า → ระบบ</string>
     <string name="developer_options_disabled_toast">ซ่อนตัวเลือกสำหรับนักพัฒนาแล้ว แตะข้อมูลเวอร์ชัน 7 ครั้งเพื่อเปิดอีกครั้ง</string>
+    <!-- Prompt management -->
+    <string name="prompt_management_title">การจัดการพรอมป์ต์</string>
+    <string name="prompt_management_sub">จัดการแหล่งที่มาและการแทรกพรอมป์ต์</string>
+    <string name="prompt_management_intro">แยกแหล่งที่มาของพรอมป์ต์ออกจากกัน เพื่อให้การอัปเดตแอปและการตั้งค่าสภาพแวดล้อมไม่เขียนทับคำสั่งของคุณ</string>
+    <string name="prompt_management_runtime_section">ชั้นพรอมป์ต์ที่จัดการโดยรันไทม์</string>
+    <string name="prompt_management_safety_note">พรอมป์ต์จาก upstream เซสชัน และเครื่องมือยังจัดการโดยรันไทม์ และแสดงในหน้านี้เพื่ออ่านเท่านั้น สิทธิ์ของเครื่องมือควบคุมแยกจากข้อความพรอมป์ต์</string>
+    <string name="prompt_environment_title">คำสั่งสภาพแวดล้อม DSH</string>
+    <string name="prompt_environment_sub">ข้อมูล Android และรันไทม์ที่แอปจัดการ เปิดใช้งานเป็นค่าเริ่มต้น; เมื่อปิดจะลบเฉพาะส่วนนี้</string>
+    <string name="prompt_environment_enabled">เปิดใช้คำสั่งสภาพแวดล้อม DSH แล้ว</string>
+    <string name="prompt_environment_disabled">ปิดคำสั่งสภาพแวดล้อม DSH แล้ว และเก็บคำสั่งของคุณไว้</string>
+    <string name="prompt_environment_update_failed">อัปเดตคำสั่งสภาพแวดล้อมไม่สำเร็จ: %1$s</string>
+    <string name="prompt_upstream_title">พรอมป์ต์เริ่มต้นของ upstream</string>
+    <string name="prompt_upstream_sub">จัดการโดยรันไทม์ Agent ของ upstream</string>
+    <string name="prompt_upstream_info">คำสั่งเหล่านี้มาจากรันไทม์ Agent ของ upstream หน้านี้จะไม่เขียนทับหรือแทนที่ และจะยังคงอัปเดตตาม upstream</string>
+    <string name="prompt_session_title">พรอมป์ต์ของเซสชัน</string>
+    <string name="prompt_session_sub">คำสั่งและบริบทเฉพาะของบทสนทนา</string>
+    <string name="prompt_session_info">พรอมป์ต์ของเซสชันจะประกอบขึ้นแบบไดนามิกจากบทสนทนาและบริบทของงานปัจจุบัน โดยไม่ได้จัดเก็บไว้ในส่วนคำสั่งผู้ใช้ส่วนกลาง</string>
+    <string name="prompt_tools_title">พรอมป์ต์ของเครื่องมือ</string>
+    <string name="prompt_tools_sub">คำแนะนำการใช้งานเฉพาะของแต่ละเครื่องมือ</string>
+    <string name="prompt_tools_info">คำแนะนำของเครื่องมือเป็นส่วนหนึ่งของเครื่องมือและการเชื่อมต่อรันไทม์นั้น ๆ เมนูนี้อธิบายชั้นดังกล่าว แต่ไม่เปลี่ยนความพร้อมใช้งานหรือการอนุญาตใช้เครื่องมือ</string>
 </resources>

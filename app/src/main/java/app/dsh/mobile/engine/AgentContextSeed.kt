@@ -22,6 +22,20 @@ object AgentContextSeed {
 
     private const val TAG = "AgentContextSeed"
     private const val FILE_NAME = "AGENTS.md"
+    private const val PREFS_NAME = "agent_context_seed"
+    private const val KEY_APP_SEED_ENABLED = "app_seed_enabled"
+
+    /** App-managed environment instructions are enabled by default for existing installs. */
+    fun isAppSeedEnabled(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_APP_SEED_ENABLED, true)
+
+    /** Toggle only the app-managed section; the user-authored section is always preserved. */
+    fun setAppSeedEnabled(ctx: Context, enabled: Boolean) {
+        ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_APP_SEED_ENABLED, enabled).apply()
+        ensure(ctx)
+    }
     private const val MARKER_PREFIX = "<!-- dsh-android AGENTS seed v"
     /** 当前模板版本：改文案必须同步递增，旧版才会被升级覆盖 */
     private const val SEED_VERSION = 55
@@ -54,9 +68,20 @@ object AgentContextSeed {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
 
-        // ① 文件不存在 → 写入完整模板（含空的用户段）
+        // ① 文件不存在 → 按开关写入 App 段，并始终创建独立用户段。
         if (existing == null) {
-            write(file, render(ctx) + userSection(null))
+            write(file, (if (isAppSeedEnabled(ctx)) render(ctx) else "") + userSection(null))
+            return
+        }
+
+        // App 段关闭时，只移除 App 管理的环境说明；用户段保持原样。
+        if (!isAppSeedEnabled(ctx)) {
+            val userContent = when {
+                existing.contains(USER_SECTION_BEGIN) -> extractUserSection(existing)
+                existing.contains(MARKER_PREFIX) -> null
+                else -> existing
+            }
+            write(file, userSection(userContent))
             return
         }
 
@@ -66,7 +91,12 @@ object AgentContextSeed {
             Log.i(TAG, "AGENTS.md exists without seed marker (user-authored); preserved as user section")
             // 已有内容整体视为用户段（放在分隔之后），App 段单独追加在上方，
             // 这样「用户的内容」和「App 的环境说明」同时生效且互不覆盖。
-            val migrated = render(ctx) + userSection(existing)
+            val legacyUserContent = if (existing.contains(USER_SECTION_BEGIN)) {
+                extractUserSection(existing)
+            } else {
+                existing
+            }
+            val migrated = render(ctx) + userSection(legacyUserContent)
             write(file, migrated)
             return
         }
@@ -99,9 +129,17 @@ object AgentContextSeed {
      * 保证两边内容都在。App 段永不被此处修改。
      */
     fun writeUserSection(ctx: Context, content: String?) {
+        // Normalize/migrate first so legacy user-authored files are never mistaken for App content.
+        ensure(ctx)
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
-        val body = if (existing == null) render(ctx) else appSectionOf(existing)
+        val body = if (!isAppSeedEnabled(ctx)) {
+            ""
+        } else if (existing == null) {
+            render(ctx)
+        } else {
+            appSectionOf(existing)
+        }
         write(file, body + userSection(content))
         Log.i(TAG, "AGENTS.md user section saved (${content?.length ?: 0} chars)")
     }

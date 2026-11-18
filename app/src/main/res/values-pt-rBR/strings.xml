@@ -1916,4 +1916,24 @@
     <string name="developer_options_security_note">Ativar este menu não concede Root, Shizuku nem outras permissões do sistema. Cada operação continua exigindo sua própria autorização.</string>
     <string name="developer_options_unlocked">Opções do desenvolvedor ativadas. Acesse em Configurações → Sistema.</string>
     <string name="developer_options_disabled_toast">Opções do desenvolvedor ocultadas. Toque sete vezes nas informações da versão para mostrá-las novamente.</string>
+    <!-- Prompt management -->
+    <string name="prompt_management_title">Gerenciamento de prompts</string>
+    <string name="prompt_management_sub">Gerencie as fontes e a injeção de prompts</string>
+    <string name="prompt_management_intro">As fontes de prompts são separadas para que atualizações do app e controles do ambiente nunca substituam suas próprias instruções.</string>
+    <string name="prompt_management_runtime_section">Camadas de prompt gerenciadas pelo runtime</string>
+    <string name="prompt_management_safety_note">Os prompts upstream, da sessão e das ferramentas são gerenciados pelo runtime e exibidos aqui apenas para consulta. As permissões das ferramentas são controladas separadamente do texto dos prompts.</string>
+    <string name="prompt_environment_title">Instruções de ambiente do DSH</string>
+    <string name="prompt_environment_sub">Informações de Android e do runtime gerenciadas pelo app. Ativado por padrão; desativar remove somente esta seção.</string>
+    <string name="prompt_environment_enabled">Instruções de ambiente do DSH ativadas</string>
+    <string name="prompt_environment_disabled">Instruções de ambiente do DSH desativadas; suas instruções foram preservadas</string>
+    <string name="prompt_environment_update_failed">Não foi possível atualizar as instruções de ambiente: %1$s</string>
+    <string name="prompt_upstream_title">Prompts padrão do upstream</string>
+    <string name="prompt_upstream_sub">Gerenciados pelo runtime Agent upstream</string>
+    <string name="prompt_upstream_info">Estas instruções são fornecidas pelo runtime Agent upstream. Esta tela não as reescreve nem substitui; elas continuam acompanhando as atualizações do upstream.</string>
+    <string name="prompt_session_title">Prompts da sessão</string>
+    <string name="prompt_session_sub">Instruções e contexto específicos da conversa</string>
+    <string name="prompt_session_info">Os prompts da sessão são montados dinamicamente a partir da conversa atual e do contexto da tarefa. Eles não são armazenados na seção global de instruções do usuário.</string>
+    <string name="prompt_tools_title">Prompts das ferramentas</string>
+    <string name="prompt_tools_sub">Instruções de uso específicas de cada ferramenta</string>
+    <string name="prompt_tools_info">As instruções das ferramentas pertencem às próprias ferramentas e integrações do runtime. Este menu documenta essa camada, mas não altera a disponibilidade nem a autorização das ferramentas.</string>
 </resources>
