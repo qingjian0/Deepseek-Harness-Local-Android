@@ -70,6 +70,9 @@ object ProfilePluginProvisioner {
      */
     const val SOLUTION_EXPLORER_PKG = "@xiaopb/dsh-solution-explorer"
 
+    /** DSH Agent integration for the dsh-gpt LSPosed module. */
+    const val DSH_GPT_HOOK_AGENT_PKG = "@dsh-external/dsh-gpt-hook-agent"
+
     /**
      * 一个随 APK 分发、以 profile bundle 形式安装的插件。
      *
@@ -114,6 +117,12 @@ object ProfilePluginProvisioner {
             // 与 mobile-layout「跟随设置开关」是同一原则：默认不改变既有体验。
             enabledOnFirstRun = { false },
             hasNpmDependencies = true,
+        ),
+        BundledProfilePlugin(
+            pkg = DSH_GPT_HOOK_AGENT_PKG,
+            assetRoot = "dsh-gpt-hook-agent",
+            // Hook Agent 是 dsh-gpt 模块的控制面；首装默认启用，用户仍可在插件页关闭或卸载。
+            enabledOnFirstRun = { true },
         ),
     )
 
