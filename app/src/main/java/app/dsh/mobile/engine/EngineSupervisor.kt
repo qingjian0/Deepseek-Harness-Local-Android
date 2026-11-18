@@ -523,6 +523,7 @@ class EngineSupervisor(private val ctx: Context) {
                 //   而且不该指望用户自己想到去「设置→维护→全面体检」。
                 //   只在**终态**跑（不是每次退避都跑）—— 体检要扫目录，每 2 秒一次太重。
                 runSelfCheck = true,
+                enginePort = activePort,
             ).let { f ->
                 // archMismatch 只有调用方知道（它是异常类型决定的，不是日志能看出来的）
                 if (overrideCause == EngineTriage.Cause.RUNTIME_ARCH) f.copy(archMismatch = true) else f
