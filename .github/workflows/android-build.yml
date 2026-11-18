@@ -581,7 +581,7 @@ jobs:
           # Verify the installed package identity from the actual APK manifest, not Gradle source alone.
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -f "$APK"
-          SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -1)"
           test -x "$AAPT"
           "$AAPT" dump badging "$APK" | grep -F "package: name='dsh.dsh.mobile'"
