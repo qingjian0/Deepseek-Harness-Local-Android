@@ -597,7 +597,7 @@ copy_soname() {
     return 0
   fi
   rm -f "$dst"
-  for s in "$ROOT"/lib/"$pattern"; do
+  for s in "$ROOT"/lib/$pattern; do
     [ "$s" = "$dst" ] && continue
     [ -f "$s" ] && [ -s "$s" ] || continue
     cp -L -p "$s" "$dst"
