@@ -3,6 +3,7 @@ package app.dsh.mobile.engine
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLDecoder
@@ -20,6 +21,11 @@ object HookAgentBridge {
     private const val METHOD_SNAPSHOT = "host_snapshot"
     private const val METHOD_SET_CONFIG = "host_set_config"
     private const val METHOD_SET_ENABLED = "host_set_enabled"
+    private const val METHOD_DISCOVER = "host_discover"
+    private const val METHOD_DISCOVERY_RESULT = "host_discovery_result"
+    private const val KEY_DISCOVERY_REQUEST = "discoveryRequest"
+    private const val KEY_DISCOVERY_RESULT = "discoveryResult"
+    private const val KEY_DISCOVERY_ID = "discoveryId"
     private const val KEY_REPORT = "report"
     private const val KEY_CONFIG = "config"
     private const val KEY_ENABLED = "enabled"
@@ -102,12 +108,44 @@ object HookAgentBridge {
             .toString()
     }
 
-    fun discover(@Suppress("UNUSED_PARAMETER") context: Context, @Suppress("UNUSED_PARAMETER") body: String): Pair<Int, String> =
-        501 to JSONObject()
-            .put("ok", false)
-            .put("error", "discovery_not_connected")
-            .put("message", "The target-process discovery request queue is not wired yet")
-            .toString()
+    fun discover(context: Context, body: String): Pair<Int, String> = guarded {
+        val request = JSONObject(body)
+        val prefix = request.optString("prefix", "com.openai.")
+        val className = request.optString("className").takeIf { it.isNotBlank() }
+        val limit = request.optInt("limit", 100).coerceIn(1, 500)
+        require(prefix.startsWith("com.openai.") && prefix.length <= 180) {
+            "prefix must be within com.openai.*"
+        }
+        if (className != null) require(className.startsWith("com.openai.") && className.length <= 240) {
+            "className must be within com.openai.*"
+        }
+
+        val requestId = java.util.UUID.randomUUID().toString()
+        val queued = JSONObject()
+            .put("requestId", requestId)
+            .put("prefix", prefix)
+            .put("className", className ?: JSONObject.NULL)
+            .put("limit", limit)
+        val queuedResult = call(context, METHOD_DISCOVER, Bundle().apply {
+            putString(KEY_DISCOVERY_REQUEST, queued.toString())
+        })
+        if (!queuedResult.getBoolean(KEY_ACCEPTED, false)) {
+            throw IllegalStateException("Module provider rejected the discovery request")
+        }
+
+        // The target process polls independently; keep this bounded below the bridge socket timeout.
+        val deadline = SystemClock.elapsedRealtime() + 4_200L
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val result = call(context, METHOD_DISCOVERY_RESULT, Bundle().apply {
+                putString(KEY_DISCOVERY_ID, requestId)
+            }).getString(KEY_DISCOVERY_RESULT)
+            if (!result.isNullOrBlank()) return@guarded result
+            SystemClock.sleep(150L)
+        }
+        throw java.util.concurrent.TimeoutException(
+            "Target process did not complete discovery within 4.2 seconds; retry the same query"
+        )
+    }
 
     private fun snapshot(context: Context): Bundle =
         call(context, METHOD_SNAPSHOT, null)
