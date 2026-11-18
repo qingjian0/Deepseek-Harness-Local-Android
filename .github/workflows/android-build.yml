@@ -573,6 +573,10 @@ jobs:
           if [ "${{ matrix.package }}" = "full" ]; then
             ARGS+=(-PruntimeZip="${{ github.workspace }}/runtime-dist/runtime.zip")
           fi
+          # Run the new ELF integrity JVM regression suite once per workflow, not once per ABI/package lane.
+          if [ "${{ matrix.abi }}" = "arm64-v8a" ] && [ "${{ matrix.package }}" = "full" ]; then
+            gradle -p . :app:testDebugUnitTest "${ARGS[@]}" --stacktrace 2>&1 | tee runtime-unit-tests.log
+          fi
           gradle -p . assembleDebug "${ARGS[@]}" --stacktrace 2>&1 | tee build-${{ matrix.abi }}-${{ matrix.package }}.log
           if [ -n "${DSH_RELEASE_STORE_PASSWORD:-}" ] && [ -f keystore/dsh-release.keystore ]; then
             # -PrequireReleaseSigning=true：正式包缺私钥时必须失败，不能产出
