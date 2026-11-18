@@ -117,9 +117,9 @@ check("backupHome 的 tar 有 60s 超时", "waitFor(60" in bseg)
 check("超时会销毁 tar 进程", "proc.destroy()" in bseg)
 check("超时会删掉半个备份文件", "out.delete()" in bseg)
 
-check("reclaimPort 的 kill 脚本有超时",
-      "waitFor(3, java.util.concurrent.TimeUnit.SECONDS)" in sup)
-check("reclaimPort 超时会 destroy", "p.destroy()" in sup)
+check("端口冲突不会按监听端口误杀外部进程",
+      "foreign listeners are never killed" in sup and "reclaimPortByPort" not in sup)
+check("端口回退由分配器负责", "EnginePortManager.select(ctx)" in sup)
 
 print("\n=== 5. Root 模式提示 ===")
 onb = open(ONB, encoding="utf-8").read()
