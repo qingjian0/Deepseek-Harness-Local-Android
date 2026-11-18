@@ -1012,6 +1012,7 @@ class RuntimeInstaller(private val ctx: Context) {
                 onProgress = { p -> onProgress(if (bundled) p else 0.45f + p * 0.55f) },
                 onDetail = onDetail,
             )
+            preserveUserProvisionedPackages(staging)
             restoreExecBits(staging)
             check(isRootCompleteAt(staging)) {
                 "staged runtime incomplete (${staging.absolutePath})"
@@ -1260,6 +1261,26 @@ class RuntimeInstaller(private val ctx: Context) {
             if (dest.exists()) dest.delete()
             src.copyTo(dest, overwrite = true)
         }.onFailure { Log.w(TAG, "alias materialise failed for ${dest.name}: ${it.message}") }
+    }
+
+    /**
+     * Keep manually provisioned LibreOffice runtime packages across a runtime refresh.
+     * The current runtime bundle wins when it already contains a package; otherwise copy
+     * the installed package into staging before the top-level lib/ swap.
+     */
+    private fun preserveUserProvisionedPackages(staging: File) {
+        val packages = listOf(
+            "@deepseek-ai/libreoffice-kit",
+            "@deepseek-ai/libreoffice-kit-wasm",
+        )
+        for (relative in packages) {
+            val source = File(root, "lib/node_modules/$relative")
+            val destination = File(staging, "lib/node_modules/$relative")
+            if (!source.isDirectory || destination.exists()) continue
+            destination.parentFile?.mkdirs()
+            source.copyRecursively(destination, overwrite = false)
+            Log.i(TAG, "preserved locally provisioned runtime package $relative")
+        }
     }
 
     /**
