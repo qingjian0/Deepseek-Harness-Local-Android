@@ -35,6 +35,12 @@ on:
     # 17:30 UTC = 次日 01:30 Asia/Shanghai（UTC+8）——要改北京时间，改这里的 UTC 值。
     - cron: "30 17 * * *"   # 每日 01:30 Asia/Shanghai（= UTC 17:30）
   workflow_dispatch:
+    inputs:
+      publish_direct_apk:
+        description: "发布本次 CI 测试 APK 为独立 .apk 下载附件（滚动测试版；非正式 Release）"
+        required: false
+        type: boolean
+        default: true
 
 env:
   # 时区统一为 Asia/Shanghai（GitHub 的 schedule 只能写 UTC，换算见上面 cron 注释；
@@ -768,6 +774,61 @@ jobs:
             dist/*.apk
             dist/meta-*.json
           retention-days: 1   # 仅 job 间传递用，避免 90 天默认堆积百 MB×N（曾堆 32GB）
+
+  # 手动构建的直接 APK 下载：仅 workflow_dispatch 显式触发，独立滚动 prerelease。
+  # 这里发布的是 CI 构建测试包，不替代正式 Release；保留 Actions ZIP Artifact 供 job 传递。
+  publish-ci-apk:
+    name: 发布可直接下载的 CI APK（测试版）
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.publish_direct_apk
+      && needs.build-apk.result == 'success'
+    needs: [build-apk]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 读取版本号
+        id: ver
+        run: |
+          V=$(grep -oP 'versionName\\s*=\\s*"\\K[^"]+' app/build.gradle.kts | head -1)
+          test -n "$V"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: 下载 APK 构建产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dsh-android-apk-*
+          merge-multiple: true
+          path: apk/
+
+      - name: 校验直接下载资产
+        run: |
+          set -euo pipefail
+          find apk -maxdepth 1 -type f -name '*.apk' -print
+          test -n "$(find apk -maxdepth 1 -type f -name '*.apk' -print -quit)"
+
+      - name: 发布滚动 CI 测试版（直接 .apk 附件）
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ci-apk
+          target_commitish: ${{ github.sha }}
+          name: CI Test APK · v${{ steps.ver.outputs.version }} · build ${{ github.run_number }}
+          files: apk/*.apk
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+          body: |
+            这是手动触发的 CI 测试构建，不是正式版 Release。
+
+            - 附件为独立 APK 文件，可直接下载，不需要解压 Actions ZIP。
+            - debug APK 使用 CI debug 签名；可能无法覆盖安装正式签名版本。
+            - 只有仓库配置正式签名材料时才会额外生成 release APK。
+            - 正式发布仍走版本 tag 和原有签名校验流程。
 
   # ⚠️ v1.2.106：**取消 CI 自动发 release**。
   #
