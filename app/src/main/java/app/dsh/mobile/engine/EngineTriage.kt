@@ -159,9 +159,11 @@ object EngineTriage {
     data class Facts(
         /** 引擎日志尾部（本次启动段），空串表示没有 */
         val logTail: String = "",
-        /** 3080 当前是否有人在监听 */
+        /** 本轮实际分配的引擎端口；不能假定始终是 3080 */
+        val enginePort: Int = EngineConfig.DEFAULT_PORT,
+        /** 实际引擎端口当前是否有人在监听 */
         val portInUse: Boolean = false,
-        /** 占着 3080 的进程：pid -> cmdline。空 map 表示查不到 */
+        /** 占着实际引擎端口的进程：pid -> cmdline。空 map 表示查不到 */
         val portOwners: Map<Int, String> = emptyMap(),
         /** 本次是否已经是「架构不匹配」这个确定性失败 */
         val archMismatch: Boolean = false,
