@@ -1956,4 +1956,24 @@
     <string name="developer_options_security_note">Enabling this menu does not grant Root, Shizuku, or other system permissions. Each operation still requires its own authorization.</string>
     <string name="developer_options_unlocked">Developer options enabled. Find them under Settings → System.</string>
     <string name="developer_options_disabled_toast">Developer options hidden. Tap the version information seven times to show them again.</string>
+    <!-- Prompt management -->
+    <string name="prompt_management_title">Prompt management</string>
+    <string name="prompt_management_sub">Manage prompt sources and injection behavior</string>
+    <string name="prompt_management_intro">Prompt sources are separated so App updates and environment controls never overwrite your own instructions.</string>
+    <string name="prompt_management_runtime_section">Runtime-managed prompt layers</string>
+    <string name="prompt_management_safety_note">Upstream, session, and tool prompts are currently runtime-owned and shown as read-only information. Tool permissions are controlled separately from prompt text.</string>
+    <string name="prompt_environment_title">DSH environment instructions</string>
+    <string name="prompt_environment_sub">App-managed Android and runtime facts. Default on; disabling removes only this section.</string>
+    <string name="prompt_environment_enabled">DSH environment instructions enabled</string>
+    <string name="prompt_environment_disabled">DSH environment instructions disabled; your own instructions were preserved</string>
+    <string name="prompt_environment_update_failed">Could not update environment instructions: %1$s</string>
+    <string name="prompt_upstream_title">Upstream default prompts</string>
+    <string name="prompt_upstream_sub">Owned by the upstream Agent runtime</string>
+    <string name="prompt_upstream_info">These instructions are supplied by the upstream Agent runtime. This screen does not rewrite or replace them; they continue to follow upstream updates.</string>
+    <string name="prompt_session_title">Session prompts</string>
+    <string name="prompt_session_sub">Conversation-specific instructions and context</string>
+    <string name="prompt_session_info">Session prompts are assembled dynamically from the current conversation and task context. They are not stored in the global user-instructions section.</string>
+    <string name="prompt_tools_title">Tool prompts</string>
+    <string name="prompt_tools_sub">Tool-specific usage instructions</string>
+    <string name="prompt_tools_info">Tool instructions belong to their respective tools and runtime integrations. This menu currently documents the layer; it does not change tool availability or authorization.</string>
 </resources>

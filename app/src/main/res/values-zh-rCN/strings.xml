@@ -1959,4 +1959,24 @@
     <string name="developer_options_security_note">开启此菜单不会自动授予 Root、Shizuku 或其他系统权限。每项操作仍须经过独立授权检查。</string>
     <string name="developer_options_unlocked">已开启开发者选项，可在「设置 → 系统」中查看。</string>
     <string name="developer_options_disabled_toast">开发者选项已隐藏。再次点击版本信息 7 次即可开启。</string>
+    <!-- Prompt management -->
+    <string name="prompt_management_title">提示词管理</string>
+    <string name="prompt_management_sub">管理提示词来源与注入行为</string>
+    <string name="prompt_management_intro">提示词来源相互独立，应用更新和环境开关不会覆盖你自己的指令。</string>
+    <string name="prompt_management_runtime_section">运行时管理的提示词层</string>
+    <string name="prompt_management_safety_note">上游、会话和工具提示词目前由运行时管理，此处仅提供只读说明。工具权限与提示词文本分开控制。</string>
+    <string name="prompt_environment_title">DSH 环境提示词</string>
+    <string name="prompt_environment_sub">由应用管理的 Android 与运行环境说明。默认开启；关闭只移除此部分。</string>
+    <string name="prompt_environment_enabled">已开启 DSH 环境提示词</string>
+    <string name="prompt_environment_disabled">已关闭 DSH 环境提示词，你自己的指令已保留</string>
+    <string name="prompt_environment_update_failed">更新环境提示词失败：%1$s</string>
+    <string name="prompt_upstream_title">上游默认提示词</string>
+    <string name="prompt_upstream_sub">由上游 Agent 运行时管理</string>
+    <string name="prompt_upstream_info">这部分指令由上游 Agent 运行时提供。本页面不会重写或替换它们，仍随上游更新。</string>
+    <string name="prompt_session_title">会话提示词</string>
+    <string name="prompt_session_sub">当前对话专属的指令与上下文</string>
+    <string name="prompt_session_info">会话提示词根据当前对话和任务上下文动态组装，不保存在全局用户自定义指令段中。</string>
+    <string name="prompt_tools_title">工具提示词</string>
+    <string name="prompt_tools_sub">各工具专属的使用说明</string>
+    <string name="prompt_tools_info">工具说明由各工具及运行时集成负责。本菜单目前提供管理说明，不改变工具可用性或授权状态。</string>
 </resources>

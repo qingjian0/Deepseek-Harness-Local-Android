@@ -1962,4 +1962,24 @@
     <string name="developer_options_security_note">Dieses Menü gewährt keinen Root-, Shizuku- oder anderen Systemzugriff. Jede Aktion benötigt weiterhin eine eigene Berechtigungsprüfung.</string>
     <string name="developer_options_unlocked">Entwickleroptionen aktiviert. Sie finden sie unter Einstellungen → System.</string>
     <string name="developer_options_disabled_toast">Entwickleroptionen ausgeblendet. Tippen Sie siebenmal auf die Versionsinformation, um sie erneut anzuzeigen.</string>
+    <!-- Prompt management -->
+    <string name="prompt_management_title">Prompt-Verwaltung</string>
+    <string name="prompt_management_sub">Prompt-Quellen und Einfügeverhalten verwalten</string>
+    <string name="prompt_management_intro">Prompt-Quellen bleiben getrennt, damit App-Updates und Umgebungsoptionen Ihre eigenen Anweisungen nicht überschreiben.</string>
+    <string name="prompt_management_runtime_section">Vom Laufzeitsystem verwaltete Prompt-Ebenen</string>
+    <string name="prompt_management_safety_note">Upstream-, Sitzungs- und Tool-Prompts werden derzeit vom Laufzeitsystem verwaltet und hier nur schreibgeschützt erläutert. Tool-Berechtigungen werden getrennt vom Prompt-Text gesteuert.</string>
+    <string name="prompt_environment_title">DSH-Umgebungsanweisungen</string>
+    <string name="prompt_environment_sub">Von der App verwaltete Android- und Laufzeitinformationen. Standardmäßig aktiviert; beim Deaktivieren wird nur dieser Abschnitt entfernt.</string>
+    <string name="prompt_environment_enabled">DSH-Umgebungsanweisungen aktiviert</string>
+    <string name="prompt_environment_disabled">DSH-Umgebungsanweisungen deaktiviert; Ihre eigenen Anweisungen bleiben erhalten</string>
+    <string name="prompt_environment_update_failed">Umgebungsanweisungen konnten nicht aktualisiert werden: %1$s</string>
+    <string name="prompt_upstream_title">Upstream-Standardprompts</string>
+    <string name="prompt_upstream_sub">Vom Upstream-Agent-Laufzeitsystem verwaltet</string>
+    <string name="prompt_upstream_info">Diese Anweisungen werden vom Upstream-Agent-Laufzeitsystem bereitgestellt. Diese Seite schreibt sie nicht um und ersetzt sie nicht; sie werden weiterhin mit Upstream-Updates aktualisiert.</string>
+    <string name="prompt_session_title">Sitzungs-Prompts</string>
+    <string name="prompt_session_sub">Gesprächsspezifische Anweisungen und Kontext</string>
+    <string name="prompt_session_info">Sitzungs-Prompts werden dynamisch aus dem aktuellen Gespräch und Aufgabenkontext zusammengesetzt. Sie werden nicht im globalen Bereich für Benutzeranweisungen gespeichert.</string>
+    <string name="prompt_tools_title">Tool-Prompts</string>
+    <string name="prompt_tools_sub">Nutzungshinweise für einzelne Tools</string>
+    <string name="prompt_tools_info">Tool-Anweisungen gehören zu den jeweiligen Tools und Laufzeitintegrationen. Dieses Menü beschreibt diese Ebene, ändert aber weder die Verfügbarkeit noch die Autorisierung von Tools.</string>
 </resources>
