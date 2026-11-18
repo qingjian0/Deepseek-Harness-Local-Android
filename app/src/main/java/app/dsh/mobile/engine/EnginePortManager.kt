@@ -4,7 +4,7 @@ import android.content.Context
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 
-/** Main engine port allocator with 100-port segment fallback. */
+/** Main engine port allocator with sequential fallback across the configured search range. */
 object EnginePortManager {
     enum class Mode { AUTO, EXACT }
     data class Config(val mode: Mode, val start: Int, val end: Int, val searchEnd: Int, val exact: Int)
@@ -83,20 +83,22 @@ object EnginePortManager {
             ?: throw IllegalStateException("No free engine port segment between ${c.start} and ${c.searchEnd}")
         val (port, segmentStart) = found
         val segmentEnd = segmentStart + (c.end - c.start)
-        val reason = if (segmentStart == c.start) "preferred segment" else "fallback segment ${segmentStart}-${segmentEnd}"
+        val reason = if (port <= c.end) "preferred range" else "auto-increment fallback ${port}"
         return Selection(port, segmentStart, segmentEnd, reason)
     }
 
     internal fun findCandidate(start: Int, end: Int, searchEnd: Int, available: (Int) -> Boolean): Pair<Int, Int>? {
         require(start in 1024..65533 && end in start..65533 && searchEnd >= end)
-        val width = end - start
-        var segmentStart = start
-        while (segmentStart + width <= searchEnd) {
-            val segmentEnd = segmentStart + width
-            for (candidate in segmentStart..segmentEnd) {
-                if (isCandidateAvailable(candidate, available)) return candidate to segmentStart
+        val preferredWidth = end - start
+        // Scan every candidate in order. The previous 100-port stride only tested
+        // [start..end], [start+100..end+100], ... and silently skipped free ports
+        // in between (e.g. 3091..3179). That could report exhaustion while usable
+        // ports were available. Keep the preferred range first, then increment by 1.
+        for (candidate in start..searchEnd) {
+            if (isCandidateAvailable(candidate, available)) {
+                val rangeStart = if (candidate <= end) start else candidate
+                return candidate to rangeStart
             }
-            segmentStart += 100
         }
         return null
     }
