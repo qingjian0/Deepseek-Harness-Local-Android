@@ -793,7 +793,7 @@ jobs:
       - name: 读取版本号
         id: ver
         run: |
-          V=$(grep -oP 'versionName\\s*=\\s*"\\K[^"]+' app/build.gradle.kts | head -1)
+          V=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
           test -n "$V"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
