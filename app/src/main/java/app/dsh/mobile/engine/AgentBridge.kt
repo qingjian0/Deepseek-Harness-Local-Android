@@ -498,6 +498,14 @@ object AgentBridge {
      * Existing handlers remain untouched so this refactor does not alter behavior.
      */
     private val routes: Map<String, Route> = mapOf(
+        // dsh-gpt LSPosed extension: the DSH bridge token terminates here; provider
+        // calls are separately authenticated by the module app against this host UID.
+        "GET /hook/status" to Route("GET") { c, _, _ -> HookAgentBridge.status(c) },
+        "GET /hook/events" to Route("GET") { c, q, _ -> HookAgentBridge.events(c, q) },
+        "GET /hook/rules" to Route("GET") { c, _, _ -> HookAgentBridge.rules(c) },
+        "POST /hook/rules" to Route("POST") { c, _, b -> HookAgentBridge.updateRules(c, b) },
+        "POST /hook/discover" to Route("POST") { c, _, b -> HookAgentBridge.discover(c, b) },
+        "POST /hook/control" to Route("POST") { c, _, b -> HookAgentBridge.control(c, b) },
         "POST /notify" to Route("POST") { c, _, b -> notify(c, b) },
         "GET /screen" to Route("GET") { _, q, _ -> screen(q) },
         "GET /ocr" to Route("GET") { _, q, _ -> ocr(q) },
