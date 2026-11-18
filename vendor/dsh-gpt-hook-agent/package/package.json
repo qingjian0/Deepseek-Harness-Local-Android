@@ -1,0 +1,21 @@
+{
+  "name": "@dsh-external/dsh-gpt-hook-agent",
+  "version": "0.1.0",
+  "description": "DSH Agent tools for live control and iterative research of the dsh-gpt LSPosed module.",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "GPL-3.0-only"
+}
