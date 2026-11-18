@@ -312,6 +312,7 @@ object LocalEmbedder {
 
     private fun parseEmbeddings(json: String, expect: Int): List<DoubleArray>? = runCatching {
         val arr = JSONObject(json).getJSONArray("data")
+        if (arr.length() != expect) return@runCatching null
         val out = ArrayList<DoubleArray>(arr.length())
         for (i in 0 until arr.length()) {
             val e = arr.getJSONObject(i).getJSONArray("embedding")
