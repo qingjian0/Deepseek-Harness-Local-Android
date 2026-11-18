@@ -2,6 +2,7 @@ package app.dsh.mobile.engine
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -17,20 +18,20 @@ class EnginePortManagerTest {
         assertFalse(EnginePortManager.isCandidateAvailable(3080) { it != 3082 })
     }
 
-    @Test fun occupiedDefaultPortAutoIncrementsToNextUsablePort() {
-        // 3081 is invalid because its companion 3083 is reserved; 3082 is next usable.
-        val found = EnginePortManager.findCandidate(3080, 3090, 8000) { it != 3080 }
-        assertEquals(3082 to 3080, found)
+    @Test fun oneOccupiedApplicationPortBlocksTheWholePortGroup() {
+        val ports = ServicePortConfig.portsForOffset(0)
+        val allAvailable = EnginePortManager.isPortBlockAvailable(ports, 3080) { true }
+        val bridgeOccupied = EnginePortManager.isPortBlockAvailable(ports, 3080) { it != ports.agentBridge }
+        val companionOccupied = EnginePortManager.isPortBlockAvailable(ports, 3080) { it != 3082 }
+        assertTrue(allAvailable)
+        assertFalse(bridgeOccupied)
+        assertFalse(companionOccupied)
     }
 
-    @Test fun searchDoesNotSkipFreePortsBetweenHundredPortBlocks() {
-        // 3091 is reserved; the first valid candidate after this blocked range is 3092.
-        val found = EnginePortManager.findCandidate(3080, 3090, 8000) { it >= 3092 }
-        assertEquals(3092 to 3092, found)
-    }
-
-    @Test fun continuesSearchingWhenFirstHundredPortsAreOccupied() {
-        val found = EnginePortManager.findCandidate(3080, 3090, 8000) { port -> port >= 3180 }
-        assertEquals(3180 to 3180, found)
+    @Test fun portBlockMovesInExactThousandPortSteps() {
+        assertEquals(1000, EnginePortManager.nextBlockOffset(0))
+        assertEquals(2000, EnginePortManager.nextBlockOffset(1000))
+        assertEquals(57533, EnginePortManager.nextBlockOffset(56533))
+        assertNull(EnginePortManager.nextBlockOffset(57533))
     }
 }
