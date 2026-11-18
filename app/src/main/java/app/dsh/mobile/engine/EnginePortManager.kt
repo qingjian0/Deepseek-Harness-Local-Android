@@ -47,8 +47,15 @@ object EnginePortManager {
 
     fun remember(context: Context, selection: Selection) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putInt("actual_port", selection.port).apply()
+            .putInt("actual_port", selection.port)
+            .putString("last_reason", selection.reason)
+            .putInt("last_segment_start", selection.segmentStart)
+            .putInt("last_segment_end", selection.segmentEnd)
+            .apply()
     }
+
+    fun lastReason(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getString("last_reason", "尚未启动") ?: "尚未启动"
 
     fun select(context: Context): Selection {
         val c = config(context)
@@ -58,18 +65,26 @@ object EnginePortManager {
             }
             return Selection(c.exact, c.exact, c.exact, "exact")
         }
-        var segmentStart = c.start
-        while (segmentStart + (c.end - c.start) <= c.searchEnd) {
-            val segmentEnd = segmentStart + (c.end - c.start)
+        val found = findCandidate(c.start, c.end, c.searchEnd, ::canBind)
+            ?: throw IllegalStateException("No free engine port segment between ${c.start} and ${c.searchEnd}")
+        val (port, segmentStart) = found
+        val segmentEnd = segmentStart + (c.end - c.start)
+        val reason = if (segmentStart == c.start) "preferred segment" else "fallback segment ${segmentStart}-${segmentEnd}"
+        return Selection(port, segmentStart, segmentEnd, reason)
+    }
+
+    internal fun findCandidate(start: Int, end: Int, searchEnd: Int, available: (Int) -> Boolean): Pair<Int, Int>? {
+        require(start in 1024..65533 && end in start..65533 && searchEnd >= end)
+        val width = end - start
+        var segmentStart = start
+        while (segmentStart + width <= searchEnd) {
+            val segmentEnd = segmentStart + width
             for (candidate in segmentStart..segmentEnd) {
-                if (isCandidateAvailable(candidate)) {
-                    val reason = if (segmentStart == c.start) "preferred segment" else "fallback segment ${segmentStart}-${segmentEnd}"
-                    return Selection(candidate, segmentStart, segmentEnd, reason)
-                }
+                if (isCandidateAvailable(candidate, available)) return candidate to segmentStart
             }
             segmentStart += 100
         }
-        throw IllegalStateException("No free engine port segment between ${c.start} and ${c.searchEnd}")
+        return null
     }
 
     internal fun isCandidateAvailable(port: Int, available: (Int) -> Boolean = ::canBind): Boolean {
