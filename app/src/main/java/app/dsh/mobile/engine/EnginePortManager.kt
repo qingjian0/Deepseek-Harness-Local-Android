@@ -11,21 +11,16 @@ object EnginePortManager {
     data class Selection(val port: Int, val segmentStart: Int, val segmentEnd: Int, val reason: String)
 
     private const val PREFS = "engine_port_manager"
-    private const val DEFAULT_START = 3080
-    private const val DEFAULT_END = 3090
-    private const val DEFAULT_SEARCH_END = 8000
-    private const val DEFAULT_EXACT = 3080
-    // Internal listeners are fixed today; reserve them until the service-port map is fully dynamic.
-    private val reserved = setOf(3083, 3085, 3090, 3091)
 
     fun config(context: Context): Config {
+        val defaults = ServicePortConfig.ports(context)
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return Config(
             mode = runCatching { Mode.valueOf(p.getString("mode", "AUTO") ?: "AUTO") }.getOrDefault(Mode.AUTO),
-            start = p.getInt("start", DEFAULT_START),
-            end = p.getInt("end", DEFAULT_END),
-            searchEnd = p.getInt("search_end", DEFAULT_SEARCH_END),
-            exact = p.getInt("exact", DEFAULT_EXACT),
+            start = p.getInt("start", defaults.engine),
+            end = p.getInt("end", defaults.lanWeb),
+            searchEnd = p.getInt("search_end", 8000 + defaults.offset),
+            exact = p.getInt("exact", defaults.engine),
         )
     }
 
@@ -42,9 +37,26 @@ object EnginePortManager {
             .putString("mode", Mode.EXACT.name).putInt("exact", port).apply()
     }
 
-    fun currentPort(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt("actual_port", EngineConfig.DEFAULT_PORT)
+    /** Shift saved engine ranges together with the service-port offset. */
+    internal fun shiftForOffset(context: Context, delta: Int) {
+        if (delta == 0) return
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val edit = p.edit()
+        for (key in listOf("start", "end", "search_end", "exact")) {
+            if (!p.contains(key)) continue
+            val shifted = p.getInt(key, 0) + delta
+            require(shifted in 1024..65533) { "Port offset moves $key outside the valid range" }
+            edit.putInt(key, shifted)
+        }
+        edit.remove("actual_port").remove("last_reason").remove("last_segment_start").remove("last_segment_end")
+        check(edit.commit()) { "Could not shift saved engine port configuration" }
+    }
+
+    fun currentPort(context: Context): Int {
+        ServicePortConfig.initialize(context)
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt("actual_port", ServicePortConfig.enginePort)
+    }
 
     fun remember(context: Context, selection: Selection) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -92,6 +104,7 @@ object EnginePortManager {
     internal fun isCandidateAvailable(port: Int, available: (Int) -> Boolean = ::canBind): Boolean {
         val companion = port + 2
         if (port !in 1024..65533 || companion > 65535) return false
+        val reserved = ServicePortConfig.reservedPorts()
         if (port in reserved || companion in reserved) return false
         return available(port) && available(companion)
     }
