@@ -127,6 +127,9 @@ check("C6 CI 调用的是这个脚本",
 check("C7 旧脚本不再被 CI 引用",
       "pack-mobile-layout.sh" not in ci,
       "两个脚本并存会让 CI 打出不同的资产布局")
+check("C8 scoped npm 包名把 / 转成 _ 后再解析本地 TGZ 变量",
+      "sed 's#/#_#g'" in script,
+      "例如 @scope/plugin 应映射到 SCOPE_PLUGIN_TGZ")
 
 print("== D. 升级绕开 pnpm ==")
 check("D1 升级走 extractTgzInto",
