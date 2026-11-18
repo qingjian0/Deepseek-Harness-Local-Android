@@ -102,6 +102,10 @@ class EngineSupervisor(private val ctx: Context) {
         data object Stopped : State
     }
 
+    @Volatile private var activePort: Int = EnginePortManager.currentPort(ctx)
+    /** The application port block is selected once per supervisor lifetime; app-owned listeners remain bound across engine retries. */
+    @Volatile private var portBlockSelected: Boolean = false
+
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state
 
@@ -113,7 +117,7 @@ class EngineSupervisor(private val ctx: Context) {
     val healthyPort: Int get() = when (val s = _state.value) {
         is State.Healthy -> s.port
         is State.SafeMode -> s.port
-        else -> EngineConfig.DEFAULT_PORT
+        else -> activePort
     }
 
     /** 从 engine.log 提取**本次启动**的 `dsh web:` 输出（带 token 完整 URL）。
@@ -390,10 +394,10 @@ class EngineSupervisor(private val ctx: Context) {
     private fun awaitPortFree(timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (!portInUse(200)) return true
+            if (!portInUse(activePort, 200)) return true
             runCatching { Thread.sleep(100) }
         }
-        return !portInUse(300)
+        return !portInUse(activePort, 300)
     }
 
     /**
@@ -445,19 +449,14 @@ class EngineSupervisor(private val ctx: Context) {
      * 时每秒 spawn 一次」的旧 bug。用户手动点击不该绕过这个节流 —— 否则
      * 一个坏掉的第三方服务器就能让用户点着玩、把电池耗光。
      *
-     * 返回清场是否执行（端口本来就空闲时也算成功，因为目标状态已达成）。
+     * 返回当前端口是否空闲；若被占用，重启时由分配器选择其他端口。
      */
     fun reclaimPortAndRetry(): Boolean {
-        val ok = runCatching {
-            reclaimPort()
-            true
-        }.getOrElse {
-            Log.w(TAG, "manual port reclaim failed: ${it.message}")
-            false
-        }
-        Log.i(TAG, "manual port reclaim: ok=$ok — restarting engine")
+        // Report whether the currently selected socket is already free. Never kill its owner.
+        val available = runCatching { !portInUse() }.getOrDefault(false)
+        Log.i(TAG, "manual port check: free=$available — restarting with adaptive allocation")
         restart()
-        return ok
+        return available
     }
 
     /**
@@ -526,6 +525,7 @@ class EngineSupervisor(private val ctx: Context) {
                 //   而且不该指望用户自己想到去「设置→维护→全面体检」。
                 //   只在**终态**跑（不是每次退避都跑）—— 体检要扫目录，每 2 秒一次太重。
                 runSelfCheck = true,
+                enginePort = activePort,
             ).let { f ->
                 // archMismatch 只有调用方知道（它是异常类型决定的，不是日志能看出来的）
                 if (overrideCause == EngineTriage.Cause.RUNTIME_ARCH) f.copy(archMismatch = true) else f
@@ -762,6 +762,19 @@ class EngineSupervisor(private val ctx: Context) {
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
                 step("guardian-restore")
 
+                // Select the complete application port block before AgentBridge / RemoteAccess bind.
+                // Keep it stable across supervisor retries: those app-owned listeners stay alive,
+                // so probing them again would mistake our own sockets for foreign conflicts.
+                if (!portBlockSelected) {
+                    mark("port-allocation")
+                    val selection = withContext(Dispatchers.IO) { EnginePortManager.select(ctx) }
+                    activePort = selection.port
+                    EnginePortManager.remember(ctx, selection)
+                    portBlockSelected = true
+                    Log.i(TAG, "engine port selected: ${selection.port} (${selection.reason})")
+                    step("port-allocation")
+                }
+
                 // 三项互不依赖的启动准备任务并行执行：
                 //  - AgentContextSeed 只写 dsh-home/AGENTS.md；
                 //  - LogJanitor 只裁剪 *.log / plugin-manager operation 日志；
@@ -886,7 +899,7 @@ class EngineSupervisor(private val ctx: Context) {
                 step("spawn")
 
                 mark("health-poll")
-                val healthy = pollHealth(EngineConfig.DEFAULT_PORT, proc)
+                val healthy = pollHealth(activePort, proc)
                 step("health-poll")
                 if (healthy) {
                     // HTTP 已通 → 进入「加载界面」阶段：等插件探针、再由 UI 拉 WebUI 首屏。
@@ -987,7 +1000,7 @@ class EngineSupervisor(private val ctx: Context) {
                         // 「新装就起不来」（多半是环境/安装问题）与「用了一阵突然坏」
                         // （多半是残留/插件/端口），两者建议的动作本来就不该一样。
                         healthyEverReached.set(true)
-                        Log.i(TAG, (if (safe) "engine healthy in SAFE MODE on :${EngineConfig.DEFAULT_PORT}" else "engine healthy on :${EngineConfig.DEFAULT_PORT}") + restartMs)
+                        Log.i(TAG, (if (safe) "engine healthy in SAFE MODE on :${activePort}" else "engine healthy on :${activePort}") + restartMs)
                         // 把探针的降级结果一并带出去（详见 Degraded 的注释）。
                         // `health == null` 表示探针没报告（慢设备/超时）——那不是降级，
                         // 不能因为"不知道"就告诉用户"坏了"。
@@ -1005,11 +1018,19 @@ class EngineSupervisor(private val ctx: Context) {
                             )
                         }
                         _state.value =
-                            if (safe) State.SafeMode(EngineConfig.DEFAULT_PORT, tokenUrl, notice, degradedNow)
-                            else State.Healthy(EngineConfig.DEFAULT_PORT, tokenUrl, notice, degradedNow)
+                            if (safe) State.SafeMode(activePort, tokenUrl, notice, degradedNow)
+                            else State.Healthy(activePort, tokenUrl, notice, degradedNow)
                         // 新运行时首次 Healthy：确认安装成功，释放 engine.old 回滚备份。
                         runCatching { RuntimeInstaller(ctx).markHealthy() }
                             .onFailure { Log.w(TAG, "runtime markHealthy failed: ${it.message}") }
+                        // Warm an already-downloaded embedding model off the startup path.
+                        // Never download model data automatically: first-time download remains user-triggered.
+                        scopeRef?.launch(Dispatchers.IO) {
+                            if (LocalModel.isModelReady(ctx) && !LocalModel.isServerRunning()) {
+                                val ready = LocalModel.ensureReady(ctx)
+                                if (!ready) Log.i(TAG, "local embedding warmup skipped or unavailable")
+                            }
+                        }
                         // 插件应急总开关（v1.4.27）：恢复动作已收敛且引擎真起来了，
                         // 相位推进到 enabled。⚠️ SafeMode 不确认：那时 profiles 已被
                         // 归档重建，bundles 根本没写回去，标成 enabled 会让用户失去重试。
@@ -1027,7 +1048,14 @@ class EngineSupervisor(private val ctx: Context) {
                         backoffIndex = 0
                         // Shizuku 模式：引擎就绪后启动 ADB 级访问桥（shz 包装器回呼用）；其他模式自动关停
                         withContext(Dispatchers.IO) {
-                            ShizukuHttpBridge.start(ctx, EngineConfig.DEFAULT_PORT)
+                            ShizukuHttpBridge.start(ctx, activePort)
+                            // Restart the optional LAN proxy only after the actual upstream port is known.
+                            // The proxy runs independently from the engine and must not keep a stale upstream.
+                            LanWebProxy.stop()
+                            if (app.dsh.mobile.DshApp.lanWebEnabled(ctx)) {
+                                LanWebProxy.setContext(ctx)
+                                LanWebProxy.start(app.dsh.mobile.DshApp.lanWebPassword(ctx))
+                            }
                         }
                         // 阻塞等待进程退出（被杀/崩溃）。Healthy 后退出视为资源类偶发，
                         // 不计入 guardian（那是普通退避该管的事，与配置无关）。
@@ -1044,16 +1072,11 @@ class EngineSupervisor(private val ctx: Context) {
                                     "exitCode=${(status shr 8) and 0xff})",
                             )
                         }
-                        // ── v1.4.24（宝宝要求）：异常退出后彻底清场再完整重启 ──────
-                        // 这条路径是「引擎健康运行过、然后被杀/OOM/崩溃」——正是用户
-                        // 说的「进程异常退出」。旧实现直接进入下一轮 spawn，残留的
-                        // 监听 socket、TIME_WAIT、或被 su 拉起的孙进程都可能让新引擎
-                        // EADDRINUSE，表现为「反复重启起不来」。
-                        //
-                        // 现在：先按端口把 3080 上的一切清干净，再完整重新启动一遍，
-                        // 效果等同「关掉应用重开」。
+                        // After an engine crash, do not kill the listener by port number.
+                        // OrphanReaper handles app-owned leftovers; adaptive allocation moves
+                        // to a free segment if another process owns the previous port.
                         withContext(Dispatchers.IO) { reclaimPort() }
-                        Log.i(TAG, "post-crash: port ${EngineConfig.DEFAULT_PORT} thoroughly reclaimed before restart")
+                        Log.i(TAG, "post-crash: port ${activePort} checked; next start will allocate a free port")
                         // v1.4.16（审查 P1）：健康运行的引擎退出、即将自动重启时，
                         // 重置启动墙钟——新一轮「用户可见启动」从旧引擎死亡时起算。
                         // 旧实现只有 Healthy 分支一个重置点，健康跑超 5 分钟后崩溃，
@@ -1149,7 +1172,7 @@ class EngineSupervisor(private val ctx: Context) {
             }
             if (crashed) {
                 withContext(Dispatchers.IO) { reclaimPort() }
-                Log.i(TAG, "crash detected — thorough port reclaim done, next attempt starts clean")
+                Log.i(TAG, "crash detected — stale app processes handled by OrphanReaper; allocator will choose a free port")
             }
             val portEvidence = withContext(Dispatchers.IO) {
                 portInUse() && (deterministicFailure != null || looksLikePortConflict())
@@ -1172,7 +1195,7 @@ class EngineSupervisor(private val ctx: Context) {
                     Log.e(
                         TAG,
                         "port reclaim exhausted (${EngineConfig.MAX_PORT_RECLAIMS} lifetime attempts) — " +
-                            "port ${EngineConfig.DEFAULT_PORT} is held by a foreign process",
+                            "port ${activePort} is held by a foreign process",
                     )
                     // ★v1.5.3：原来这里是一句**硬编码英文**，五语种都没有它，
                     //   中文/德语用户看到的是英文；而且不给任何出路，只能重启 App。
@@ -1180,7 +1203,7 @@ class EngineSupervisor(private val ctx: Context) {
                     failTerminal(
                         ctx.getString(
                             R.string.error_port_foreign,
-                            EngineConfig.DEFAULT_PORT,
+                            activePort,
                         ),
                         overrideCause = EngineTriage.Cause.PORT_FOREIGN,
                     )
@@ -1279,7 +1302,9 @@ class EngineSupervisor(private val ctx: Context) {
     private val lastExitStatus: Int?
         get() = process?.exitFuture?.takeIf { it.isDone }?.get()
 
-    private fun spawnEngine(bootId: String): EngineProcess {
+    private fun spawnEngine(bootId: String): EngineProcess = spawnEngine(bootId, activePort)
+
+    private fun spawnEngine(bootId: String, port: Int): EngineProcess {
         // spawn 内部逐项打点：boot step 只报「spawn 合计」，不细分就看不出
         // 236ms 花在哪（本轮压缩冷启时正是靠这些数才知道 su 只占 20ms、
         // 大头在文件自愈与 patch 生成）。日志级别 D，正常使用不可见。
@@ -1353,6 +1378,8 @@ class EngineSupervisor(private val ctx: Context) {
         val patchPaths = ArrayList<String>(2)
         runCatching { EngineConfig.ensureBundledSshPlugin(ctx)?.absolutePath }
             .getOrNull()?.let { patchPaths.add(it) }
+        runCatching { EngineConfig.ensurePromptOverlay(ctx)?.absolutePath }
+            .getOrNull()?.let { patchPaths.add(it) }
         runCatching { EngineConfig.ensureAndroidOverlay(ctx).absolutePath }
             .getOrNull()?.let { patchPaths.add(it) }
         sp("patches")
@@ -1375,7 +1402,7 @@ class EngineSupervisor(private val ctx: Context) {
                 runCatching { EngineConfig.deployLinuxAgentGates(ctx) }
                     .onFailure { Log.w(TAG, "linux gate redeploy failed: ${it.message}") }
                 val spec = launcher.buildEngineArgv(
-                    port = EngineConfig.DEFAULT_PORT,
+                    port = port,
                     bootId = bootId,
                     patchPaths = patchPaths,
                     compileCacheFlusher = cacheFlusher,
@@ -1423,7 +1450,7 @@ class EngineSupervisor(private val ctx: Context) {
             nodeBin = EngineConfig.nodeBin(ctx),
             entryJs = EngineConfig.dshEntry(ctx),
             cwd = EngineConfig.workspaces(ctx),
-            env = EngineConfig.buildEnv(ctx, EngineConfig.DEFAULT_PORT, bootId),
+            env = EngineConfig.buildEnv(ctx, port, bootId),
             logFile = logFile(),
             suPath = suPath,
             patchPaths = patchPaths,
@@ -1464,21 +1491,22 @@ class EngineSupervisor(private val ctx: Context) {
      * 「端口本来就空闲」的情况下走完了超时分支（Android 上 connect 到
      * 未监听端口在某些机型会先 SYN 超时而不是立刻 RST）。
      */
-    private fun portInUse(timeoutMs: Int = 120): Boolean {
+    private fun portInUse(port: Int = activePort, timeoutMs: Int = 120): Boolean {
         return try {
             java.net.Socket().use { s ->
-                s.connect(java.net.InetSocketAddress("127.0.0.1", EngineConfig.DEFAULT_PORT), timeoutMs)
+                s.connect(java.net.InetSocketAddress("127.0.0.1", port), timeoutMs)
                 true
             }
         } catch (e: java.net.ConnectException) {
             false            // 明确拒绝 = 没人在听 = 空闲
         } catch (e: Exception) {
-            true             // 超时/未知一律按占用（保守：清场无害，漏清致命）
+            true             // Timeout/unknown is conservatively treated as occupied.
         }
     }
 
     /**
-     * 强制回收 3080：清掉所有占着它的引擎 node 残留（v1.3.1）。
+     * Legacy UI recovery action: check the current engine port and restart with adaptive allocation.
+     * No listener is killed based only on its socket ownership.
      *
      * ⚠️ Root 模式的孤儿为什么清不干净（用户报的二次启动失败）：
      * 引擎以 `su -c "exec node …"` 启动，PTY 的直接子进程只是 **su 外壳** ——
@@ -1495,128 +1523,18 @@ class EngineSupervisor(private val ctx: Context) {
      * `files/engine/bin/node`，误杀会让「局域网访问」在每次引擎重启后静默失效。
      */
     private fun reclaimPort() {
-        // v1.4.24：默认也改为「按端口找占用者」——旧实现只匹配 cmdline 含
-        // files/engine/bin/node 的进程，任何包装层（sh -c、su 外壳、自定义启动器）
-        // 都可能漏网，导致「杀了但端口还在占」的假清场。
-        reclaimPortByPort()
+        // Never kill an arbitrary listener: the allocator will move to another port.
+        Log.i(TAG, "port reclaim requested for $activePort; foreign listeners are never killed")
     }
 
-    /**
-     * 彻底清场（v1.4.24，宝宝要求）：
-     * 「把当前 3080 端口的所有东西全部杀掉，然后重新完整启动一遍 dsh web，
-     *  相当于把应用关了重开」。
-     *
-     * 与 [reclaimPort] 的区别：**不按 cmdline 匹配，直接按端口找持有者**。
-     * 因此无论是引擎 node、su 外壳、僵尸孙进程，还是任何第三方进程占着 3080，
-     * 都会被清掉。这是异常退出后的默认处置，不再只在「检测到端口占用」时触发。
-     *
-     * 安全边界：只针对**监听 3080 的进程**，绝不误伤 LAN 反向代理（它监听别的
-     * 端口；即便 cmdline 含 engine node，只要不占 3080 就不动）。
-     */
-    private fun reclaimPortByPort() {
-        val port = EngineConfig.DEFAULT_PORT
-        Log.w(TAG, "port $port — thorough reclaim (kill every holder of this port)")
-        val d = "$"
-        // 用 /proc 找所有监听该端口的 uid（tcp/tcp6 的本地地址:端口列），再杀掉这些 pid。
-        // 匹配逻辑：读 /proc/net/tcp{,6}，找 state=0A（LISTEN）且 local_port == 3080，
-        // 取其 inode，再扫 /proc/<pid>/fd 找指向 socket:[inode] 的进程。
-        val script = """
-            PORT_HEX=${'$'}(printf '%04X' $port)
-            INODES=''
-            for f in /proc/net/tcp /proc/net/tcp6; do
-              [ -r "${'$'}f" ] || continue
-              INODES="${'$'}INODES ${'$'}(awk -v p="${'$'}PORT_HEX" 'NR>1 && \$4 == "0A" { split(\$2,a,":"); if (a[2]==p) print \$10 }' "${'$'}f" 2>/dev/null)"
-            done
-            case "${'$'}INODES" in
-              *[0-9]*)
-                for p in ${'$'}(ls /proc | grep -E '^[0-9]+${'$'}'); do
-                  for fd in /proc/${'$'}p/fd/*; do
-                    tgt=${'$'}(readlink "${'$'}fd" 2>/dev/null) || continue
-                    case "${'$'}tgt" in
-                      socket:*)
-                        ino=${'$'}{tgt#socket:}
-                        ino=${'$'}{ino%]}
-                        case " ${'$'}INODES " in
-                          *" ${'$'}ino "*) kill -9 ${'$'}p 2>/dev/null; break ;;
-                        esac ;;
-                    esac
-                  done
-                done ;;
-            esac
-            true
-        """.trimIndent()
-        // ① 同 uid
-        runCatching {
-            val p = ProcessBuilder("/system/bin/sh", "-c", script).start()
-            if (!p.waitFor(4, java.util.concurrent.TimeUnit.SECONDS)) {
-                runCatching { p.destroy() }
-                Log.w(TAG, "thorough reclaim: same-uid sweep timed out (4s)")
-            }
-        }
-        // ② su 兜底（Root 模式孤儿以 uid 0 运行，app uid 杀不动）
-        Privilege.runSu(script)
-        waitPortFree(2_000)
-        if (portInUse(400)) {
-            Log.w(TAG, "port still in use after thorough sweep — retrying via su")
-            Privilege.runSu(script)
-            waitPortFree(2_000)
-        }
-        if (portInUse(300)) {
-            Log.e(TAG, "port $port STILL in use after thorough sweeps — next boot will likely fail")
-        } else {
-            Log.i(TAG, "port $port is free after thorough reclaim")
-        }
-    }
+    // Legacy port-owner sweepers were intentionally removed. They could kill a
+    // foreign app that happened to listen on the configured engine port.
 
-    /** 旧口径：只杀 cmdline 含 files/engine/bin/node 的进程（保留给 LAN 代理等场景） */
-    private fun reclaimEngineNodesOnly() {
-        Log.w(TAG, "port ${EngineConfig.DEFAULT_PORT} in use — reclaiming (orphan engine node)")
-        // shell 脚本里的 $ 用 $ 拼接（Kotlin 会把 "$p" 当模板变量解析）
-        val d = "$"
-        val killCmd =
-            "for p in " + d + "(ls /proc | grep -E '^[0-9]+" + d + "'); do " +
-                "c=" + d + "(tr '\\0' ' ' < /proc/" + d + "p/cmdline 2>/dev/null) || continue; " +
-                "case \"" + d + "c\" in *files/engine/bin/node*) " +
-                "case \"" + d + "c\" in *lan-web-proxy*) continue;; esac; " +
-                "kill -9 " + d + "p 2>/dev/null;; esac; done; true"
-        // ① 同 uid（普通模式孤儿）
-        runCatching {
-            // v1.4.9：加超时 —— 这个 kill 脚本要遍历 /proc，若某个进程的 cmdline
-            // 读取卡住（僵尸/内核态 D 状态），无界 waitFor 会让整个监督循环停住。
-            val p = ProcessBuilder("/system/bin/sh", "-c", killCmd).start()
-            if (!p.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
-                runCatching { p.destroy() }
-                Log.w(TAG, "reclaimPort: same-uid sweep timed out (3s) — continuing")
-            }
-        }
-        // ② su 兜底（Root 模式孤儿；su 不可用时 runSu 自己会静默返回 null）
-        Privilege.runSu(killCmd)
-        // ③ 等端口真正释放；仍占用则再补一轮 su 清场（可能是刚被拉起的新进程）
-        waitPortFree(1_800)
-        if (portInUse(400)) {
-            Log.w(TAG, "port still in use after first sweep — retrying via su")
-            Privilege.runSu(killCmd)
-            waitPortFree(1_800)
-        }
-        if (portInUse(300)) {
-            Log.e(TAG, "port ${EngineConfig.DEFAULT_PORT} STILL in use after sweeps — next boot will likely fail")
-        }
-    }
-
-    /** 轮询等端口释放，返回是否已空闲 */
-    private fun waitPortFree(budgetMs: Long): Boolean {
-        val until = System.currentTimeMillis() + budgetMs
-        while (System.currentTimeMillis() < until) {
-            if (!portInUse(250)) return true
-            Thread.sleep(120)
-        }
-        return !portInUse(250)
-    }
-
-    /** 启动前端口体检：占用则清场（不做静默跳过）。 */
+    /** Startup compatibility hook; actual port conflicts are handled by EnginePortManager. */
     private fun cleanupOrphanEngine() {
-        if (!portInUse()) return
-        reclaimPort()
+        // OrphanReaper is the only authority for cleaning this app's stale processes.
+        // A busy socket alone does not prove ownership, so do not kill its listener.
+        Log.d(TAG, "skip port-based cleanup; allocator avoids foreign listeners")
     }
 
     /** 稳定窗：windowMs 内进程退出返回 false（启动失败），挺过窗口返回 true */

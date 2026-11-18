@@ -37,7 +37,7 @@ object LanWebProxy {
     private const val TAG = "LanWebProxy"
 
     /** 独立端口（禁止占用 3080/3083） */
-    const val PORT = 3090
+    val PORT: Int get() = ServicePortConfig.lanWebPort
 
     /** 「已开启」常驻通知的 channel / id（v1.2.188） */
     private const val NOTIF_CHANNEL = "lan_web"
@@ -70,7 +70,10 @@ object LanWebProxy {
         return java.io.File(parent ?: engine, "dsh-home")
     }
 
-    fun setContext(ctx: android.content.Context) { appCtx = ctx.applicationContext }
+    fun setContext(ctx: android.content.Context) {
+        ServicePortConfig.initialize(ctx)
+        appCtx = ctx.applicationContext
+    }
 
     @Volatile
     private var server: ServerSocket? = null
@@ -95,7 +98,10 @@ object LanWebProxy {
      * 读的是**本机文件**（同 app uid 私有目录），无网络、无外部依赖。
      */
     private fun readEngineToken(): String? = runCatching {
-        val log = java.io.File(ENV_ENGINE_LOG)
+        val ctx = appCtx ?: return@runCatching null
+        // Resolve through the app context: applicationId is fork-configurable and must not
+        // be baked into /data/user/0/<package>/ paths.
+        val log = java.io.File(EngineConfig.engineRoot(ctx), "engine.log")
         if (!log.isFile) return@runCatching null
         var last: String? = null
         log.forEachLine { line ->
@@ -104,8 +110,6 @@ object LanWebProxy {
         }
         last
     }.getOrNull()
-
-    private const val ENV_ENGINE_LOG = "/data/user/0/app.dsh.mobile/files/engine/engine.log"
 
     /**
      * 本机局域网 IPv4（供 UI 显示访问地址）。
@@ -156,7 +160,8 @@ object LanWebProxy {
                 val workDir: java.io.File = EngineConfig.engineRoot(ctx)
                 // 复用引擎的环境构造（正确处理 Termux 硬编码 OpenSSL 路径 / LD_LIBRARY_PATH /
                 // PREFIX / TMPDIR 等；手写会漏，实测漏 OPENSSL_CONF 导致 node exit=13）
-                val engineEnv: Array<String> = EngineConfig.buildEnv(ctx, EngineConfig.DEFAULT_PORT)
+                val enginePort = EnginePortManager.currentPort(ctx)
+                val engineEnv: Array<String> = EngineConfig.buildEnv(ctx, enginePort)
                 // 清掉上一次可能残留的代理进程：否则新进程会撞 EADDRINUSE。
                 // 自己拉起的子进程优先用 destroy（不需要提权），su 兜底覆盖"换进程后残留"。
                 killStaleProxy(ctx)
@@ -176,7 +181,7 @@ object LanWebProxy {
                 val sh = "cd " + workDir.absolutePath + " && " + envPrefix +
                     " DSH_LAN_PW='" + pw + "'" +
                     " nohup " + node.absolutePath + " " + scriptPath +
-                    " --port " + PORT + " --pw '" + pw + "'" +
+                    " --port " + PORT + " --upstream 127.0.0.1:" + enginePort + " --pw '" + pw + "'" +
                     " > " + logPath + " 2>&1 &"
                 val proc = ProcessBuilder("sh", "-c", sh).start()
                 val exit = proc.waitFor()

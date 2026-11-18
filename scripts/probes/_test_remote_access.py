@@ -13,7 +13,7 @@
 
 A 段：地址选择（热点 bug 的回归防线）
 B 段：配对与鉴权分流
-C 段：3091 服务端契约
+C 段：统一端口映射与远程服务契约
 D 段：App 接线与 UI
 """
 
@@ -30,6 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 ENG = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine")
 RA = os.path.join(ENG, "RemoteAccess.kt")
 RAS = os.path.join(ENG, "RemoteAccessServer.kt")
+PORTS = os.path.join(ENG, "ServicePortConfig.kt")
 LA = os.path.join(ENG, "LanAddress.kt")
 BRIDGE = os.path.join(ENG, "AgentBridge.kt")
 LWP = os.path.join(ENG, "LanWebProxy.kt")
@@ -57,7 +58,8 @@ def main():
     la = read(LA)
     ra = _kstrip.strip_comments(read(RA))   # ★ 同 ras：存在性断言只看代码
     ras_raw = read(RAS)
-    ras = _kstrip.strip_comments(ras_raw)   # ★ 存在性断言必须在剥注释后的代码上做
+    ras = _kstrip.strip_comments(ras_raw)
+    ports = read(PORTS)   # ★ 存在性断言必须在剥注释后的代码上做
     bridge = read(BRIDGE)
     lwp = read(LWP)
     sup = read(SUP)
@@ -161,8 +163,14 @@ def main():
 
     # ---- C 段：3091 服务端 ----
     check(
-        "C1 端口独立，不占 3080/3083/3090",
-        "PORT = 3091" in ras.replace(" ", " "),
+        "C1 远程服务端口来自统一映射且与其他监听器隔离",
+        "val PORT: Int get() = ServicePortConfig.remoteAccessPort" in ras
+        and "3091 + offset" in ports
+        and "setOf(p.agentBridge, p.embedding, p.lanWeb, p.remoteAccess)" in ports,
+    )
+    check(
+        "C1b setup.sh 使用配置后的远程服务端口",
+        "__PHONE_PORT__" in ras_raw and '.replace("__PHONE_PORT__", PORT.toString())' in ras,
     )
     check(
         "C2 每个请求都过私网检查（断言调用点，不是函数定义）",

@@ -159,9 +159,11 @@ object EngineTriage {
     data class Facts(
         /** 引擎日志尾部（本次启动段），空串表示没有 */
         val logTail: String = "",
-        /** 3080 当前是否有人在监听 */
+        /** 本轮实际分配的引擎端口；不能假定始终是 3080 */
+        val enginePort: Int = EngineConfig.DEFAULT_PORT,
+        /** 实际引擎端口当前是否有人在监听 */
         val portInUse: Boolean = false,
-        /** 占着 3080 的进程：pid -> cmdline。空 map 表示查不到 */
+        /** 占着实际引擎端口的进程：pid -> cmdline。空 map 表示查不到 */
         val portOwners: Map<Int, String> = emptyMap(),
         /** 本次是否已经是「架构不匹配」这个确定性失败 */
         val archMismatch: Boolean = false,
@@ -332,7 +334,7 @@ object EngineTriage {
                 else -> Cause.PORT_FOREIGN
             }
             val evidence = buildList {
-                if (facts.portInUse) add("port ${EngineConfig.DEFAULT_PORT} is listening")
+                if (facts.portInUse) add("port ${facts.enginePort} is listening")
                 facts.portOwners.entries.take(3).forEach { (pid, cmd) ->
                     add("pid $pid: ${cmd.take(120)}")
                 }
@@ -348,7 +350,7 @@ object EngineTriage {
                     Fix(Fix.Kind.RECLAIM_PORT, needsConfirm = cause == Cause.PORT_FOREIGN),
                     Fix(Fix.Kind.RESTART_ENGINE),
                 ),
-                summary = "${cause.id}: ${facts.portOwners.size} owner(s) on ${EngineConfig.DEFAULT_PORT}",
+                summary = "${cause.id}: ${facts.portOwners.size} owner(s) on ${facts.enginePort}",
                 neverBooted = facts.neverBooted,
             )
         }
@@ -567,9 +569,10 @@ object EngineTriage {
         hasLastGoodProfile: Boolean = false,
         inSafeMode: Boolean = false,
         runSelfCheck: Boolean = false,
+        enginePort: Int = EnginePortManager.currentPort(ctx),
     ): Facts {
-        val portInUse = runCatching { portListening() }.getOrDefault(false)
-        val owners = if (portInUse) runCatching { portOwners() }.getOrDefault(emptyMap()) else emptyMap()
+        val portInUse = runCatching { portListening(enginePort) }.getOrDefault(false)
+        val owners = if (portInUse) runCatching { portOwners(enginePort) }.getOrDefault(emptyMap()) else emptyMap()
 
         val runtimeMissing = runCatching { runtimeMissingFiles(ctx) }.getOrDefault(emptyList())
         val profileBroken = runCatching { unparseableConfigs(ctx) }.getOrDefault(emptyList())
@@ -579,6 +582,7 @@ object EngineTriage {
 
         return Facts(
             logTail = runCatching { readLogTail(ctx, logSinceOffset) }.getOrDefault(""),
+            enginePort = enginePort,
             portInUse = portInUse,
             portOwners = owners,
             runtimeIntact = runtimeMissing.isEmpty(),
@@ -599,13 +603,10 @@ object EngineTriage {
         )
     }
 
-    /** 3080 是否有人在监听（连一下比读 /proc 可靠：容器/root 域都适用） */
-    private fun portListening(): Boolean = runCatching {
+    /** 实际引擎端口是否有人在监听（连一下比读 /proc 可靠：容器/root 域都适用） */
+    private fun portListening(port: Int): Boolean = runCatching {
         java.net.Socket().use { s ->
-            s.connect(
-                java.net.InetSocketAddress("127.0.0.1", EngineConfig.DEFAULT_PORT),
-                200,
-            )
+            s.connect(java.net.InetSocketAddress("127.0.0.1", port), 200)
             true
         }
     }.getOrElse { e ->
@@ -614,14 +615,14 @@ object EngineTriage {
     }
 
     /**
-     * 占着 3080 的进程（pid -> cmdline）。
+     * 占着实际引擎端口的进程（pid -> cmdline）。
      *
      * 走 `/proc/net/tcp{,6}` 找 LISTEN 的 inode，再扫 `/proc/<pid>/fd` 匹配。
      * 这是免 root 唯一能用的办法（`lsof`/`ss -p` 在多数设备上没有或需要 root）。
      * 拿不到就返回空 map —— 调用方会归到 PORT_UNKNOWN_OWNER，仍可清场。
      */
-    private fun portOwners(): Map<Int, String> = runCatching {
-        val portHex = String.format("%04X", EngineConfig.DEFAULT_PORT)
+    private fun portOwners(port: Int): Map<Int, String> = runCatching {
+        val portHex = String.format("%04X", port)
         val inodes = mutableSetOf<String>()
         for (f in listOf("/proc/net/tcp", "/proc/net/tcp6")) {
             val file = File(f)

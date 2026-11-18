@@ -316,7 +316,9 @@ object RemoteAccess {
      * 但那个端点从未实现过（summary() 在桥里零调用方）。保留这个函数是给未来接一个
      * 只读状态端点用的；要接就两边一起改，不要再单方面在注释里宣布它存在。
      */
-    fun summary(ctx: Context): org.json.JSONObject = org.json.JSONObject().apply {
+    fun summary(ctx: Context): org.json.JSONObject {
+        ServicePortConfig.initialize(ctx)
+        return org.json.JSONObject().apply {
         put("enabled", isEnabled(ctx))
         put("bridge_port", AgentBridge.PORT)
         put("setup_port", RemoteAccessServer.PORT)
@@ -326,5 +328,6 @@ object RemoteAccess {
         put("pair_window_open", pairWindowOpen(ctx))
         put("pair_code", currentPairCode(ctx) ?: org.json.JSONObject.NULL)
         put("pair_window_left_s", pairWindowRemainingSeconds(ctx))
+        }
     }
 }
