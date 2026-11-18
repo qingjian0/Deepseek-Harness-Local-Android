@@ -49,4 +49,5 @@ The preferred shared data root is `/storage/emulated/0/Documents/dshdata`. It is
 - Source check: canonical application ID is `dsh.dsh.mobile` on `main`.
 - Source check: namespace remains `app.dsh.mobile`.
 - Source check: no app Gradle `applicationIdSuffix` or flavor-specific application ID override was found.
-- Not yet validated: clean Android build, APK manifest package, target-device installation, and old-package data migration.
+- Android CI now checks the built APK manifest package is exactly `dsh.dsh.mobile` for each build lane.
+- Not yet validated: successful clean Android build after this change, target-device installation, and old-package data migration.
