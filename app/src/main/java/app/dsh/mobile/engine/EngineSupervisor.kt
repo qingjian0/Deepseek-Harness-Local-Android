@@ -1011,6 +1011,14 @@ class EngineSupervisor(private val ctx: Context) {
                         // 新运行时首次 Healthy：确认安装成功，释放 engine.old 回滚备份。
                         runCatching { RuntimeInstaller(ctx).markHealthy() }
                             .onFailure { Log.w(TAG, "runtime markHealthy failed: ${it.message}") }
+                        // Warm an already-downloaded embedding model off the startup path.
+                        // Never download model data automatically: first-time download remains user-triggered.
+                        scopeRef?.launch(Dispatchers.IO) {
+                            if (LocalModel.isModelReady(ctx) && !LocalModel.isServerRunning()) {
+                                val ready = LocalModel.ensureReady(ctx)
+                                if (!ready) Log.i(TAG, "local embedding warmup skipped or unavailable")
+                            }
+                        }
                         // 插件应急总开关（v1.4.27）：恢复动作已收敛且引擎真起来了，
                         // 相位推进到 enabled。⚠️ SafeMode 不确认：那时 profiles 已被
                         // 归档重建，bundles 根本没写回去，标成 enabled 会让用户失去重试。

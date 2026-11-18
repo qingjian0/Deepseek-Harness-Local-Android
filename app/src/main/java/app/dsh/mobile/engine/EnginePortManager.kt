@@ -15,7 +15,8 @@ object EnginePortManager {
     private const val DEFAULT_END = 3090
     private const val DEFAULT_SEARCH_END = 8000
     private const val DEFAULT_EXACT = 3080
-    private val reserved = setOf(3083, 3090, 3091)
+    // Internal listeners are fixed today; reserve them until the service-port map is fully dynamic.
+    private val reserved = setOf(3083, 3085, 3090, 3091)
 
     fun config(context: Context): Config {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

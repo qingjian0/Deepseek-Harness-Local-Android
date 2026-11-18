@@ -239,33 +239,95 @@ object LocalEmbedder {
      * 在候选文本里找与目标最相关的一个。
      * @return null = 服务不可用（调用方回退云端）
      */
-    fun bestMatch(candidates: List<String>, target: String): Match? {
-        if (candidates.isEmpty() || target.isBlank()) return null
-        if (!isReady()) return null
+    private const val MAX_EMBEDDING_CACHE = 512
+    private val embeddingCache = LinkedHashMap<String, DoubleArray>(128, 0.75f, true)
+
+    /** Clear cached vectors after replacing the local embedding model. */
+    fun clearEmbeddingCache() = synchronized(embeddingCache) { embeddingCache.clear() }
+
+    private fun cacheKey(text: String): String = text.trim()
+
+    private fun cachedVector(key: String): DoubleArray? = synchronized(embeddingCache) {
+        embeddingCache[key]?.copyOf()
+    }
+
+    private fun rememberVector(key: String, vector: DoubleArray) = synchronized(embeddingCache) {
+        embeddingCache[key] = vector.copyOf()
+        while (embeddingCache.size > MAX_EMBEDDING_CACHE) {
+            val oldest = embeddingCache.entries.iterator()
+            if (!oldest.hasNext()) break
+            oldest.next()
+            oldest.remove()
+        }
+    }
+
+    /** Shared cached single-text embedding used by memory indexing as well as FastPicker. */
+    fun embeddingVector(text: String): List<Float>? {
+        if (text.isBlank() || !isReady()) return null
+        val key = cacheKey(text)
+        cachedVector(key)?.let { return it.map(Double::toFloat) }
         return runCatching {
-            val inputs = (listOf(target) + candidates)
             val body = JSONObject().apply {
                 put("model", "local")
-                put("input", JSONArray(inputs))
+                put("input", JSONArray().put(text))
             }.toString()
             val conn = java.net.URL("http://127.0.0.1:$PORT/v1/embeddings").openConnection()
             conn.doOutput = true
             conn.connectTimeout = 2000
-            // v1.2.152：4s→2.5s。15MB 模型**热态**是毫秒级；冷加载应在 llama-server
-            // 启动时完成（LocalModel 有预热），不该让 verify 的预算替它买单——
-            // 实测一次冷调用吃掉 8s，把 timeoutMs=6000 的验证拖成 14s。
             conn.readTimeout = 2500
             conn.setRequestProperty("Content-Type", "application/json")
             conn.outputStream.use { it.write(body.toByteArray()) }
-            val resp = conn.getInputStream().bufferedReader().use { it.readText() }
-            val vecs = parseEmbeddings(resp, inputs.size) ?: return@runCatching null
-            if (vecs.size < 2) return@runCatching null
-            val targetVec = vecs[0]
+            val response = conn.getInputStream().bufferedReader().use { it.readText() }
+            val vector = parseEmbeddings(response, 1)?.firstOrNull() ?: return@runCatching null
+            rememberVector(key, vector)
+            vector.map(Double::toFloat)
+        }.getOrElse {
+            Log.w(TAG, "single embedding failed: ${it.message}")
+            null
+        }
+    }
+
+    fun bestMatch(candidates: List<String>, target: String): Match? {
+        if (candidates.isEmpty() || target.isBlank()) return null
+        if (!isReady()) return null
+        return runCatching {
+            val inputs = listOf(target) + candidates
+            val keys = inputs.map(::cacheKey)
+            val vectors = arrayOfNulls<DoubleArray>(inputs.size)
+            val missing = ArrayList<Int>()
+            keys.forEachIndexed { index, key ->
+                val cached = cachedVector(key)
+                if (cached == null) missing.add(index) else vectors[index] = cached
+            }
+            if (missing.isNotEmpty()) {
+                val requestInputs = missing.map { inputs[it] }
+                val body = JSONObject().apply {
+                    put("model", "local")
+                    put("input", JSONArray(requestInputs))
+                }.toString()
+                val conn = java.net.URL("http://127.0.0.1:$PORT/v1/embeddings").openConnection()
+                conn.doOutput = true
+                conn.connectTimeout = 2000
+                // The first cold request is kept out of latency-sensitive picker calls by startup prewarm.
+                conn.readTimeout = 2500
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.outputStream.use { it.write(body.toByteArray()) }
+                val resp = conn.getInputStream().bufferedReader().use { it.readText() }
+                val fetched = parseEmbeddings(resp, requestInputs.size) ?: return@runCatching null
+                if (fetched.size != missing.size) return@runCatching null
+                missing.forEachIndexed { position, originalIndex ->
+                    val vector = fetched[position]
+                    vectors[originalIndex] = vector
+                    rememberVector(keys[originalIndex], vector)
+                }
+            }
+            val targetVec = vectors[0] ?: return@runCatching null
             var bestIdx = -1
             var bestScore = -1.0
-            for (i in 1 until vecs.size) {
-                val s = cosine(targetVec, vecs[i])
-                if (s > bestScore) { bestScore = s; bestIdx = i - 1 }
+            for (i in 1 until vectors.size) {
+                val candidate = vectors[i] ?: continue
+                val score = cosine(targetVec, candidate)
+                if (score > bestScore) { bestScore = score; bestIdx = i - 1 }
             }
             if (bestIdx < 0) null else Match(bestIdx, bestScore)
         }.getOrElse {
@@ -276,6 +338,7 @@ object LocalEmbedder {
 
     private fun parseEmbeddings(json: String, expect: Int): List<DoubleArray>? = runCatching {
         val arr = JSONObject(json).getJSONArray("data")
+        if (arr.length() != expect) return@runCatching null
         val out = ArrayList<DoubleArray>(arr.length())
         for (i in 0 until arr.length()) {
             val e = arr.getJSONObject(i).getJSONArray("embedding")
