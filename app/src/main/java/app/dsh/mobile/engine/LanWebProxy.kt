@@ -95,7 +95,10 @@ object LanWebProxy {
      * 读的是**本机文件**（同 app uid 私有目录），无网络、无外部依赖。
      */
     private fun readEngineToken(): String? = runCatching {
-        val log = java.io.File(ENV_ENGINE_LOG)
+        val ctx = appCtx ?: return@runCatching null
+        // Resolve through the app context: applicationId is fork-configurable and must not
+        // be baked into /data/user/0/<package>/ paths.
+        val log = java.io.File(EngineConfig.engineRoot(ctx), "engine.log")
         if (!log.isFile) return@runCatching null
         var last: String? = null
         log.forEachLine { line ->
@@ -104,8 +107,6 @@ object LanWebProxy {
         }
         last
     }.getOrNull()
-
-    private const val ENV_ENGINE_LOG = "/data/user/0/app.dsh.mobile/files/engine/engine.log"
 
     /**
      * 本机局域网 IPv4（供 UI 显示访问地址）。
