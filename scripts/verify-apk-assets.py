@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""verify-apk-assets.py —— 校验 full/noruntime APK 的资产形态。
+"""Verify APK runtime assets, ABI, and the actual Android application ID.
 
-用法:
-  python scripts/verify-apk-assets.py app-debug.apk --expect-package full --expect-abi arm64-v8a
-
-检查:
-  · assets/runtime/MANIFEST.json 存在且 schema/package/abi 正确；
-  · full：必须含 assets/runtime.zip，且 hash/size 与 manifest 一致；bin/node e_machine 匹配 ABI；
-  · noruntime：不得含 assets/runtime.zip；tag URL 必须有 sha，`/latest/` URL 必须没有 sha；
-  · 两种形态都必须含 assets/hardssh/{lib/index.js,node_modules/ssh2,ws}。
+Usage:
+  python scripts/verify-apk-assets.py app-debug.apk \
+    --expect-package full --expect-abi arm64-v8a \
+    --expect-application-id dsh.dsh.mobile
 """
 import argparse
 import hashlib
 import json
+import struct
 import sys
 import zipfile
 
@@ -24,15 +21,96 @@ def fail(msg: str) -> None:
     raise SystemExit(1)
 
 
+def _length8(data: bytes, pos: int) -> tuple[int, int]:
+    first = data[pos]
+    pos += 1
+    if first & 0x80:
+        return ((first & 0x7F) << 8) | data[pos], pos + 1
+    return first, pos
+
+
+def _length16(data: bytes, pos: int) -> tuple[int, int]:
+    value = struct.unpack_from("<H", data, pos)[0]
+    pos += 2
+    if value & 0x8000:
+        return ((value & 0x7FFF) << 16) | struct.unpack_from("<H", data, pos)[0], pos + 2
+    return value, pos
+
+
+def _string_pool(data: bytes, chunk: int, header_size: int) -> list[str]:
+    count, _styles, flags, strings_start, _styles_start = struct.unpack_from("<IIIII", data, chunk + 8)
+    offsets = chunk + header_size
+    utf8 = bool(flags & 0x100)
+    result = []
+    for index in range(count):
+        relative = struct.unpack_from("<I", data, offsets + index * 4)[0]
+        pos = chunk + strings_start + relative
+        if utf8:
+            _utf16_length, pos = _length8(data, pos)
+            byte_length, pos = _length8(data, pos)
+            value = data[pos:pos + byte_length].decode("utf-8")
+        else:
+            char_length, pos = _length16(data, pos)
+            value = data[pos:pos + char_length * 2].decode("utf-16le")
+        result.append(value)
+    return result
+
+
+def manifest_package(manifest: bytes) -> str:
+    """Read the manifest package attribute from Android's binary XML format."""
+    if manifest[:2] == b"<?":
+        import xml.etree.ElementTree as ET
+        return ET.fromstring(manifest).attrib.get("package", "")
+
+    strings: list[str] = []
+    pos = 8  # RES_XML header
+    while pos + 8 <= len(manifest):
+        chunk_type, header_size, chunk_size = struct.unpack_from("<HHI", manifest, pos)
+        if chunk_size < header_size or pos + chunk_size > len(manifest):
+            raise ValueError("malformed AndroidManifest.xml chunk")
+        if chunk_type == 0x0001:  # RES_STRING_POOL_TYPE
+            strings = _string_pool(manifest, pos, header_size)
+        elif chunk_type == 0x0102 and strings:  # RES_XML_START_ELEMENT_TYPE
+            name_index = struct.unpack_from("<I", manifest, pos + 20)[0]
+            element_name = strings[name_index] if name_index < len(strings) else ""
+            if element_name == "manifest":
+                attribute_start, attribute_size, attribute_count = struct.unpack_from("<HHH", manifest, pos + 24)
+                attributes = pos + 16 + attribute_start
+                for index in range(attribute_count):
+                    item = attributes + index * attribute_size
+                    _namespace, name_index, raw_value = struct.unpack_from("<III", manifest, item)
+                    name = strings[name_index] if name_index < len(strings) else ""
+                    if name != "package":
+                        continue
+                    if raw_value != 0xFFFFFFFF:
+                        return strings[raw_value] if raw_value < len(strings) else ""
+                    value_size, _res0, value_type, value_data = struct.unpack_from("<HBBI", manifest, item + 12)
+                    if value_type == 0x03 and value_data < len(strings):
+                        return strings[value_data]
+                    raise ValueError(f"unsupported manifest package value type {value_type}")
+        pos += chunk_size
+    raise ValueError("manifest package attribute not found")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("apk")
     ap.add_argument("--expect-package", choices=["full", "noruntime"], required=True)
     ap.add_argument("--expect-abi", required=True)
+    ap.add_argument("--expect-application-id", required=True)
     args = ap.parse_args()
 
     with zipfile.ZipFile(args.apk) as z:
         names = set(z.namelist())
+        if "AndroidManifest.xml" not in names:
+            fail("missing AndroidManifest.xml")
+        try:
+            actual_application_id = manifest_package(z.read("AndroidManifest.xml"))
+        except (ValueError, struct.error, UnicodeError) as exc:
+            fail(f"cannot read Android application ID: {exc}")
+        if actual_application_id != args.expect_application_id:
+            fail(f"applicationId mismatch: {actual_application_id!r} != {args.expect_application_id!r}")
+
         for rel in (
             "assets/hardssh/lib/index.js",
             "assets/hardssh/node_modules/ssh2/package.json",
@@ -74,7 +152,7 @@ def main() -> int:
                     fail(f"runtime.zip size mismatch: {size} != {runtime['size']}")
                 with zipfile.ZipFile(tmp) as rz:
                     node = rz.read("bin/node")[:20]
-                    if node[:4] != b"\x7fELF":
+                    if node[:4] != b"\\x7fELF":
                         fail("runtime bin/node is not ELF")
                     got = int.from_bytes(node[18:20], "little")
                     want = EM[args.expect_abi]
@@ -99,7 +177,8 @@ def main() -> int:
             fail("manifest hardssh.version missing")
 
     print(
-        f"OK {args.apk}: {args.expect_package}/{args.expect_abi}, "
+        f"OK {args.apk}: {actual_application_id}, "
+        f"{args.expect_package}/{args.expect_abi}, "
         f"runtime={runtime.get('version')} hardssh={hard.get('version')}"
     )
     return 0
