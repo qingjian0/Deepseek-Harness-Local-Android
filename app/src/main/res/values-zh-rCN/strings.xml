@@ -1950,6 +1950,12 @@
     <string name="developer_port_exact">精确端口</string>
     <string name="developer_port_saved_restart">已保存；下次启动引擎时生效</string>
     <string name="developer_port_invalid">端口配置无效</string>
+    <string name="developer_port_auto_summary">自动端口段：%1$d–%2$d（搜索上限 %3$d）</string>
+    <string name="developer_port_exact_summary">精确端口：%1$d</string>
+    <string name="developer_port_actual_summary">%1$s · 当前实际端口：%2$d · %3$s</string>
+    <string name="developer_port_auto_hint">3080-3090,8000</string>
+    <string name="developer_port_exact_hint">8080</string>
+    <string name="developer_port_format_error">格式：起始端口-结束端口,搜索上限，例如 3080-3090,8000</string>
     <string name="developer_options_security_note">开启此菜单不会自动授予 Root、Shizuku 或其他系统权限。每项操作仍须经过独立授权检查。</string>
     <string name="developer_options_unlocked">已开启开发者选项，可在「设置 → 系统」中查看。</string>
     <string name="developer_options_disabled_toast">开发者选项已隐藏。再次点击版本信息 7 次即可开启。</string>
