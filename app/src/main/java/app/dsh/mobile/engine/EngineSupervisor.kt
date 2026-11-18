@@ -447,7 +447,7 @@ class EngineSupervisor(private val ctx: Context) {
      * 时每秒 spawn 一次」的旧 bug。用户手动点击不该绕过这个节流 —— 否则
      * 一个坏掉的第三方服务器就能让用户点着玩、把电池耗光。
      *
-     * 返回清场是否执行（端口本来就空闲时也算成功，因为目标状态已达成）。
+     * 返回当前端口是否空闲；若被占用，重启时由分配器选择其他端口。
      */
     fun reclaimPortAndRetry(): Boolean {
         // Report whether the currently selected socket is already free. Never kill its owner.
@@ -882,7 +882,7 @@ class EngineSupervisor(private val ctx: Context) {
                 activePort = portSelection.port
                 EnginePortManager.remember(ctx, portSelection)
                 Log.i(TAG, "engine port selected: ${portSelection.port} (${portSelection.reason})")
-                val proc = withContext(Dispatchers.IO) { spawnEngine(bootId, portSelection.port) }
+                val proc = withContext(Dispatchers.IO) { spawnEngine(bootId) }
                 process = proc
                 step("spawn")
 
@@ -1052,14 +1052,9 @@ class EngineSupervisor(private val ctx: Context) {
                                     "exitCode=${(status shr 8) and 0xff})",
                             )
                         }
-                        // ── v1.4.24（宝宝要求）：异常退出后彻底清场再完整重启 ──────
-                        // 这条路径是「引擎健康运行过、然后被杀/OOM/崩溃」——正是用户
-                        // 说的「进程异常退出」。旧实现直接进入下一轮 spawn，残留的
-                        // 监听 socket、TIME_WAIT、或被 su 拉起的孙进程都可能让新引擎
-                        // EADDRINUSE，表现为「反复重启起不来」。
-                        //
-                        // 现在：先按端口把 3080 上的一切清干净，再完整重新启动一遍，
-                        // 效果等同「关掉应用重开」。
+                        // After an engine crash, do not kill the listener by port number.
+                        // OrphanReaper handles app-owned leftovers; adaptive allocation moves
+                        // to a free segment if another process owns the previous port.
                         withContext(Dispatchers.IO) { reclaimPort() }
                         Log.i(TAG, "post-crash: port ${activePort} checked; next start will allocate a free port")
                         // v1.4.16（审查 P1）：健康运行的引擎退出、即将自动重启时，
@@ -1287,6 +1282,8 @@ class EngineSupervisor(private val ctx: Context) {
     private val lastExitStatus: Int?
         get() = process?.exitFuture?.takeIf { it.isDone }?.get()
 
+    private fun spawnEngine(bootId: String): EngineProcess = spawnEngine(bootId, activePort)
+
     private fun spawnEngine(bootId: String, port: Int): EngineProcess {
         // spawn 内部逐项打点：boot step 只报「spawn 合计」，不细分就看不出
         // 236ms 花在哪（本轮压缩冷启时正是靠这些数才知道 su 只占 20ms、
@@ -1481,12 +1478,13 @@ class EngineSupervisor(private val ctx: Context) {
         } catch (e: java.net.ConnectException) {
             false            // 明确拒绝 = 没人在听 = 空闲
         } catch (e: Exception) {
-            true             // 超时/未知一律按占用（保守：清场无害，漏清致命）
+            true             // Timeout/unknown is conservatively treated as occupied.
         }
     }
 
     /**
-     * 强制回收 3080：清掉所有占着它的引擎 node 残留（v1.3.1）。
+     * Legacy UI recovery action: check the current engine port and restart with adaptive allocation.
+     * No listener is killed based only on its socket ownership.
      *
      * ⚠️ Root 模式的孤儿为什么清不干净（用户报的二次启动失败）：
      * 引擎以 `su -c "exec node …"` 启动，PTY 的直接子进程只是 **su 外壳** ——
@@ -1510,7 +1508,7 @@ class EngineSupervisor(private val ctx: Context) {
     // Legacy port-owner sweepers were intentionally removed. They could kill a
     // foreign app that happened to listen on the configured engine port.
 
-    /** 启动前端口体检：占用则清场（不做静默跳过）。 */
+    /** Startup compatibility hook; actual port conflicts are handled by EnginePortManager. */
     private fun cleanupOrphanEngine() {
         // OrphanReaper is the only authority for cleaning this app's stale processes.
         // A busy socket alone does not prove ownership, so do not kill its listener.
