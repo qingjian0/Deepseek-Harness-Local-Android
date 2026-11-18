@@ -13,13 +13,34 @@ const output = {
 };
 
 async function loadDefineTool() {
-  // Match DSH's bundled android-plugins loader; do not depend on Node package resolution.
+  // A profile bundle lives several directories below DSH_HOME, unlike android-plugins.
+  // Search DSH_HOME and the module's ancestors so both layouts resolve the same engine API.
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const engineRoot = path.resolve(here, "..");
-  const candidates = [
-    path.join(engineRoot, "lib/node_modules/@deepseek-ai/dsh-tools/lib/index.js"),
-    path.join(engineRoot, "node_modules/@deepseek-ai/dsh-tools/lib/index.js"),
-  ];
+  const candidates = [];
+  const seen = new Set();
+  const addRoot = (root) => {
+    if (!root) return;
+    for (const relative of [
+      "lib/node_modules/@deepseek-ai/dsh-tools/lib/index.js",
+      "node_modules/@deepseek-ai/dsh-tools/lib/index.js",
+    ]) {
+      const candidate = path.resolve(root, relative);
+      if (!seen.has(candidate)) {
+        seen.add(candidate);
+        candidates.push(candidate);
+      }
+    }
+  };
+
+  addRoot(process.env.DSH_HOME);
+  let cursor = here;
+  for (let depth = 0; depth < 10; depth++) {
+    addRoot(cursor);
+    const parent = path.dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+
   for (const candidate of candidates) {
     try {
       if (!fs.existsSync(candidate)) continue;
