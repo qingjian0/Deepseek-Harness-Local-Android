@@ -1955,7 +1955,7 @@
     <string name="developer_port_invalid">Ungültige Portkonfiguration</string>
     <string name="developer_port_auto_summary">Automatischer Bereich: %1$d–%2$d (Suche bis %3$d)</string>
     <string name="developer_port_exact_summary">Exakter Port: %1$d</string>
-    <string name="developer_port_actual_summary">%1$s · Aktueller Port: %2$d · %3$s</string>
+    <string name="developer_port_actual_summary">%1$s · Aktuell/zuletzt gewählter Port: %2$d · %3$s</string>
     <string name="developer_port_auto_hint">3080-3090,8000</string>
     <string name="developer_port_exact_hint">8080</string>
     <string name="developer_port_format_error">Format: Start-Ende, Suchlimit (z. B. 3080-3090,8000)</string>
