@@ -664,6 +664,7 @@
     <string name="boot_step_userdata">Benutzerdaten verknüpfen</string>
     <string name="boot_step_spawn">Engine-Prozess starten</string>
     <string name="boot_step_health">Auf Health-Check warten</string>
+    <string name="boot_step_port_allocation">Anwendungsports auswählen</string>
     <string name="setting_boot_trace">Letzter Start</string>
     <string name="setting_boot_trace_sub">Zeiten und Dateianzahlen des letzten Starts</string>
     <string name="boot_trace_title">Details zum letzten Start</string>
