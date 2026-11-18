@@ -696,6 +696,19 @@ object EngineTriage {
         if (!node.isFile) out += "node: ${node.absolutePath}"
         else if (!node.canExecute()) out += "node not executable: ${node.absolutePath}"
         if (!entry.isFile) out += "entry: ${entry.absolutePath}"
+        val expectedMachine = when (Build.SUPPORTED_ABIS.firstOrNull()) {
+            "arm64-v8a" -> 183
+            "x86_64" -> 62
+            "armeabi-v7a" -> 40
+            else -> 0
+        }
+        val root = EngineConfig.engineRoot(ctx)
+        for (name in listOf("libreadline.so.8", "libz.so.1", "libssl.so")) {
+            val file = File(root, "lib/$name")
+            RuntimeElfIntegrity.inspect(file, expectedMachine)?.let { problem ->
+                out += "$name: $problem"
+            }
+        }
         return out
     }
 
