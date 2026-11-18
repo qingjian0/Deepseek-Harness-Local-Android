@@ -28,7 +28,7 @@ def verify(path: str, abi: str):
             data = resolve_entry(archive, name)
             if len(data) < 20:
                 raise ValueError(f"{name}: resolved payload is only {len(data)} bytes")
-            if data[:4] != b"\\x7fELF":
+            if data[:4] != b"\x7fELF":
                 raise ValueError(f"{name}: resolved payload is not ELF")
             if data[4] != 2 or data[5] != 1:
                 raise ValueError(f"{name}: expected little-endian ELF64")
