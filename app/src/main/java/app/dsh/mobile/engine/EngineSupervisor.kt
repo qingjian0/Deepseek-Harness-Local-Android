@@ -450,16 +450,11 @@ class EngineSupervisor(private val ctx: Context) {
      * 返回清场是否执行（端口本来就空闲时也算成功，因为目标状态已达成）。
      */
     fun reclaimPortAndRetry(): Boolean {
-        val ok = runCatching {
-            reclaimPort()
-            true
-        }.getOrElse {
-            Log.w(TAG, "manual port reclaim failed: ${it.message}")
-            false
-        }
-        Log.i(TAG, "manual port reclaim: ok=$ok — restarting engine")
+        // Report whether the currently selected socket is already free. Never kill its owner.
+        val available = runCatching { !portInUse() }.getOrDefault(false)
+        Log.i(TAG, "manual port check: free=$available — restarting with adaptive allocation")
         restart()
-        return ok
+        return available
     }
 
     /**
@@ -1059,7 +1054,7 @@ class EngineSupervisor(private val ctx: Context) {
                         // 现在：先按端口把 3080 上的一切清干净，再完整重新启动一遍，
                         // 效果等同「关掉应用重开」。
                         withContext(Dispatchers.IO) { reclaimPort() }
-                        Log.i(TAG, "post-crash: port ${activePort} thoroughly reclaimed before restart")
+                        Log.i(TAG, "post-crash: port ${activePort} checked; next start will allocate a free port")
                         // v1.4.16（审查 P1）：健康运行的引擎退出、即将自动重启时，
                         // 重置启动墙钟——新一轮「用户可见启动」从旧引擎死亡时起算。
                         // 旧实现只有 Healthy 分支一个重置点，健康跑超 5 分钟后崩溃，
@@ -1155,7 +1150,7 @@ class EngineSupervisor(private val ctx: Context) {
             }
             if (crashed) {
                 withContext(Dispatchers.IO) { reclaimPort() }
-                Log.i(TAG, "crash detected — thorough port reclaim done, next attempt starts clean")
+                Log.i(TAG, "crash detected — stale app processes handled by OrphanReaper; allocator will choose a free port")
             }
             val portEvidence = withContext(Dispatchers.IO) {
                 portInUse() && (deterministicFailure != null || looksLikePortConflict())
