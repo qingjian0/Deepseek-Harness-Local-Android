@@ -710,7 +710,7 @@ class RuntimeInstaller(private val ctx: Context) {
                 for (name in required) {
                     val bytes = readResolved("lib/$name")
                     val problem = RuntimeElfIntegrity.inspectHeader(
-                        bytes.copyOf(minOf(bytes.size, 20)), bytes.size.toLong(), expected,
+                        bytes.copyOf(minOf(bytes.size, 64)), bytes.size.toLong(), expected,
                     )
                     check(problem == null) { "bundled lib/$name is invalid: $problem" }
                     val target = File(libDir, name)
