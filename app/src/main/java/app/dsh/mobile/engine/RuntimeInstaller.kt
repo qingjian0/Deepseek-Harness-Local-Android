@@ -135,8 +135,16 @@ class RuntimeInstaller(private val ctx: Context) {
             isRootCompleteAt(root, validateLibraries = false)
         ) {
             val repaired = repairRequiredLibrariesFromBundledAsset()
-            complete = repaired && isRootComplete()
-            if (complete) Log.w(TAG, "repaired damaged runtime shared libraries in place")
+            if (!repaired || !isRootComplete()) {
+                // Do not fall through to a whole-runtime swap when the bundled repair source
+                // is itself invalid. Keep the current engine and any rollback snapshot intact.
+                throw IllegalStateException(
+                    "runtime shared libraries are damaged and the bundled repair archive is invalid; " +
+                        "existing engine files were left in place",
+                )
+            }
+            complete = true
+            Log.w(TAG, "repaired damaged runtime shared libraries in place")
         }
         if (complete) {
             // noruntime 版本可长期复用旧磁盘；先修复/确认前端 polyfill，再启动引擎。
