@@ -1899,7 +1899,7 @@
     <string name="developer_port_invalid">การกำหนดค่าพอร์ตไม่ถูกต้อง</string>
     <string name="developer_port_auto_summary">ช่วงอัตโนมัติ: %1$d–%2$d (ค้นหาจนถึง %3$d)</string>
     <string name="developer_port_exact_summary">พอร์ตที่ระบุ: %1$d</string>
-    <string name="developer_port_actual_summary">%1$s · พอร์ตที่ใช้งานจริง: %2$d · %3$s</string>
+    <string name="developer_port_actual_summary">%1$s · พอร์ตที่เลือกปัจจุบัน/ล่าสุด: %2$d · %3$s</string>
     <string name="developer_port_auto_hint">3080-3090,8000</string>
     <string name="developer_port_exact_hint">8080</string>
     <string name="developer_port_format_error">รูปแบบ: เริ่มต้น-สิ้นสุด, ขีดจำกัดการค้นหา เช่น 3080-3090,8000</string>
