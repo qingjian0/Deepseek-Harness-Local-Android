@@ -25,6 +25,9 @@ def verify(path: str, abi: str):
     with zipfile.ZipFile(path) as archive:
         for basename in REQUIRED:
             name = f"lib/{basename}"
+            info = archive.getinfo(name)
+            if info.comment.decode("utf-8", "replace").startswith("LINK:"):
+                raise ValueError(f"{name}: critical linker library must be stored as a full ZIP payload")
             data = resolve_entry(archive, name)
             if len(data) < 64:
                 raise ValueError(f"{name}: resolved payload is only {len(data)} bytes")
