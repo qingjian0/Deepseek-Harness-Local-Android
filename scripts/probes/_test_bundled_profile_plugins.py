@@ -100,6 +100,7 @@ check("B3 build-apk 依赖该 job",
 ASSET_TO_PROP = {
     "mobile-layout": "mobileLayoutTgzDir",
     "solution-explorer": "solutionExplorerTgzDir",
+    "dsh-gpt-hook-agent": "dshGptHookAgentTgzDir",
 }
 for root in prov_roots:
     prop = ASSET_TO_PROP.get(root)
