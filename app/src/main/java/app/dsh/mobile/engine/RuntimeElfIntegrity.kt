@@ -10,6 +10,7 @@ import java.io.File
 internal object RuntimeElfIntegrity {
 
     fun inspect(file: File, expectedMachine: Int): String? {
+        if (java.nio.file.Files.isSymbolicLink(file.toPath())) return "symbolic link not materialized"
         if (!file.isFile) return "missing"
         val header = runCatching {
             file.inputStream().use { input ->
