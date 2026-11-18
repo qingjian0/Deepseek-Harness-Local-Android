@@ -31,7 +31,8 @@ The preferred shared data root is `/storage/emulated/0/Documents/dshdata`. It is
 
 - A missing `storages/workspace.json` is currently reported as `OK: not created yet`. This can be a first-use state when no workspace has been registered; it is not proof that workspace initialization completed.
 - A missing `profiles/web/package.json` is currently reported as `WARN: not created yet`. `ProfilePluginProvisioner.ensureAll()` runs before engine spawn, but its bundle-entry helper does not create a missing profile manifest. Observe the first successful engine initialization before changing this warning's meaning.
-- Self-check prints the actual `context.filesDir`-derived path. A path such as `/data/user/0/dsh.dah.mobile/files/dsh-home` does not match the canonical package ID. Treat it as an installed-artifact/package-identity discrepancy to verify, not as a path to hard-code or rewrite.
+- Self-check reports `context.packageName` alongside the actual `context.filesDir`-derived path. A path such as `/data/user/0/dsh.dah.mobile/files/dsh-home` means the running APK identity is `dsh.dah.mobile` (unless the log was mistyped); it does not match canonical `dsh.dsh.mobile`. Never hard-code or rewrite this path. The identity warning is diagnostic and does not block engine startup.
+- Runtime completeness must validate the required shared libraries as non-empty ELF64 files for the device ABI. A zero-byte `libz.so.1` is a hard runtime failure even when `File.isFile` returns true; self-check and installer must agree on this rule.
 
 ## Required verification before release
 
