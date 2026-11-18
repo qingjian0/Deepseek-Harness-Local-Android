@@ -3,6 +3,28 @@ import java.security.MessageDigest
 import java.security.cert.CertificateFactory
 import java.util.Base64
 import java.util.Properties
+
+// Fork-only identity lives outside upstream-owned files. Keep namespace stable so
+// upstream Kotlin package paths and manifest class names remain untouched.
+private data class ForkBuildIdentity(
+    val applicationId: String,
+    val versionSuffix: String,
+    val channel: String,
+)
+
+private val forkBuildIdentity: ForkBuildIdentity = run {
+    val props = Properties()
+    rootProject.file("fork.properties").takeIf { it.isFile }?.inputStream()?.use(props::load)
+    val appId = props.getProperty("applicationId", "app.dsh.mobile").trim()
+    val suffix = props.getProperty("versionSuffix", "").trim()
+    val channel = props.getProperty("channel", "fork").trim().ifBlank { "fork" }
+    val validId = Regex("[A-Za-z][A-Za-z0-9_]*(\\\\.[A-Za-z][A-Za-z0-9_]*)+")
+    if (!validId.matches(appId)) throw GradleException("Invalid fork applicationId: $appId")
+    if (suffix.any { it.isWhitespace() || it == '/' || it == '\\\\' }) {
+        throw GradleException("Invalid fork versionSuffix: $suffix")
+    }
+    ForkBuildIdentity(appId, suffix, channel)
+}
 import java.util.zip.ZipFile
 
 plugins {
@@ -236,7 +258,7 @@ android {
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
-        applicationId = "app.dsh.mobile"
+        applicationId = forkBuildIdentity.applicationId
         minSdk = 26
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
