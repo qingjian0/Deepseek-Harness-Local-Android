@@ -80,7 +80,7 @@ object EnginePortManager {
             return Selection(c.exact, c.exact, c.exact, "exact")
         }
         val found = findCandidate(c.start, c.end, c.searchEnd, ::canBind)
-            ?: throw IllegalStateException("No free engine port segment between ${c.start} and ${c.searchEnd}")
+            ?: throw IllegalStateException("No free engine port in range ${c.start} and ${c.searchEnd}")
         val (port, segmentStart) = found
         val segmentEnd = segmentStart + (c.end - c.start)
         val reason = if (port <= c.end) "preferred range" else "auto-increment fallback ${port}"
@@ -89,7 +89,6 @@ object EnginePortManager {
 
     internal fun findCandidate(start: Int, end: Int, searchEnd: Int, available: (Int) -> Boolean): Pair<Int, Int>? {
         require(start in 1024..65533 && end in start..65533 && searchEnd >= end)
-        val preferredWidth = end - start
         // Scan every candidate in order. The previous 100-port stride only tested
         // [start..end], [start+100..end+100], ... and silently skipped free ports
         // in between (e.g. 3091..3179). That could report exhaustion while usable
