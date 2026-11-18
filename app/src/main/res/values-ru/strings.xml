@@ -1949,7 +1949,7 @@
     <string name="developer_port_invalid">Недопустимая конфигурация порта</string>
     <string name="developer_port_auto_summary">Автодиапазон: %1$d–%2$d (поиск до %3$d)</string>
     <string name="developer_port_exact_summary">Точный порт: %1$d</string>
-    <string name="developer_port_actual_summary">%1$s · Текущий порт: %2$d · %3$s</string>
+    <string name="developer_port_actual_summary">%1$s · Текущий/последний выбранный порт: %2$d · %3$s</string>
     <string name="developer_port_auto_hint">3080-3090,8000</string>
     <string name="developer_port_exact_hint">8080</string>
     <string name="developer_port_format_error">Формат: начало-конец, предел поиска (например, 3080-3090,8000)</string>
