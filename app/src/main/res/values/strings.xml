@@ -1949,7 +1949,7 @@
     <string name="developer_port_invalid">Invalid port configuration</string>
     <string name="developer_port_auto_summary">Automatic segment: %1$d–%2$d (search through %3$d)</string>
     <string name="developer_port_exact_summary">Exact port: %1$d</string>
-    <string name="developer_port_actual_summary">%1$s · Current actual port: %2$d · %3$s</string>
+    <string name="developer_port_actual_summary">%1$s · Current/last selected port: %2$d · %3$s</string>
     <string name="developer_port_auto_hint">3080-3090,8000</string>
     <string name="developer_port_exact_hint">8080</string>
     <string name="developer_port_format_error">Use start-end,search limit (for example 3080-3090,8000)</string>
