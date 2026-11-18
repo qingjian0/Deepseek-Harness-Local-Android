@@ -245,7 +245,7 @@ object LocalEmbedder {
     /** Clear cached vectors after replacing the local embedding model. */
     fun clearEmbeddingCache() = synchronized(embeddingCache) { embeddingCache.clear() }
 
-    private fun cacheKey(text: String): String = text.trim().replace(Regex("\\\\s+"), " ")
+    private fun cacheKey(text: String): String = text.trim()
 
     private fun cachedVector(key: String): DoubleArray? = synchronized(embeddingCache) {
         embeddingCache[key]?.copyOf()
