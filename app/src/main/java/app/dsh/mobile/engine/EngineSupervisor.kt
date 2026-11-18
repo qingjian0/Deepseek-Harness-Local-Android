@@ -102,7 +102,7 @@ class EngineSupervisor(private val ctx: Context) {
         data object Stopped : State
     }
 
-    @Volatile private var activePort: Int = EngineConfig.DEFAULT_PORT
+    @Volatile private var activePort: Int = EnginePortManager.currentPort(ctx)
 
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state
