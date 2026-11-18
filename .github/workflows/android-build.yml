@@ -578,6 +578,13 @@ jobs:
             gradle -p . :app:testDebugUnitTest "${ARGS[@]}" --stacktrace 2>&1 | tee runtime-unit-tests.log
           fi
           gradle -p . assembleDebug "${ARGS[@]}" --stacktrace 2>&1 | tee build-${{ matrix.abi }}-${{ matrix.package }}.log
+          # Verify the installed package identity from the actual APK manifest, not Gradle source alone.
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='dsh.dsh.mobile'"
           if [ -n "${DSH_RELEASE_STORE_PASSWORD:-}" ] && [ -f keystore/dsh-release.keystore ]; then
             # -PrequireReleaseSigning=true：正式包缺私钥时必须失败，不能产出
             # app-release-unsigned.apk 让发布链路误当正式包上传。
