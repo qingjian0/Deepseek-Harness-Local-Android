@@ -59,6 +59,7 @@ object EnginePortManager {
         .getString("last_reason", "Not started") ?: "Not started"
 
     fun select(context: Context): Selection {
+        ServicePortConfig.activate(context)
         val c = config(context)
         if (c.mode == Mode.EXACT) {
             if (!isCandidateAvailable(c.exact)) {

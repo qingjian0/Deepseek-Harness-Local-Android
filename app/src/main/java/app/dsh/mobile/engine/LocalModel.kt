@@ -65,6 +65,7 @@ object LocalModel {
      */
     @Synchronized
     fun ensureReady(ctx: Context, onProgress: (Float, String) -> Unit = { _, _ -> }): Boolean {
+        ServicePortConfig.initialize(ctx)
         if (isServerRunning()) return true
 
         val server = llamaServer(ctx) ?: run {

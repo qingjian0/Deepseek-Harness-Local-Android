@@ -1277,6 +1277,64 @@ object EngineConfig {
     fun engineHeapFlag(ctx: android.content.Context): String =
         "--max-old-space-size=" + engineHeapMb(ctx)
 
+
+    fun ensurePromptOverlay(ctx: android.content.Context): File? = runCatching {
+        val settings = PromptSettingsRepository.load(ctx)
+        val pkg = File(engineRoot(ctx), "lib/node_modules/@dsh-android/prompt-manager")
+        pkg.mkdirs()
+        File(pkg, "package.json").writeText("""{"name":"@dsh-android/prompt-manager","version":"1.0.0","type":"module","main":"index.js","dependencies":{"@deepseek-ai/schemastery":"*"}}""")
+        File(pkg, "index.js").writeText("""
+            import z from '@deepseek-ai/schemastery'
+            export const name = '@dsh-android/prompt-manager'
+            export const inject = ['systemPrompt']
+            export const Config = z.object({ sessionPrompt: z.string().default(''), toolPrompt: z.string().default('') })
+            export function apply(ctx, config) {
+              if (config.sessionPrompt) ctx.systemPrompt.context({ name: 'android:session-prompt', order: 230, text: config.sessionPrompt, interpolate: false })
+              if (config.toolPrompt) ctx.systemPrompt.section({ name: 'android:tool-guidance', order: 3200, text: config.toolPrompt, interpolate: false })
+            }
+        """.trimIndent())
+        val profileModules = File(dshHome(ctx), "profiles/node_modules")
+        val link = File(profileModules, "@dsh-android/prompt-manager")
+        var pluginReady = false
+        runCatching {
+            link.parentFile?.mkdirs()
+            if (java.nio.file.Files.isSymbolicLink(link.toPath())) {
+                val target = java.nio.file.Files.readSymbolicLink(link.toPath())
+                val same = runCatching { File(target.toString()).canonicalFile == pkg.canonicalFile }.getOrDefault(false)
+                if (!same) java.nio.file.Files.delete(link.toPath())
+            } else if (link.exists()) {
+                Log.w(TAG, "prompt manager link is occupied by a user-owned directory; custom session/tool layer skipped")
+            }
+            if (!link.exists()) java.nio.file.Files.createSymbolicLink(link.toPath(), pkg.toPath())
+            pluginReady = java.nio.file.Files.isSymbolicLink(link.toPath()) &&
+                runCatching { File(java.nio.file.Files.readSymbolicLink(link.toPath()).toString()).canonicalFile == pkg.canonicalFile }.getOrDefault(false) &&
+                File(link, "index.js").isFile
+        }
+        val body = buildString {
+            append("- id: system-prompt\n")
+            append("  config:\n")
+            append("    includeHarnessIdentity: ${settings.includeHarnessIdentity}\n")
+            append("    includeRuntimeContext: ${settings.includeRuntimeContext}\n")
+            append("    personaPrefix: ${org.json.JSONObject.quote(settings.personaPrefix)}\n")
+            append("    personaSuffix: ${org.json.JSONObject.quote(settings.personaSuffix)}\n")
+            append("- id: agent-instructions\n")
+            append("  config:\n")
+            append("    maxBytes: ${settings.maxBytes}\n")
+            append("    maxSourceBytes: ${settings.maxSourceBytes}\n")
+            if (pluginReady) {
+                append("- insert:\n")
+                append("    - id: android-prompt-manager\n")
+                append("      name: '@dsh-android/prompt-manager'\n")
+                append("      config:\n")
+                append("        sessionPrompt: ${org.json.JSONObject.quote(settings.sessionPrompt)}\n")
+                append("        toolPrompt: ${org.json.JSONObject.quote(settings.toolPrompt)}\n")
+            }
+        }
+        val overlay = File(engineRoot(ctx), "android-prompt-overlay.yml")
+        overlay.writeText(body)
+        overlay
+    }.onFailure { Log.w(TAG, "prompt overlay unavailable: ${it.message}") }.getOrNull()
+
     fun ensureAndroidOverlay(ctx: android.content.Context): File {
         val f = File(engineRoot(ctx), "android-overlay.yml")
         // NOTE: keep this file free of CJK text — the i18n gate scans Kotlin string
@@ -1800,6 +1858,7 @@ object EngineConfig {
             "DSH_SHZ_PORT=${ShizukuHttpBridge.port(port)}",
             // 桥 token（v1.2.99）：只交给引擎子进程，供 scr/notify 等闸门脚本鉴权。
             // 第三方 App 拿不到 → 无法调用读屏/点击/通知等设备能力。
+            "DSH_BRIDGE_PORT=${AgentBridge.PORT}",
             "DSH_BRIDGE_TOKEN=${AgentBridge.currentToken().orEmpty()}",
             // 桌宠桥 token（v1.4.21，PR #48 评审）：dsh-pet-bridge 插件 POST
             // /bubble 时带 X-DSH-Pet-Token 头；惰性生成，进程内稳定，不落盘。
@@ -2188,7 +2247,7 @@ object EngineConfig {
             if (broken.isNotEmpty()) {
                 Log.w(TAG, "agent gates BROKEN: ${broken.joinToString("; ")}")
             } else {
-                Log.i(TAG, "agent gates: notify/scr/say/_dsh_http.sh deployed (bridge :3083)")
+                Log.i(TAG, "agent gates: notify/scr/say/_dsh_http.sh deployed (bridge :${AgentBridge.PORT})")
             }
 
             // ── Android 编译桩 jar 预置（v1.2.107）────────────────────────────

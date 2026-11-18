@@ -27,7 +27,7 @@ name: android-build
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main", "dev"]
     tags: ["v*"]
   pull_request:
   schedule:

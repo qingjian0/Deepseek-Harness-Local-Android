@@ -14,7 +14,7 @@ name: i18n-check
 on:
   pull_request:
   push:
-    branches: ["**"]
+    branches: ["main", "dev"]
   workflow_dispatch:
 
 permissions:

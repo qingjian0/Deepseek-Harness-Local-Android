@@ -204,7 +204,7 @@ object LocalEmbedder {
     private const val TAG = "LocalEmbedder"
 
     /** llama-server 默认端口（避开引擎 3080 / 桥 3083） */
-    const val PORT = 3085
+    val PORT: Int get() = ServicePortConfig.embeddingPort
 
     data class Match(val index: Int, val score: Double)
 

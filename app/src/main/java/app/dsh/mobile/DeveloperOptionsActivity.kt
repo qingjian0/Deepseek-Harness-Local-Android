@@ -7,6 +7,7 @@ import android.widget.EditText
 import android.text.InputType
 import androidx.appcompat.app.AlertDialog
 import app.dsh.mobile.engine.EnginePortManager
+import app.dsh.mobile.engine.ServicePortConfig
 import android.widget.Toast
 import com.google.android.material.materialswitch.MaterialSwitch
 
@@ -54,15 +55,28 @@ class DeveloperOptionsActivity : ThemedActivity() {
             getString(R.string.developer_port_auto_summary, c.start, c.end, c.searchEnd)
         } else getString(R.string.developer_port_exact_summary, c.exact)
         val reason = EnginePortManager.lastReason(this)
-        findViewById<android.widget.TextView>(R.id.txtEnginePortSummary).text =
-            getString(R.string.developer_port_actual_summary, mode, actual, reason)
+        val summary = getString(R.string.developer_port_actual_summary, mode, actual, reason)
+        val ports = ServicePortConfig.ports(this)
+        val services = getString(
+            R.string.developer_service_ports_summary,
+            ports.agentBridge, ports.embedding, ports.lanWeb, ports.remoteAccess, ports.offset,
+        )
+        findViewById<android.widget.TextView>(R.id.txtEnginePortSummary).text = "$summary\n$services"
     }
 
     private fun showPortSettings() {
         val c = EnginePortManager.config(this)
-        val choices = arrayOf(getString(R.string.developer_port_auto), getString(R.string.developer_port_exact))
+        val choices = arrayOf(
+            getString(R.string.developer_port_auto),
+            getString(R.string.developer_port_exact),
+            getString(R.string.developer_port_offset),
+        )
         AlertDialog.Builder(this).setTitle(R.string.developer_port_title)
             .setItems(choices) { _, which ->
+                if (which == 2) {
+                    showOffsetSettings()
+                    return@setItems
+                }
                 val exactMode = which == 1
                 val initial = if (exactMode) c.exact.toString() else "${c.start}-${c.end},${c.searchEnd}"
                 val input = EditText(this).apply {
@@ -86,6 +100,29 @@ class DeveloperOptionsActivity : ThemedActivity() {
                         }.onFailure { Toast.makeText(this, it.message ?: getString(R.string.developer_port_invalid), Toast.LENGTH_LONG).show() }
                     }.show()
             }.show()
+    }
+
+    private fun showOffsetSettings() {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
+            setSingleLine(true)
+            setText(ServicePortConfig.offset(this@DeveloperOptionsActivity).toString())
+            hint = getString(R.string.developer_port_offset_hint)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.developer_port_offset)
+            .setView(input)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                runCatching {
+                    ServicePortConfig.setOffset(this, input.text.toString().trim().toInt())
+                    refreshPortSummary()
+                    Toast.makeText(this, R.string.developer_port_saved_restart, Toast.LENGTH_LONG).show()
+                }.onFailure {
+                    Toast.makeText(this, it.message ?: getString(R.string.developer_port_invalid), Toast.LENGTH_LONG).show()
+                }
+            }
+            .show()
     }
 
     override fun onResume() {

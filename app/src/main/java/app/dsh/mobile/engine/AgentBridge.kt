@@ -53,7 +53,7 @@ import java.nio.charset.StandardCharsets
 object AgentBridge {
 
     private const val TAG = "AgentBridge"
-    const val PORT = 3083
+    val PORT: Int get() = ServicePortConfig.agentBridgePort
     private const val CHANNEL_ID = "agent_notify"
 
     /** 请求体上限（字节）。超限直接 413，见 handleOnWorker 里的说明。 */
@@ -221,6 +221,7 @@ object AgentBridge {
     }
 
     fun start(ctx: Context) {
+        ServicePortConfig.initialize(ctx)
         if (server != null) return
         shotCtx = ctx.applicationContext
         // v1.2.160：LAN 代理需要 app context 推导引擎目录（部署脚本 / 拉起 node 进程）
@@ -1487,7 +1488,7 @@ object AgentBridge {
             .put(
                 "note",
                 "phone is always the HTTP client: the computer runs tools/peersync/pc-sync-server.mjs " +
-                    "(default port 3091). The password travels in a plaintext LAN header, so only " +
+                    "(default port ${RemoteAccessServer.PORT}). The password travels in a plaintext LAN header, so only " +
                     "private addresses are accepted.",
             )
             .toString()
@@ -1600,7 +1601,7 @@ object AgentBridge {
                 .put("detail", "non-private host: " + host)
                 .toString()
         }
-        val port = if (obj.has("port")) obj.optInt("port", 3091) else cur.port
+        val port = if (obj.has("port")) obj.optInt("port", RemoteAccessServer.PORT) else cur.port
         if (port <= 0 || port > 65535) {
             return 400 to """{"ok":false,"error":"port must be 1..65535"}"""
         }
@@ -2007,7 +2008,7 @@ object AgentBridge {
         }.getOrDefault("(log read failed)")
 
         // Probe the currently selected engine port, not the historical default.
-        val enginePort = shotCtx?.let { EnginePortManager.currentPort(it) } ?: EngineConfig.DEFAULT_PORT
+        val enginePort = shotCtx?.let { EnginePortManager.currentPort(it) } ?: ServicePortConfig.enginePort
         val httpProbe = runCatching {
             val c = (java.net.URL("http://127.0.0.1:$enginePort/").openConnection()
                     as java.net.HttpURLConnection).apply { connectTimeout = 4000; readTimeout = 4000 }
