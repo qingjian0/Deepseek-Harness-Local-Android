@@ -5,6 +5,11 @@ import java.util.Base64
 import java.util.Properties
 import java.util.zip.ZipFile
 
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
 // Fork-only identity lives outside upstream-owned files. Keep namespace stable so
 // upstream Kotlin package paths and manifest class names remain untouched.
 private data class ForkBuildIdentity(
@@ -23,11 +28,6 @@ private val forkBuildIdentity: ForkBuildIdentity = run {
         throw GradleException("Invalid fork versionSuffix: $suffix")
     }
     ForkBuildIdentity(appId, suffix)
-}
-
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 // 构建目标 ABI 可由 -Pabi=x86_64 覆盖（CI 双架构矩阵 / 模拟器测试用），默认真机 arm64
