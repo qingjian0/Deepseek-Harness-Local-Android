@@ -61,6 +61,8 @@
              queryIntentServices(带 setComponent) 需要**包名级**可见性。
              缺它会表现为：语音服务页选不到插件、指定了也不生效。 -->
         <package android:name="app.dsh.asr" />
+        <!-- dsh-gpt Hook module provider used by the authenticated Hook Agent bridge. -->
+        <provider android:authorities="com.gpt.hook.observations" />
     </queries>
 
         <!-- ===== 全权限声明（自动生成，勿手工编辑） ===== -->
