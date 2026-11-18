@@ -93,7 +93,7 @@ async function apply(ctx) {
 
   register(ctx, defineTool, {
     name: "dsh_hook_status",
-    description: "Read the live dsh-gpt LSPosed module connection, target process, enabled state and applied Hook counts.",
+    description: "Read the dsh-gpt Provider connection, target observation state, enablement and buffered event count.",
     parameters: {},
     execute: async () => request("GET", "/hook/status"),
   });
