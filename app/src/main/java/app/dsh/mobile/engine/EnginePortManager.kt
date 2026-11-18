@@ -111,11 +111,19 @@ object EnginePortManager {
         enginePort: Int,
         available: (Int) -> Boolean,
     ): Boolean {
-        val required = listOf(
-            ports.engine, ports.engine + 2, ports.agentBridge,
-            ports.embedding, ports.lanWeb, ports.remoteAccess,
-            enginePort, enginePort + 2,
-        ).distinct()
+        if (enginePort !in 1024..65533 || enginePort + 2 > 65535) return false
+        val engineSockets = setOf(enginePort, enginePort + 2)
+        val serviceSockets = setOf(
+            ports.agentBridge, ports.embedding, ports.lanWeb, ports.remoteAccess,
+        )
+        // A manually selected engine port must not alias another app-owned listener.
+        // The default engine pair (ports.engine / ports.engine+2) is expected and
+        // remains part of the same port block; custom pairs must be disjoint.
+        if (enginePort != ports.engine && engineSockets.any {
+                it in serviceSockets || it == ports.engine || it == ports.engine + 2
+            }) return false
+        if (engineSockets.any { it in serviceSockets }) return false
+        val required = (serviceSockets + setOf(ports.engine, ports.engine + 2) + engineSockets)
         return required.all(available)
     }
 
