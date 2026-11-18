@@ -72,19 +72,47 @@ object EnginePortManager {
 
     fun select(context: Context): Selection {
         ServicePortConfig.activate(context)
-        val c = config(context)
-        if (c.mode == Mode.EXACT) {
-            if (!isCandidateAvailable(c.exact)) {
-                throw IllegalStateException("Configured engine port ${c.exact} is occupied or reserved")
+        val initialOffset = ServicePortConfig.offset(context)
+        var offset = initialOffset
+        var selectedPorts: ServicePortConfig.Ports? = null
+        var selectedEnginePort: Int? = null
+
+        // Treat every listener owned by this app as one port block. If ANY listener
+        // (including the engine's +2 companion socket) is occupied, move the whole
+        // block by exactly 1000 instead of drifting individual listeners.
+        while (offset <= 57533) {
+            val ports = runCatching { ServicePortConfig.portsForOffset(offset) }.getOrNull() ?: break
+            val cfg = config(context)
+            val enginePort = if (cfg.mode == Mode.EXACT) cfg.exact else cfg.start
+            val required = buildSet {
+                add(ports.engine)
+                add(ports.engine + 2)
+                add(ports.agentBridge)
+                add(ports.embedding)
+                add(ports.lanWeb)
+                add(ports.remoteAccess)
+                add(enginePort)
+                add(enginePort + 2)
             }
-            return Selection(c.exact, c.exact, c.exact, "exact")
+            if (required.all(::canBind)) {
+                selectedPorts = ports
+                selectedEnginePort = enginePort
+                break
+            }
+
+            offset += 1000
+            ServicePortConfig.setOffset(context, offset)
+            ServicePortConfig.activate(context)
         }
-        val found = findCandidate(c.start, c.end, c.searchEnd, ::canBind)
-            ?: throw IllegalStateException("No free engine port in range ${c.start} and ${c.searchEnd}")
-        val (port, segmentStart) = found
-        val segmentEnd = segmentStart + (c.end - c.start)
-        val reason = if (port <= c.end) "preferred range" else "auto-increment fallback ${port}"
-        return Selection(port, segmentStart, segmentEnd, reason)
+
+        val ports = selectedPorts
+            ?: throw IllegalStateException("No free application port block; tried offsets from $initialOffset in steps of 1000")
+        val port = selectedEnginePort!!
+        val cfg = config(context)
+        if (cfg.mode == Mode.EXACT) {
+            return Selection(port, port, port, "exact; application port block offset +${ports.offset}")
+        }
+        return Selection(port, port, port, "application port block offset +${ports.offset}")
     }
 
     internal fun findCandidate(start: Int, end: Int, searchEnd: Int, available: (Int) -> Boolean): Pair<Int, Int>? {
