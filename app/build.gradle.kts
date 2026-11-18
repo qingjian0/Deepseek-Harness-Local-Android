@@ -107,6 +107,19 @@ tasks.named("preBuild") { dependsOn(generateRepoConfig) }
 tasks.matching { it.name.startsWith("compile") && it.name.contains("Kotlin") }
     .configureEach { dependsOn(generateRepoConfig) }
 
+// APK 安装包名：gradle.properties 默认值可编辑，命令行 -PAPP_APPLICATION_ID=... 优先覆盖。
+val appApplicationId = (project.findProperty("APP_APPLICATION_ID") as String?)
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "app.dsh.mobile"
+val appApplicationIdPattern = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")
+if (!appApplicationIdPattern.matches(appApplicationId)) {
+    throw GradleException(
+        "Invalid APP_APPLICATION_ID '$appApplicationId'. Use at least two dot-separated segments; " +
+            "each segment must start with a letter and contain only letters, digits, or underscores.",
+    )
+}
+
 // ── Release 签名（v1.4.18）────────────────────────────────────────────────
 // 正式包必须用固定 keystore 签名，否则老用户无法覆盖升级。签名材料**绝不入库**
 // （keystore/ 已在 .gitignore）：
@@ -236,7 +249,7 @@ android {
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
-        applicationId = "app.dsh.mobile"
+        applicationId = appApplicationId
         minSdk = 26
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
