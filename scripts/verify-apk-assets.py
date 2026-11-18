@@ -152,7 +152,7 @@ def main() -> int:
                     fail(f"runtime.zip size mismatch: {size} != {runtime['size']}")
                 with zipfile.ZipFile(tmp) as rz:
                     node = rz.read("bin/node")[:20]
-                    if node[:4] != b"\\x7fELF":
+                    if node[:4] != b"\x7fELF":
                         fail("runtime bin/node is not ELF")
                     got = int.from_bytes(node[18:20], "little")
                     want = EM[args.expect_abi]
