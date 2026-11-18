@@ -55,7 +55,7 @@ object EnginePortManager {
     }
 
     fun lastReason(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getString("last_reason", "尚未启动") ?: "尚未启动"
+        .getString("last_reason", "Not started") ?: "Not started"
 
     fun select(context: Context): Selection {
         val c = config(context)
