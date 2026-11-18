@@ -655,6 +655,7 @@
     <string name="boot_step_userdata">Link user data</string>
     <string name="boot_step_spawn">Launch engine process</string>
     <string name="boot_step_health">Wait for health check</string>
+    <string name="boot_step_port_allocation">Select application ports</string>
     <string name="setting_boot_trace">Last startup</string>
     <string name="setting_boot_trace_sub">Timing and file counts from the most recent boot</string>
     <string name="boot_trace_title">Last startup details</string>
