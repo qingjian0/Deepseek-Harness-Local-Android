@@ -9,7 +9,6 @@ import java.util.Properties
 private data class ForkBuildIdentity(
     val applicationId: String,
     val versionSuffix: String,
-    val channel: String,
 )
 
 private val forkBuildIdentity: ForkBuildIdentity = run {
@@ -17,13 +16,12 @@ private val forkBuildIdentity: ForkBuildIdentity = run {
     rootProject.file("fork.properties").takeIf { it.isFile }?.inputStream()?.use(props::load)
     val appId = props.getProperty("applicationId", "app.dsh.mobile").trim()
     val suffix = props.getProperty("versionSuffix", "").trim()
-    val channel = props.getProperty("channel", "fork").trim().ifBlank { "fork" }
-    val validId = Regex("[A-Za-z][A-Za-z0-9_]*(\\\\.[A-Za-z][A-Za-z0-9_]*)+")
+    val validId = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")
     if (!validId.matches(appId)) throw GradleException("Invalid fork applicationId: $appId")
-    if (suffix.any { it.isWhitespace() || it == '/' || it == '\\\\' }) {
+    if (suffix.any { it.isWhitespace() || it == '/' || it == '\\' }) {
         throw GradleException("Invalid fork versionSuffix: $suffix")
     }
-    ForkBuildIdentity(appId, suffix, channel)
+    ForkBuildIdentity(appId, suffix)
 }
 import java.util.zip.ZipFile
 
@@ -314,7 +312,7 @@ android {
         // （见 android-build.yml:68-86）：v1.5.0（正式版，prerelease: false）与
         // v1.5.0-beta.2（试发行，prerelease: true），但 tag 必须与 versionName 完全拼得上
         // （publish-release 的 `test "$GITHUB_REF_NAME" = "v$V"`），所以打 tag 前先确认这里。
-        versionName = "1.6.0-beta.16"
+        versionName = "1.6.0-beta.16${forkBuildIdentity.versionSuffix}"
 
         ndk {
             abiFilters += listOf(targetAbi)
