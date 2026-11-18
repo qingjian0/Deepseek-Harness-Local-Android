@@ -1909,7 +1909,7 @@
     <string name="developer_port_invalid">Configuração de porta inválida</string>
     <string name="developer_port_auto_summary">Faixa automática: %1$d–%2$d (buscar até %3$d)</string>
     <string name="developer_port_exact_summary">Porta exata: %1$d</string>
-    <string name="developer_port_actual_summary">%1$s · Porta atual: %2$d · %3$s</string>
+    <string name="developer_port_actual_summary">%1$s · Porta atual/selecionada por último: %2$d · %3$s</string>
     <string name="developer_port_auto_hint">3080-3090,8000</string>
     <string name="developer_port_exact_hint">8080</string>
     <string name="developer_port_format_error">Formato: início-fim, limite de busca (ex.: 3080-3090,8000)</string>
