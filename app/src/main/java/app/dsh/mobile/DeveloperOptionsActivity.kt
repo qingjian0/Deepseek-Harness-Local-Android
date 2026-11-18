@@ -48,7 +48,8 @@ class DeveloperOptionsActivity : ThemedActivity() {
         val c = EnginePortManager.config(this)
         val actual = EnginePortManager.currentPort(this)
         val mode = if (c.mode == EnginePortManager.Mode.AUTO) "自动端口段 ${c.start}-${c.end}（搜索至 ${c.searchEnd}）" else "精确端口 ${c.exact}"
-        findViewById<android.widget.TextView>(R.id.txtEnginePortSummary).text = "$mode · 当前实际端口：$actual"
+        val reason = EnginePortManager.lastReason(this)
+        findViewById<android.widget.TextView>(R.id.txtEnginePortSummary).text = "$mode · 当前实际端口：$actual · $reason"
     }
 
     private fun showPortSettings() {
