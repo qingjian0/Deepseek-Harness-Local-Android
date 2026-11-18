@@ -134,7 +134,7 @@ object HookAgentBridge {
         }
 
         // The target process polls independently; keep this bounded below the bridge socket timeout.
-        val deadline = SystemClock.elapsedRealtime() + 4_200L
+        val deadline = SystemClock.elapsedRealtime() + 12_000L
         while (SystemClock.elapsedRealtime() < deadline) {
             val result = call(context, METHOD_DISCOVERY_RESULT, Bundle().apply {
                 putString(KEY_DISCOVERY_ID, requestId)
@@ -143,7 +143,7 @@ object HookAgentBridge {
             SystemClock.sleep(150L)
         }
         throw java.util.concurrent.TimeoutException(
-            "Target process did not complete discovery within 4.2 seconds; retry the same query"
+            "Target process did not complete discovery within 12 seconds; retry the same query"
         )
     }
 
