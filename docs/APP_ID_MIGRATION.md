@@ -15,7 +15,7 @@ Android gives each installed application ID its own private data sandbox. A buil
 - Do not uninstall the old package or clear its data as part of this migration.
 - Do not claim that changing `applicationId` automatically carries sessions, profile credentials, plugin settings, or other private files forward.
 - A safe cross-package migration needs an explicit export/import path (for example, a user-selected document/archive) or a separately designed, permission-checked shared-storage migration. Verify the archive and preserve the source until import is confirmed.
-- Audit the existing Data Export/Import feature's coverage of private profile data and credentials before presenting it as a complete migration path.
+- The existing Data Export/Import archive contains `sessions/`, `workspaces/`, and `storages/workspace.json`; it explicitly excludes `profiles/` (API keys and login state), engine extensions, `node_modules`, and symlinks. It is therefore not a full-device/profile migration.
 
 ## Existing data layout and permission behavior
 
