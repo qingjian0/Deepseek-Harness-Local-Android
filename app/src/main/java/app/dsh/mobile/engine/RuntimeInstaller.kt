@@ -635,8 +635,18 @@ class RuntimeInstaller(private val ctx: Context) {
         val node = File(base, "bin/node")
         // 1) 引擎入口 bin.js（MODULE_NOT_FOUND 的直接案发现场）
         if (!File(base, "lib/node_modules/@deepseek-ai/dsh/lib/bin.js").isFile) return false
-        // 2) bash 依赖闭环：readline SONAME 别名（m1.5 事故）
-        if (!File(base, "lib/libreadline.so.8").isFile) return false
+        // 2) Node/busybox 动态链接闭环：不能只查文件存在。
+        //    现场出现过 0 字节 libz.so.1，linker 报 file offset >= file size；
+        //    只检查 isFile 会把损坏库误判成完整运行时。
+        val want = expectedElfMachine()
+        for (name in listOf("libreadline.so.8", "libz.so.1", "libssl.so")) {
+            val lib = File(base, "lib/$name")
+            val problem = RuntimeElfIntegrity.inspect(lib, want)
+            if (problem != null) {
+                Log.e(TAG, "runtime incomplete: $name ${lib.length()} bytes: $problem")
+                return false
+            }
+        }
         // 3) node 本体可执行位（安装器 restoreExecBits 之后应为 true）
         if (!node.canExecute()) return false
         // 4) @deepseek-ai 固定锚点抽样（覆盖入口包、核心框架、内置 profile 层与前端 bundle）
@@ -655,7 +665,6 @@ class RuntimeInstaller(private val ctx: Context) {
             }
         }
         // 5) 架构必须匹配（跨架构 ELF 会在 execve 被 linker 拒绝）
-        val want = expectedElfMachine()
         if (want > 0) {
             val got = elfMachine(node)
             if (got != want) {
