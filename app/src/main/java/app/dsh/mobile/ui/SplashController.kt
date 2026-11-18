@@ -387,6 +387,7 @@ class SplashController(
     private fun stageLabel(key: String): String {
         val resId = when (key) {
             "guardian-restore" -> R.string.boot_step_guardian
+            "port-allocation" -> R.string.boot_step_port_allocation
             "agent-seed" -> R.string.boot_step_seed
             "parallel-preflight" -> R.string.boot_step_parallel_preflight
             "orphan-reap" -> R.string.boot_step_orphans
