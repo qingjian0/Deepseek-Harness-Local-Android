@@ -261,6 +261,32 @@ object LocalEmbedder {
         }
     }
 
+    /** Shared cached single-text embedding used by memory indexing as well as FastPicker. */
+    fun embeddingVector(text: String): List<Float>? {
+        if (text.isBlank() || !isReady()) return null
+        val key = cacheKey(text)
+        cachedVector(key)?.let { return it.map(Double::toFloat) }
+        return runCatching {
+            val body = JSONObject().apply {
+                put("model", "local")
+                put("input", JSONArray().put(text))
+            }.toString()
+            val conn = java.net.URL("http://127.0.0.1:$PORT/v1/embeddings").openConnection()
+            conn.doOutput = true
+            conn.connectTimeout = 2000
+            conn.readTimeout = 2500
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            val response = conn.getInputStream().bufferedReader().use { it.readText() }
+            val vector = parseEmbeddings(response, 1)?.firstOrNull() ?: return@runCatching null
+            rememberVector(key, vector)
+            vector.map(Double::toFloat)
+        }.getOrElse {
+            Log.w(TAG, "single embedding failed: ${it.message}")
+            null
+        }
+    }
+
     fun bestMatch(candidates: List<String>, target: String): Match? {
         if (candidates.isEmpty() || target.isBlank()) return null
         if (!isReady()) return null
