@@ -617,6 +617,7 @@
     <string name="boot_step_userdata">เชื่อมโยงข้อมูลผู้ใช้</string>
     <string name="boot_step_spawn">เปิดตัวกระบวนการเอนจิน</string>
     <string name="boot_step_health">รอตรวจสุขภาพ</string>
+    <string name="boot_step_port_allocation">เลือกพอร์ตแอป</string>
     <string name="setting_boot_trace">การเริ่มต้นครั้งล่าสุด</string>
     <string name="setting_boot_trace_sub">ระยะเวลาและจำนวนไฟล์จากการบูตครั้งล่าสุด</string>
     <string name="boot_trace_title">รายละเอียดการเริ่มต้นครั้งล่าสุด</string>
