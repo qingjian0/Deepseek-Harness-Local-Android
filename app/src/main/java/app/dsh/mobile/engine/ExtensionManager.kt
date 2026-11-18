@@ -29,8 +29,12 @@ import java.util.Collections
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLongArray
 import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -624,27 +628,20 @@ class ExtensionManager(private val ctx: Context) {
      *  纯网络段，可多扩展并发（每扩展独立 cacheDir，互不干扰）；
      *  解包/发布在 [installPhase]。
      *  @param rotatePreferred 索引源改用 mirrors[1]（自愈重试：规避 CDN 陈旧索引） */
-    private fun downloadPhase(
+    private suspend fun downloadPhase(
         ext: Extension, rotatePreferred: Boolean = false, report: (Float?, String) -> Unit,
     ): DownloadedDebs {
         val cacheDir = File(ctx.cacheDir, "ext-${ext.id}").apply { mkdirs() }
         val allMirrors = mirrors().ifEmpty {
             listOf("https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main")
         }
-        report(0f, "Resolving dependency closure…")   // 0 = indeterminate：解析/索引阶段无确定字节量，UI 转旋转动画
-        // v1.4.20（issue #47）：packages 为空时 first() 抛「List is empty」——
-        // 报错完全不可读（用户以为 App 坏了）。catalog 条目既无 apkUrl 又无
-        // packages 属于条目损坏，这里给出可操作的错误。
+        report(0f, "Resolving dependency closure…")
         if (ext.packages.isEmpty()) {
             throw IllegalStateException(
                 "Catalog entry '${ext.id}' has no packages and no APK URL — " +
                     "the entry is broken; please report this with a screenshot"
             )
         }
-        // v1.6.20：linuxOnly 条目在 Termux 模式下**必然**失败（包只存在于 Alpine
-        // 仓库）。UI 已置灰并说明原因，这里是第二道防线 —— 防止 AI 通道或其他
-        // 入口绕过 UI 直接调起安装，让用户看到「Package gcovr is not in the
-        // Termux repository index」这种像 bug 的文案。
         if (ext.linuxOnly) {
             throw IllegalStateException(
                 "Extension '${ext.name}' is only available in Linux container mode — " +
@@ -657,32 +654,40 @@ class ExtensionManager(private val ctx: Context) {
         val mainPkg = index[ext.packages.first()]
             ?: throw IllegalStateException("Package ${ext.packages.first()} is not in the repository index")
         Log.i(TAG, "download ${ext.id}: ${closure.size} pkgs, ${closure.sumOf { it.size } / 1048576}MB index=${preferred}")
-        // 包名清单：诊断「载荷错位」类问题（如 ffmpeg 目录出现 python3.14 —— Agent 实测）
-        // 时用来核对闭包内容 —— 若是闭包污染此处直接可见
         Log.i(TAG, "download ${ext.id} closure: " + closure.joinToString(",") { it.name })
 
-        // 逐包下载 + SHA256 强校验（进度按字节累计，占 0~0.95）
+        // Download independent .deb files concurrently. Extraction and atomic publication remain serial.
+        // Do not reuse dlSemaphore here: installTask already owns one of its permits.
+        val packageSemaphore = Semaphore(4)
         val totalBytes = closure.sumOf { it.size }.coerceAtLeast(1)
-        var done = 0L
-        val debs = mutableListOf<File>()
-        closure.forEachIndexed { idx, p ->
-            // ★ 净化后再拼文件名（v1.7.12）。name/version 来自 Packages.gz 索引，
-            //   索引一旦被篡改（镜像劫持 / TLS 被破），"../../../data/data/..." 这种
-            //   名字会让 uid 1000 的 App 在**自己的权限范围内**读写任意位置。
-            //   这是纵深缺口（前提已是镜像被破），但封住它成本几乎为零。
-            val f = File(cacheDir, safeFilePart(p.name) + "_" + safeFilePart(p.version) + ".deb")
-            val label = "${ext.name} package ${idx + 1}/${closure.size}"
-            downloadDebWithFailover(allMirrors, p.filename, f, label, { s -> report(null, s) }) { frac ->
-                report(((done + p.size * frac).toDouble() / totalBytes).toFloat() * 0.95f, "")
-            }
-            check(p.sha256.isEmpty() || RuntimeInstaller.sha256(f) == p.sha256.lowercase()) {
-                // 校验失败必须顺手删掉这个坏文件：否则它以正式文件名留在 cacheDir，
-                // 后续重试/自愈若命中故障路径，会把「已存在的坏文件」当成可用产物。
-                runCatching { f.delete() }
-                "SHA-256 verification failed: ${p.name} (corrupt mirror data?)"
-            }
-            done += p.size
-            debs.add(f)
+        val completedBytes = AtomicLongArray(closure.size)
+        val progressLock = Any()
+        val debs = coroutineScope {
+            closure.mapIndexed { idx, pkg ->
+                async(Dispatchers.IO) {
+                    packageSemaphore.acquire()
+                    try {
+                        val file = File(cacheDir, safeFilePart(pkg.name) + "_" + safeFilePart(pkg.version) + ".deb")
+                        val label = "${ext.name} package ${idx + 1}/${closure.size}"
+                        downloadDebWithFailover(allMirrors, pkg.filename, file, label, { stage ->
+                            synchronized(progressLock) { report(null, stage) }
+                        }) { fraction ->
+                            completedBytes.set(idx, (pkg.size * fraction).toLong().coerceIn(0L, pkg.size))
+                            val done = (0 until closure.size).sumOf { completedBytes.get(it) }
+                            synchronized(progressLock) {
+                                report((done.toDouble() / totalBytes).toFloat() * 0.95f, "")
+                            }
+                        }
+                        check(pkg.sha256.isEmpty() || RuntimeInstaller.sha256(file) == pkg.sha256.lowercase()) {
+                            runCatching { file.delete() }
+                            "SHA-256 verification failed: ${pkg.name} (corrupt mirror data?)"
+                        }
+                        file
+                    } finally {
+                        packageSemaphore.release()
+                    }
+                }
+            }.awaitAll()
         }
         return DownloadedDebs(debs, mainPkg.version, cacheDir, closure)
     }

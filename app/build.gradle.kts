@@ -10,6 +10,26 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Fork-only identity lives outside upstream-owned files. Keep namespace stable so
+// upstream Kotlin package paths and manifest class names remain untouched.
+private data class ForkBuildIdentity(
+    val applicationId: String,
+    val versionSuffix: String,
+)
+
+private val forkBuildIdentity: ForkBuildIdentity = run {
+    val props = Properties()
+    rootProject.file("fork.properties").takeIf { it.isFile }?.inputStream()?.use(props::load)
+    val appId = props.getProperty("applicationId", "app.dsh.mobile").trim()
+    val suffix = props.getProperty("versionSuffix", "").trim()
+    val validId = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")
+    if (!validId.matches(appId)) throw GradleException("Invalid fork applicationId: $appId")
+    if (suffix.any { it.isWhitespace() || it == '/' || it == '\\' }) {
+        throw GradleException("Invalid fork versionSuffix: $suffix")
+    }
+    ForkBuildIdentity(appId, suffix)
+}
+
 // 构建目标 ABI 可由 -Pabi=x86_64 覆盖（CI 双架构矩阵 / 模拟器测试用），默认真机 arm64
 val targetAbi = (project.findProperty("abi") as String?) ?: "arm64-v8a"
 
@@ -236,7 +256,7 @@ android {
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
-        applicationId = "app.dsh.mobile"
+        applicationId = forkBuildIdentity.applicationId
         minSdk = 26
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
@@ -292,7 +312,7 @@ android {
         // （见 android-build.yml:68-86）：v1.5.0（正式版，prerelease: false）与
         // v1.5.0-beta.2（试发行，prerelease: true），但 tag 必须与 versionName 完全拼得上
         // （publish-release 的 `test "$GITHUB_REF_NAME" = "v$V"`），所以打 tag 前先确认这里。
-        versionName = "1.6.0-beta.16"
+        versionName = "1.6.0-beta.16${forkBuildIdentity.versionSuffix}"
 
         ndk {
             abiFilters += listOf(targetAbi)

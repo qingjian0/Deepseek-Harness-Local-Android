@@ -53,7 +53,7 @@ object RemoteAccessServer {
     private const val TAG = "RemoteAccessSrv"
 
     /** 独立端口（3080 引擎 / 3083 桥 / 3090 LAN 网页代理都已占用）。 */
-    const val PORT = 3091
+    val PORT: Int get() = ServicePortConfig.remoteAccessPort
 
     /** `/pair` 每来源 IP 的最大尝试次数（窗口期内）。 */
     private const val MAX_PAIR_ATTEMPTS = 10
@@ -87,6 +87,7 @@ object RemoteAccessServer {
 
     /** 启动（幂等）。总开关没开时直接返回 —— 调用方不需要再判一次。 */
     fun start(ctx: Context) {
+        ServicePortConfig.initialize(ctx)
         appCtx = ctx.applicationContext
         if (!RemoteAccess.isEnabled(ctx)) {
             Log.i(TAG, "not starting: remote access disabled")
@@ -321,7 +322,7 @@ object RemoteAccessServer {
         # messages into mojibake. Use English here, not resource strings.
         set -e
 
-        BASE="${'$'}{DSH_PHONE_BASE:-http://__PHONE_IP__:3091}"
+        BASE="${'$'}{DSH_PHONE_BASE:-http://__PHONE_IP__:__PHONE_PORT__}"
         # The key is already inlined below (it came from the ?key= of this request).
         # DSH_PHONE_KEY can still override it, e.g. after re-pairing with a new device.
         KEY="${'$'}{DSH_PHONE_KEY:-__KEY_PLACEHOLDER__}"
@@ -360,6 +361,7 @@ object RemoteAccessServer {
         echo "  dev api POST /dev/tap '{\"text\":\"OK\"}'"
     """.trimIndent()
         .replace("__PHONE_IP__", LanAddress.best() ?: "127.0.0.1")
+        .replace("__PHONE_PORT__", PORT.toString())
         // Keys are 64-char hex; anything else means the caller did not really pass one.
         .replace("__KEY_PLACEHOLDER__", key.takeIf { it.matches(Regex("[A-Za-z0-9_-]{8,256}")) } ?: "PASTE_YOUR_KEY_HERE")
 

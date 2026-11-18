@@ -8,6 +8,8 @@ import org.junit.Test
 class EnginePortManagerTest {
     @Test fun reservedInternalPortsAreSkipped() {
         assertFalse(EnginePortManager.isCandidateAvailable(3081) { it != 3083 })
+        assertFalse(EnginePortManager.isCandidateAvailable(3083) { true })
+        assertFalse(EnginePortManager.isCandidateAvailable(3085) { true })
         assertTrue(EnginePortManager.isCandidateAvailable(3084) { true })
     }
 

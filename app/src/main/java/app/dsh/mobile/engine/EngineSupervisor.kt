@@ -673,6 +673,7 @@ class EngineSupervisor(private val ctx: Context) {
         // 没有总预算 —— 用户实测能空转 20 分钟以上，界面一直停在准备阶段。
         var userVisibleBootT0 = System.currentTimeMillis()
         while (kotlinx.coroutines.currentCoroutineContext().isActive && !stopping) {
+            ServicePortConfig.activate(ctx)
             // 总时限检查：一旦超预算，收敛为 Failed 并说清发生了什么。
             // 预算只约束「从空闲/停止状态到引擎可用」的这一段连续尝试，两个重置点：
             //   ① 引擎进入 Healthy/SafeMode（成功收尾，见下方 ready 分支）
@@ -1011,6 +1012,14 @@ class EngineSupervisor(private val ctx: Context) {
                         // 新运行时首次 Healthy：确认安装成功，释放 engine.old 回滚备份。
                         runCatching { RuntimeInstaller(ctx).markHealthy() }
                             .onFailure { Log.w(TAG, "runtime markHealthy failed: ${it.message}") }
+                        // Warm an already-downloaded embedding model off the startup path.
+                        // Never download model data automatically: first-time download remains user-triggered.
+                        scopeRef?.launch(Dispatchers.IO) {
+                            if (LocalModel.isModelReady(ctx) && !LocalModel.isServerRunning()) {
+                                val ready = LocalModel.ensureReady(ctx)
+                                if (!ready) Log.i(TAG, "local embedding warmup skipped or unavailable")
+                            }
+                        }
                         // 插件应急总开关（v1.4.27）：恢复动作已收敛且引擎真起来了，
                         // 相位推进到 enabled。⚠️ SafeMode 不确认：那时 profiles 已被
                         // 归档重建，bundles 根本没写回去，标成 enabled 会让用户失去重试。
@@ -1357,6 +1366,8 @@ class EngineSupervisor(private val ctx: Context) {
         // 插件缺失/链接失败时 ensureBundledSshPlugin 返回 null —— 引擎照常启动。
         val patchPaths = ArrayList<String>(2)
         runCatching { EngineConfig.ensureBundledSshPlugin(ctx)?.absolutePath }
+            .getOrNull()?.let { patchPaths.add(it) }
+        runCatching { EngineConfig.ensurePromptOverlay(ctx)?.absolutePath }
             .getOrNull()?.let { patchPaths.add(it) }
         runCatching { EngineConfig.ensureAndroidOverlay(ctx).absolutePath }
             .getOrNull()?.let { patchPaths.add(it) }

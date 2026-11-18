@@ -153,6 +153,9 @@ cp "$ROOT/app/src/main/java/app/dsh/mobile/engine/ExtensionVersionPlan.kt" "$WOR
 # FastPicker.kt 里住着 LocalEmbedder（嵌入服务的端口与就绪探测）。MemoryIndex 复用它，
 # 端口才不会有两处真相；它只依赖 Log + org.json，能进这套纯 JVM 编译。
 cp "$ROOT/app/src/main/java/app/dsh/mobile/engine/FastPicker.kt" "$WORK/src/"
+# FastPicker only needs the embedding port in this pure-JVM suite; Android/JUnit tests
+# exercise the real ServicePortConfig implementation and its offset persistence.
+cp "$ROOT/scripts/jvm/ServicePortConfigStub.kt" "$WORK/src/"
 # MemoryReplay.kt 复用 SceneMemory.fingerprint（锚点校验与 M4 检索必须对同一份文本判断），
 # 而 run() 要碰的 DshAccessibilityService 在宿主 JVM 编不动 —— 由 stub 提供同名签名。
 # stub 与真实服务的一致性由 BehaviourTest.assertStubMatchesService() 读源码钉住。
@@ -185,7 +188,7 @@ echo "== compile =="
 java -Dfile.encoding=UTF-8 -cp "$COMPILER_CP" \
   org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib \
   -cp "$(win "$STD")$sep$(win "$ANDROID_JAR")" -d "$(win "$WORK/out")" \
-  "$(win "$WORK/src/ScreenMask.kt")" "$(win "$WORK/src/ProtectedPages.kt")" "$(win "$WORK/src/ScreenBudget.kt")" "$(win "$WORK/src/ScreenDigest.kt")" "$(win "$WORK/src/Handoff.kt")" "$(win "$WORK/src/PhoneTask.kt")" "$(win "$WORK/src/PhoneAsk.kt")" "$(win "$WORK/src/TaskReport.kt")" "$(win "$WORK/src/OverlayState.kt")" "$(win "$WORK/src/MarkGeometry.kt")" "$(win "$WORK/src/SwipePath.kt")" "$(win "$WORK/src/HumanPace.kt")" "$(win "$WORK/src/IslandChrome.kt")" "$(win "$WORK/src/ContrastColor.kt")" "$(win "$WORK/src/LinuxWorkbenchUiState.kt")" "$(win "$WORK/src/FastMode.kt")" "$(win "$WORK/src/A11yEntry.kt")" "$(win "$WORK/src/ScrollGeometry.kt")" "$(win "$WORK/src/NumFmt.kt")" "$(win "$WORK/src/TraceModel.kt")" "$(win "$WORK/src/TracePruner.kt")" "$(win "$WORK/src/TraceRetention.kt")" "$(win "$WORK/src/MemoryStore.kt")" "$(win "$WORK/src/MemoryCodec.kt")" "$(win "$WORK/src/MemoryIndex.kt")" "$(win "$WORK/src/GuestPaths.kt")" "$(win "$WORK/src/LanAddress.kt")" "$(win "$WORK/src/ExtensionVersionPlan.kt")" "$(win "$WORK/src/FastPicker.kt")" "$(win "$WORK/src/SceneMemory.kt")" "$(win "$WORK/src/MemoryReplay.kt")" "$(win "$WORK/src/DshAccessibilityServiceStub.kt")" "$(win "$WORK/src/BehaviourTest.kt")" "${EXTRA_ARGS[@]}" \
+  "$(win "$WORK/src/ScreenMask.kt")" "$(win "$WORK/src/ProtectedPages.kt")" "$(win "$WORK/src/ScreenBudget.kt")" "$(win "$WORK/src/ScreenDigest.kt")" "$(win "$WORK/src/Handoff.kt")" "$(win "$WORK/src/PhoneTask.kt")" "$(win "$WORK/src/PhoneAsk.kt")" "$(win "$WORK/src/TaskReport.kt")" "$(win "$WORK/src/OverlayState.kt")" "$(win "$WORK/src/MarkGeometry.kt")" "$(win "$WORK/src/SwipePath.kt")" "$(win "$WORK/src/HumanPace.kt")" "$(win "$WORK/src/IslandChrome.kt")" "$(win "$WORK/src/ContrastColor.kt")" "$(win "$WORK/src/LinuxWorkbenchUiState.kt")" "$(win "$WORK/src/FastMode.kt")" "$(win "$WORK/src/A11yEntry.kt")" "$(win "$WORK/src/ScrollGeometry.kt")" "$(win "$WORK/src/NumFmt.kt")" "$(win "$WORK/src/TraceModel.kt")" "$(win "$WORK/src/TracePruner.kt")" "$(win "$WORK/src/TraceRetention.kt")" "$(win "$WORK/src/MemoryStore.kt")" "$(win "$WORK/src/MemoryCodec.kt")" "$(win "$WORK/src/MemoryIndex.kt")" "$(win "$WORK/src/GuestPaths.kt")" "$(win "$WORK/src/LanAddress.kt")" "$(win "$WORK/src/ExtensionVersionPlan.kt")" "$(win "$WORK/src/FastPicker.kt")" "$(win "$WORK/src/ServicePortConfigStub.kt")" "$(win "$WORK/src/SceneMemory.kt")" "$(win "$WORK/src/MemoryReplay.kt")" "$(win "$WORK/src/DshAccessibilityServiceStub.kt")" "$(win "$WORK/src/BehaviourTest.kt")" "${EXTRA_ARGS[@]}" \
   || { echo "FAILED: compilation"; exit 1; }
 
 echo "== run =="

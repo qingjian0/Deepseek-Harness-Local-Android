@@ -37,7 +37,7 @@ object LanWebProxy {
     private const val TAG = "LanWebProxy"
 
     /** 独立端口（禁止占用 3080/3083） */
-    const val PORT = 3090
+    val PORT: Int get() = ServicePortConfig.lanWebPort
 
     /** 「已开启」常驻通知的 channel / id（v1.2.188） */
     private const val NOTIF_CHANNEL = "lan_web"
@@ -70,7 +70,10 @@ object LanWebProxy {
         return java.io.File(parent ?: engine, "dsh-home")
     }
 
-    fun setContext(ctx: android.content.Context) { appCtx = ctx.applicationContext }
+    fun setContext(ctx: android.content.Context) {
+        ServicePortConfig.initialize(ctx)
+        appCtx = ctx.applicationContext
+    }
 
     @Volatile
     private var server: ServerSocket? = null
@@ -95,7 +98,10 @@ object LanWebProxy {
      * 读的是**本机文件**（同 app uid 私有目录），无网络、无外部依赖。
      */
     private fun readEngineToken(): String? = runCatching {
-        val log = java.io.File(ENV_ENGINE_LOG)
+        val ctx = appCtx ?: return@runCatching null
+        // Resolve through the app context: applicationId is fork-configurable and must not
+        // be baked into /data/user/0/<package>/ paths.
+        val log = java.io.File(EngineConfig.engineRoot(ctx), "engine.log")
         if (!log.isFile) return@runCatching null
         var last: String? = null
         log.forEachLine { line ->
@@ -104,8 +110,6 @@ object LanWebProxy {
         }
         last
     }.getOrNull()
-
-    private const val ENV_ENGINE_LOG = "/data/user/0/app.dsh.mobile/files/engine/engine.log"
 
     /**
      * 本机局域网 IPv4（供 UI 显示访问地址）。

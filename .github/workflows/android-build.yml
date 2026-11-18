@@ -1,7 +1,7 @@
 name: android-build
 
 # dsh-android 构建流水线
-# v1.2.120 · 2026-10-13 — 全量触发 + 结果监视
+# v1.2.120 · 2026-10-13 — 主分支 push + PR 检查 + 结果监视
 #
 # 双架构矩阵（arm64-v8a 真机 / x86_64 模拟器）：
 #   build-hardssh —— 解析 npm 最新版本，从上游 Release 取 tgz，组装 APK 内置目录
@@ -16,18 +16,18 @@ name: android-build
 #   tag "runtime"；本流水线只负责取用 + 统一闭包校验，"不重编译" 不等于 "不带
 #   完整运行时" —— full APK 照旧内嵌 runtime.zip，正式 Release 照旧附 2 个 zip。
 #
-# 监视：每次 push / PR / dispatch / 定时都跑，build-monitor 汇总各 legs 的结果
+# 监视：main/dev push、PR、dispatch 和定时触发均由 build-monitor 汇总各 legs 的结果
 # 写入 Step Summary，失败即整红；Gradle 日志按需留存 7 天。
 # ⚠️ Fork 本仓库后 GitHub 会把本 workflow 置为 disabled_fork：
 #    需在 Actions → android-build 页面点一次 “Enable workflow” 才会运行。
-# 触发一览：push(任意分支/tag v*) · pull_request(任意目标分支) · 每日 01:30 Asia/Shanghai · 手动 dispatch
+# 触发一览：push(main/dev/tag v*) · pull_request(任意目标分支) · 每日 01:30 Asia/Shanghai · 手动 dispatch
 # tag 认两种：v<major>.<minor>.<patch>（正式版）与 v<major>.<minor>.<patch>-<预发布标识>
 # （试发行，GitHub 标记 prerelease: true）。后者必须与 versionName 完全一致
 # （例：versionName "1.5.0-beta" → tag v1.5.0-beta）；预览版仍走每日定时的 preview。
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main", "dev"]
     tags: ["v*"]
   pull_request:
   schedule:
@@ -74,7 +74,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   # main 上新 push 取代旧构建，避免并发的 edge 发布互相覆盖（最新提交最终生效）；
   # tag 构建不互相取消，避免半个正式发布。
-  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # ---------------------------------------------------------------------------
