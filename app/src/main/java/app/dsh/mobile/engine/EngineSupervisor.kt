@@ -1053,7 +1053,7 @@ class EngineSupervisor(private val ctx: Context) {
                             ShizukuHttpBridge.start(ctx, activePort)
                             // Restart the optional LAN proxy only after the actual upstream port is known.
                             // The proxy runs independently from the engine and must not keep a stale upstream.
-                            LanWebProxy.stop()
+                            LanWebProxy.stopOwnedForPortRotation()
                             if (app.dsh.mobile.DshApp.lanWebEnabled(ctx)) {
                                 LanWebProxy.setContext(ctx)
                                 LanWebProxy.start(app.dsh.mobile.DshApp.lanWebPassword(ctx))
