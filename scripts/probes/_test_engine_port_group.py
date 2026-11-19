@@ -37,7 +37,7 @@ check("probe never kills unknown processes", "Process.killProcess" not in manage
 
 # Startup ordering is essential: load persisted base -> reap -> select -> bind app services.
 i_load = supervisor.find("EnginePortManager.load(ctx)")
-i_reap = supervisor.find("OrphanReaper.reap(ctx)")
+i_reap = supervisor.find("val reaped = OrphanReaper.reap(ctx)")
 i_select = supervisor.find("EnginePortManager.select(ctx)")
 i_bridge = supervisor.find("AgentBridge.start(ctx)")
 check("load persisted plan before orphan reaper", i_load >= 0 and i_reap > i_load)
