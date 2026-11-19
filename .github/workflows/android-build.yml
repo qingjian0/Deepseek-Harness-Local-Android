@@ -692,11 +692,18 @@ jobs:
       - name: 校验 APK 资产形态（${{ matrix.package }} / ${{ matrix.abi }}）
         run: |
           set -euo pipefail
+          EXPECTED_APPLICATION_ID=$(python3 -c 'from pathlib import Path; p={k.strip():v.strip() for line in Path("fork.properties").read_text().splitlines() if "=" in line and not line.lstrip().startswith("#") for k,v in [line.split("=",1)]}; print(p.get("applicationId",""))')
+          if [ "$EXPECTED_APPLICATION_ID" != "dsh.dsh.mobile" ]; then
+            echo "::error::fork.properties applicationId must be dsh.dsh.mobile, got '$EXPECTED_APPLICATION_ID'"
+            exit 1
+          fi
           python3 scripts/verify-apk-assets.py "$APK_DEBUG" \
-            --expect-package ${{ matrix.package }} --expect-abi ${{ matrix.abi }}
+            --expect-package ${{ matrix.package }} --expect-abi ${{ matrix.abi }} \
+            --expect-application-id "$EXPECTED_APPLICATION_ID"
           if [ -f "$APK_RELEASE" ]; then
             python3 scripts/verify-apk-assets.py "$APK_RELEASE" \
-              --expect-package ${{ matrix.package }} --expect-abi ${{ matrix.abi }}
+              --expect-package ${{ matrix.package }} --expect-abi ${{ matrix.abi }} \
+              --expect-application-id "$EXPECTED_APPLICATION_ID"
           fi
 
       # debug 签名必须固定：否则 edge/preview 的 debug 包签名每版都不同，

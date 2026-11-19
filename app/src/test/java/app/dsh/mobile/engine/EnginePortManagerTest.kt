@@ -34,4 +34,25 @@ class EnginePortManagerTest {
         assertEquals(57533, EnginePortManager.nextBlockOffset(56533))
         assertNull(EnginePortManager.nextBlockOffset(57533))
     }
+
+    @Test fun customEnginePortCannotAliasAnInternalServiceListener() {
+        val ports = ServicePortConfig.portsForOffset(0)
+        assertFalse(EnginePortManager.isPortBlockAvailable(ports, ports.agentBridge) { true })
+        assertFalse(EnginePortManager.isPortBlockAvailable(ports, ports.embedding) { true })
+        assertFalse(EnginePortManager.isPortBlockAvailable(ports, ports.lanWeb) { true })
+        assertFalse(EnginePortManager.isPortBlockAvailable(ports, ports.remoteAccess) { true })
+    }
+
+    @Test fun customEngineCompanionCannotAliasAnInternalServiceListener() {
+        val ports = ServicePortConfig.portsForOffset(0)
+        assertFalse(EnginePortManager.isPortBlockAvailable(ports, ports.agentBridge - 2) { true })
+        assertFalse(EnginePortManager.isPortBlockAvailable(ports, ports.embedding - 2) { true })
+        assertFalse(EnginePortManager.isPortBlockAvailable(ports, ports.lanWeb - 2) { true })
+        assertFalse(EnginePortManager.isPortBlockAvailable(ports, ports.remoteAccess - 2) { true })
+    }
+
+    @Test fun defaultEnginePairRemainsValidAsPartOfItsPortBlock() {
+        val ports = ServicePortConfig.portsForOffset(0)
+        assertTrue(EnginePortManager.isPortBlockAvailable(ports, ports.engine) { true })
+    }
 }
