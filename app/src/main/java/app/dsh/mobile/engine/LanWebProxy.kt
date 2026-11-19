@@ -326,6 +326,26 @@ object LanWebProxy {
         }
     }
 
+    /**
+     * Port rotation variant: stop only the child process handle owned by this
+     * app process. Do not run broad pkill patterns against arbitrary listeners.
+     * A stale process from a previous app process is left untouched; the allocator
+     * will choose a different complete block if its socket is still occupied.
+     */
+    fun stopOwnedForPortRotation() {
+        running.set(false)
+        appCtx?.let { hideLanNotice(it) }
+        val owned = child
+        if (owned != null) {
+            runCatching {
+                owned.destroy()
+                if (!owned.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) owned.destroyForcibly()
+            }.onFailure { Log.w(TAG, "owned LAN proxy stop failed: ${it.message}") }
+        }
+        child = null
+        Log.i(TAG, "owned LAN proxy stopped for port rotation")
+    }
+
     fun stop() {
         running.set(false)
         // v1.2.188：关掉代理时同步撤掉「已开启」常驻通知
