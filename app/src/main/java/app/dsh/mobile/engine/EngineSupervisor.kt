@@ -1534,7 +1534,7 @@ class EngineSupervisor(private val ctx: Context) {
 
         // These are all app-owned services. They are restarted on their normal
         // lifecycle paths after the engine becomes healthy.
-        LanWebProxy.stop()
+        LanWebProxy.stopOwnedForPortRotation()
         ShizukuHttpBridge.stop()
         RemoteAccessServer.stop()
         AgentBridge.stop()
