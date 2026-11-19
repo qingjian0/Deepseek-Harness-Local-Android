@@ -804,7 +804,11 @@ class EngineSupervisor(private val ctx: Context) {
                                 // v1.7.1：远程访问总开关开着就一并起 3091（发现+配对）。
                                 // 放在这里而不是 App.onCreate：它依赖 DSH_HOME 与引擎目录，
                                 // 必须等 preflight 落盘之后才有意义。
-                                if (RemoteAccess.isEnabled(ctx)) RemoteAccessServer.start(ctx)
+                                if (RemoteAccess.isEnabled(ctx)) {
+                                    check(RemoteAccessServer.start(ctx)) {
+                                        "remote access bind failed on ${RemoteAccessServer.PORT}: ${RemoteAccessServer.lastBindError ?: "unknown error"}"
+                                    }
+                                }
                             }
                         },
                     ).awaitAll()
@@ -1182,7 +1186,10 @@ class EngineSupervisor(private val ctx: Context) {
                 val bridgeError = AgentBridge.lastBindError.orEmpty()
                 val bridgePortConflict = bridgeError.contains("EADDRINUSE", ignoreCase = true) ||
                     bridgeError.contains("address already in use", ignoreCase = true)
-                looksLikePortConflict() || bridgePortConflict ||
+                val remoteError = RemoteAccessServer.lastBindError.orEmpty()
+                val remotePortConflict = remoteError.contains("EADDRINUSE", ignoreCase = true) ||
+                    remoteError.contains("address already in use", ignoreCase = true)
+                looksLikePortConflict() || bridgePortConflict || remotePortConflict ||
                     (deterministicFailure != null && portInUse())
             }
             if (portEvidence) {
@@ -1545,7 +1552,11 @@ class EngineSupervisor(private val ctx: Context) {
         check(AgentBridge.start(ctx)) {
             "agent bridge bind failed after port reallocation on ${AgentBridge.PORT}: ${AgentBridge.lastBindError ?: "unknown error"}"
         }
-        if (RemoteAccess.isEnabled(ctx)) RemoteAccessServer.start(ctx)
+        if (RemoteAccess.isEnabled(ctx)) {
+            check(RemoteAccessServer.start(ctx)) {
+                "remote access bind failed after port reallocation on ${RemoteAccessServer.PORT}: ${RemoteAccessServer.lastBindError ?: "unknown error"}"
+            }
+        }
 
         Log.w(
             TAG,
