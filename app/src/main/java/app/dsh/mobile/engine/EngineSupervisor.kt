@@ -1181,14 +1181,27 @@ class EngineSupervisor(private val ctx: Context) {
                 totalPortReclaims++
                 if (totalPortReclaims <= EngineConfig.MAX_PORT_RECLAIMS) {
                     portReclaimCount++
-                    withContext(Dispatchers.IO) { reclaimPort() }
-                    deterministicFailure = null   // 已处置，不计入 guardian（与配置无关）
+                    // A failed bind must invalidate the cached block. Stop only our own
+                    // listeners, reap only our own stale engine processes, then probe and
+                    // move the COMPLETE application block (engine +2, bridge, embedding,
+                    // LAN and remote-access) together. Never kill a foreign listener.
+                    val reallocated = withContext(Dispatchers.IO) {
+                        reallocatePortBlockAfterConflict()
+                    }
+                    if (!reallocated) {
+                        failTerminal(
+                            ctx.getString(R.string.error_port_foreign, activePort),
+                            overrideCause = EngineTriage.Cause.PORT_FOREIGN,
+                        )
+                        break
+                    }
+                    deterministicFailure = null   // 已重新分配端口，不计入 guardian（与配置无关）
                     // ⚠️ v1.4.6（审查 P0）：这里**绝不能**重置 backoffIndex。
                     // 旧实现重置它，且 `portReclaimCount` 满了又归零，于是计数永远在
                     // 0..8 循环、退避永远停在 0~2 秒 —— MAX_RESTART(14) 永远到不了，
                     // 端口被外来进程长期占用时就是「每 2 秒 spawn 一次 node、立刻死」
                     // 的永久循环（耗电、发热、UI 抖动，且永不进 Failed）。
-                    delay(1_200)                  // 等端口真正释放再下一轮
+                    delay(1_200)                  // 新端口组完成绑定后再启动引擎
                 } else {
                     // 累计清场额度用尽：端口被外部进程占着，不是我们能修的问题。
                     // 明确进入 Failed 并给出可读原因，而不是无限重试。
@@ -1491,6 +1504,49 @@ class EngineSupervisor(private val ctx: Context) {
      * 「端口本来就空闲」的情况下走完了超时分支（Android 上 connect 到
      * 未监听端口在某些机型会先 SYN 超时而不是立刻 RST）。
      */
+    /**
+     * Rebuild the app-owned port block after an actual EADDRINUSE failure.
+     *
+     * The normal allocator runs before listeners bind. Once startup has progressed,
+     * AgentBridge/RemoteAccess/embedding/LAN/Shizuku may already own sockets in that
+     * block, so simply calling select() would mistake our own listeners for foreign
+     * conflicts. Stop those owned listeners first, reap only our stale engine tree,
+     * then let the allocator probe and persist the next free +1000 block.
+     */
+    private fun reallocatePortBlockAfterConflict(): Boolean = runCatching {
+        val previous = activePort
+        Log.w(TAG, "port conflict on $previous; rebuilding the complete application port block")
+
+        // These are all app-owned services. They are restarted on their normal
+        // lifecycle paths after the engine becomes healthy.
+        LanWebProxy.stop()
+        ShizukuHttpBridge.stop()
+        RemoteAccessServer.stop()
+        AgentBridge.stop()
+        LocalModel.stop()
+
+        runCatching { OrphanReaper.reap(ctx) }
+            .onFailure { Log.w(TAG, "orphan reap before port reallocation failed: ${it.message}") }
+
+        val selection = EnginePortManager.select(ctx)
+        activePort = selection.port
+        EnginePortManager.remember(ctx, selection)
+        portBlockSelected = true
+
+        // AgentBridge is required during engine startup; rebind it on the new block.
+        AgentBridge.start(ctx)
+        if (RemoteAccess.isEnabled(ctx)) RemoteAccessServer.start(ctx)
+
+        Log.w(
+            TAG,
+            "port block reallocated: engine $previous -> ${selection.port} " +
+                "(offset +${ServicePortConfig.offset(ctx)}, ${selection.reason})",
+        )
+        true
+    }.onFailure {
+        Log.e(TAG, "complete port block reallocation failed", it)
+    }.getOrDefault(false)
+
     private fun portInUse(port: Int = activePort, timeoutMs: Int = 120): Boolean {
         return try {
             java.net.Socket().use { s ->
