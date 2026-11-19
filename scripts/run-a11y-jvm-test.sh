@@ -153,6 +153,7 @@ cp "$ROOT/app/src/main/java/app/dsh/mobile/engine/ExtensionVersionPlan.kt" "$WOR
 # FastPicker.kt 里住着 LocalEmbedder（嵌入服务的端口与就绪探测）。MemoryIndex 复用它，
 # 端口才不会有两处真相；它只依赖 Log + org.json，能进这套纯 JVM 编译。
 cp "$ROOT/app/src/main/java/app/dsh/mobile/engine/FastPicker.kt" "$WORK/src/"
+cp "$ROOT/app/src/main/java/app/dsh/mobile/engine/EnginePortManager.kt" "$WORK/src/"
 # MemoryReplay.kt 复用 SceneMemory.fingerprint（锚点校验与 M4 检索必须对同一份文本判断），
 # 而 run() 要碰的 DshAccessibilityService 在宿主 JVM 编不动 —— 由 stub 提供同名签名。
 # stub 与真实服务的一致性由 BehaviourTest.assertStubMatchesService() 读源码钉住。
