@@ -798,9 +798,21 @@ test -x "$ROOT/bin/bash" || { echo "错误：缺少可执行 bin/bash" >&2; exit
 test -x "$ROOT/bin/rg" || { echo "错误：缺少可执行 bin/rg（Termux ripgrep）" >&2; exit 1; }
 # SONAME 精确文件名（Android linker 按 NEEDED 逐字查找，模糊存在不算数）
 for so in libreadline.so.8 libhistory.so.8 libncursesw.so.6 libncurses.so.6 \
-          libiconv.so libpcre2-8.so; do
+          libiconv.so libpcre2-8.so libz.so.1; do
   test -e "$ROOT/lib/$so" || { echo "错误：SONAME 库 lib/$so 缺失" >&2; exit 1; }
 done
+test -s "$ROOT/lib/libz.so.1" || { echo "错误：lib/libz.so.1 为空" >&2; exit 1; }
+python3 - "$ROOT/lib/libz.so.1" "$ARCH" <<'PY'
+import sys
+path, arch = sys.argv[1:]
+head = open(path, "rb").read(20)
+want = {"aarch64": 183, "x86_64": 62}[arch]
+if len(head) < 20 or head[:4] != b"\x7fELF":
+    raise SystemExit(f"错误：libz.so.1 不是有效 ELF（{len(head)} header bytes）")
+got = int.from_bytes(head[18:20], "little")
+if got != want:
+    raise SystemExit(f"错误：libz.so.1 ABI 不匹配：e_machine={got}, expected={want}")
+PY
 # 工具 wrapper
 test -x "$ROOT/bin/pnpm" || { echo "错误：bin/pnpm wrapper 缺失" >&2; exit 1; }
 test -x "$ROOT/bin/curl" || { echo "错误：bin/curl wrapper 缺失" >&2; exit 1; }

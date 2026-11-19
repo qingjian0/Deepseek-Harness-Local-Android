@@ -141,10 +141,22 @@ object SelfCheck {
         val lib = File(root, "lib")
         val needLibs = listOf("libreadline.so.8", "libz.so.1", "libssl.so")
         val missing = needLibs.filter { !File(lib, it).isFile }
-        out += if (missing.isEmpty()) {
-            Item("runtime.libs", "Runtime libraries", Item.Status.OK, needLibs.joinToString(", "))
+        val zlib = File(lib, "libz.so.1")
+        val expectedMachine = when (Build.SUPPORTED_ABIS.firstOrNull()) {
+            "arm64-v8a" -> 183
+            "x86_64" -> 62
+            "armeabi-v7a" -> 40
+            else -> 0
+        }
+        val zlibValid = zlib.isFile && zlib.length() >= 20 &&
+            (expectedMachine == 0 || ReadElfMachine(zlib) == expectedMachine)
+        val libProblems = missing + if (zlibValid) emptyList() else listOf(
+            "libz.so.1 invalid/empty ELF (${zlib.length()} bytes)",
+        )
+        out += if (libProblems.isEmpty()) {
+            Item("runtime.libs", "Runtime libraries", Item.Status.OK, needLibs.joinToString(", ") + " (libz ELF valid)")
         } else {
-            Item("runtime.libs", "Runtime libraries", Item.Status.FAIL, "missing: ${missing.joinToString(", ")}")
+            Item("runtime.libs", "Runtime libraries", Item.Status.FAIL, libProblems.joinToString(", "))
         }
 
         // 架构：与设备 ABI 比对（跨架构会让 execve 直接被 linker 拒绝）

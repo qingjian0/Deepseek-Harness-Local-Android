@@ -54,6 +54,11 @@ def main() -> int:
     for i in infos:
         if i.is_dir() or not i.filename.startswith("lib/") or not is_so(i.filename):
             continue
+        # Keep zlib SONAME files as ordinary payloads. Node needs libz at process
+        # startup; alias compaction has previously yielded a zero-byte libz.so.1
+        # on-device, which Android's linker rejects before Node can run.
+        if i.filename.rsplit("/", 1)[-1].startswith("libz.so"):
+            continue
         if i.compress_size == 0 and i.file_size == 0:
             continue
         h = hashlib.sha256(src.read(i.filename)).hexdigest()

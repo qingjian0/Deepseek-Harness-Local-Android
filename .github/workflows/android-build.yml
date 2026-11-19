@@ -230,9 +230,10 @@ jobs:
           test -x runtime-check/bin/rg
           # SONAME 精确文件名（Android linker 按 NEEDED 逐字查找）
           for so in libreadline.so.8 libhistory.so.8 libncursesw.so.6 libncurses.so.6 \
-                    libiconv.so libpcre2-8.so; do
+                    libiconv.so libpcre2-8.so libz.so.1; do
             test -e "runtime-check/lib/$so" || { echo "::error::SONAME 库 lib/$so 缺失"; exit 1; }
           done
+          test -s runtime-check/lib/libz.so.1 || { echo "::error::libz.so.1 is empty"; exit 1; }
           # 工具 wrapper（m1.6.8 真机验证版）
           test -x runtime-check/bin/pnpm
           test -x runtime-check/bin/curl
