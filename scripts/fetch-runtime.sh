@@ -199,15 +199,19 @@ if api_asset "latest" "runtime-${ABI}.zip" "$WORK/runtime-${ABI}.zip" \
         got="$(python3 -c \
           'import json,sys;print(json.load(open(sys.argv[1])).get("scriptsSha256",""))' \
           "$WORK/runtime-inputs.json" 2>/dev/null || true)"
-        if [ -n "$got" ] && [ "$got" != "$EXPECT_SHA" ]; then
+        if [ "$got" != "$EXPECT_SHA" ]; then
           if [ "$STRICT" = "1" ]; then
             rm -f "$OUT" "$META"
-            strict_fail "tag/正式构建要求 runtime 与当前脚本指纹一致，但 releases/latest 是别的版本。
-下一步：Actions → runtime-build → Run workflow（勾 force）发布新运行时，成功后再重跑本构建。"
+            strict_fail "tag/正式构建要求 runtime 与当前脚本指纹一致，但 releases/latest 是别的版本。\n下一步：Actions → runtime-build → Run workflow（勾 force）发布新运行时，成功后再重跑本构建。"
           fi
           echo "warn: tier 2 指纹不一致（${got:-none} vs ${EXPECT_SHA:0:12}…），降级到 tier 3 本地重建" >&2
           rm -f "$OUT" "$META"
         fi
+      else
+        # Without a fingerprint the stable release cannot prove it matches current
+        # collector/patch scripts. On fingerprinted CI builds, force tier-3 rebuild.
+        echo "warn: tier 2 缺少 runtime-inputs.json，无法证明运行时与当前脚本一致，降级到 tier 3 本地重建" >&2
+        rm -f "$OUT" "$META"
       fi
     fi
     if [ -f "$OUT" ]; then
