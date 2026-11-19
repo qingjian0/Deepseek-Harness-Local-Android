@@ -40,6 +40,10 @@ check("bind race rotates without reclaiming foreign listener", (
     and supervisor.find("if (bindConflict)") < supervisor.find("val portEvidence")
     and "rotateAfterBindConflict(ctx)" in supervisor
 ))
+check("port rotation rebinds app-owned companion listeners", all(x in supervisor for x in (
+    "AgentBridge.stop()", "AgentBridge.start(ctx)", "RemoteAccessServer.stop()",
+    "RemoteAccessServer.start(ctx)",
+)))
 
 # Startup ordering is essential: load persisted base -> reap -> select -> bind app services.
 i_load = supervisor.find("EnginePortManager.load(ctx)")
