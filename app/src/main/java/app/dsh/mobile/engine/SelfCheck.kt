@@ -85,6 +85,7 @@ object SelfCheck {
         val t0 = System.currentTimeMillis()
         val items = mutableListOf<Item>()
 
+        items += checkAppIdentity(ctx)
         items += checkRuntime(ctx)
         items += checkStorage(ctx)
         items += checkSymlinks(ctx)
@@ -102,6 +103,21 @@ object SelfCheck {
                 .appendText("\n[self-check]\n" + summarize(r) + "\n")
         }
         return r
+    }
+
+    private fun checkAppIdentity(ctx: Context): List<Item> {
+        val actual = ctx.packageName
+        val expected = "dsh.dsh.mobile"
+        return listOf(
+            if (actual == expected) {
+                Item("app.identity", "Installed package", Item.Status.OK, actual)
+            } else {
+                Item(
+                    "app.identity", "Installed package", Item.Status.WARN,
+                    "actual=$actual expected=$expected — app data remains in the actual package sandbox",
+                )
+            },
+        )
     }
 
     // ── 1. 运行时 ──────────────────────────────────────────────────────────
@@ -140,11 +156,21 @@ object SelfCheck {
 
         val lib = File(root, "lib")
         val needLibs = listOf("libreadline.so.8", "libz.so.1", "libssl.so")
-        val missing = needLibs.filter { !File(lib, it).isFile }
-        out += if (missing.isEmpty()) {
-            Item("runtime.libs", "Runtime libraries", Item.Status.OK, needLibs.joinToString(", "))
+        val expectedLibMachine = when (Build.SUPPORTED_ABIS.firstOrNull()) {
+            "arm64-v8a" -> 183
+            "x86_64" -> 62
+            "armeabi-v7a" -> 40
+            else -> 0
+        }
+        val badLibs = needLibs.mapNotNull { name ->
+            val file = File(lib, name)
+            val problem = RuntimeElfIntegrity.inspect(file, expectedLibMachine)
+            problem?.let { "$name (${file.length()} bytes: $it)" }
+        }
+        out += if (badLibs.isEmpty()) {
+            Item("runtime.libs", "Runtime libraries", Item.Status.OK, needLibs.joinToString(", ") + " — ELF verified")
         } else {
-            Item("runtime.libs", "Runtime libraries", Item.Status.FAIL, "missing: ${missing.joinToString(", ")}")
+            Item("runtime.libs", "Runtime libraries", Item.Status.FAIL, "invalid: ${badLibs.joinToString("; ")}")
         }
 
         // 架构：与设备 ABI 比对（跨架构会让 execve 直接被 linker 拒绝）
