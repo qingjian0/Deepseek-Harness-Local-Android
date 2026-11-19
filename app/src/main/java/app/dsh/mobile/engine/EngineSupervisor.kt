@@ -798,7 +798,9 @@ class EngineSupervisor(private val ctx: Context) {
                         async { runParallelInit("log-sweep") { LogJanitor.sweep(ctx); Unit } },
                         async {
                             runParallelInit("bridge") {
-                                AgentBridge.start(ctx)
+                                check(AgentBridge.start(ctx)) {
+                                    "agent bridge bind failed on ${AgentBridge.PORT}: ${AgentBridge.lastBindError ?: "unknown error"}"
+                                }
                                 // v1.7.1：远程访问总开关开着就一并起 3091（发现+配对）。
                                 // 放在这里而不是 App.onCreate：它依赖 DSH_HOME 与引擎目录，
                                 // 必须等 preflight 落盘之后才有意义。
@@ -1175,10 +1177,13 @@ class EngineSupervisor(private val ctx: Context) {
                 Log.i(TAG, "crash detected — stale app processes handled by OrphanReaper; allocator will choose a free port")
             }
             val portEvidence = withContext(Dispatchers.IO) {
-                // EADDRINUSE is authoritative even when the foreign socket is bound but
-                // not listening: a loopback connect would be refused, while bind() still
-                // fails. Fall back to connect-based evidence for silent process exits.
-                looksLikePortConflict() || (deterministicFailure != null && portInUse())
+                // Bind errors are authoritative even when a socket is bound but not
+                // listening: loopback connect may be refused while ServerSocket.bind fails.
+                val bridgeError = AgentBridge.lastBindError.orEmpty()
+                val bridgePortConflict = bridgeError.contains("EADDRINUSE", ignoreCase = true) ||
+                    bridgeError.contains("address already in use", ignoreCase = true)
+                looksLikePortConflict() || bridgePortConflict ||
+                    (deterministicFailure != null && portInUse())
             }
             if (portEvidence) {
                 totalPortReclaims++
@@ -1537,7 +1542,9 @@ class EngineSupervisor(private val ctx: Context) {
         portBlockSelected = true
 
         // AgentBridge is required during engine startup; rebind it on the new block.
-        AgentBridge.start(ctx)
+        check(AgentBridge.start(ctx)) {
+            "agent bridge bind failed after port reallocation on ${AgentBridge.PORT}: ${AgentBridge.lastBindError ?: "unknown error"}"
+        }
         if (RemoteAccess.isEnabled(ctx)) RemoteAccessServer.start(ctx)
 
         Log.w(
