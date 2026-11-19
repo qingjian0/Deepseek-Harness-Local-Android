@@ -53,10 +53,12 @@ verify_zip() {
 
   test -x "$tmp/bin/bash" || { echo "错误：缺少 bin/bash" >&2; return 1; }
   test -x "$tmp/bin/rg" || { echo "错误：缺少 bin/rg" >&2; return 1; }
-  for so in libreadline.so.8 libhistory.so.8 libncursesw.so.6 libncurses.so.6 \
+  for so in libreadline.so.8 libz.so.1 libssl.so libhistory.so.8 libncursesw.so.6 libncurses.so.6 \
             libiconv.so libpcre2-8.so; do
     test -e "$tmp/lib/$so" || { echo "错误：SONAME 库 lib/$so 缺失" >&2; return 1; }
   done
+  # ZIP 去重别名本来就是 0 字节 + LINK:<target> 注释；不能直接检查解压后的别名。
+  python3 "$SCRIPT_DIR/verify-runtime-libraries.py" "$zip" --abi "$ABI"
   test -x "$tmp/bin/pnpm" || { echo "错误：缺少 bin/pnpm" >&2; return 1; }
   test -x "$tmp/bin/curl" || { echo "错误：缺少 bin/curl" >&2; return 1; }
   test -e "$tmp/usr/bin/.keep" || { echo "错误：usr/bin 丢失" >&2; return 1; }
