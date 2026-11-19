@@ -229,10 +229,12 @@ jobs:
           test -x runtime-check/bin/bash
           test -x runtime-check/bin/rg
           # SONAME 精确文件名（Android linker 按 NEEDED 逐字查找）
-          for so in libreadline.so.8 libhistory.so.8 libncursesw.so.6 libncurses.so.6 \
+          for so in libreadline.so.8 libz.so.1 libssl.so libhistory.so.8 libncursesw.so.6 libncurses.so.6 \
                     libiconv.so libpcre2-8.so; do
             test -e "runtime-check/lib/$so" || { echo "::error::SONAME 库 lib/$so 缺失"; exit 1; }
           done
+          # Validate actual ZIP payloads and resolve LINK aliases; Info-ZIP alone extracts aliases as empty files.
+          python3 scripts/verify-runtime-libraries.py runtime.zip --abi "${{ matrix.abi }}"
           # 工具 wrapper（m1.6.8 真机验证版）
           test -x runtime-check/bin/pnpm
           test -x runtime-check/bin/curl
@@ -571,7 +573,18 @@ jobs:
           if [ "${{ matrix.package }}" = "full" ]; then
             ARGS+=(-PruntimeZip="${{ github.workspace }}/runtime-dist/runtime.zip")
           fi
+          # Run the new ELF integrity JVM regression suite once per workflow, not once per ABI/package lane.
+          if [ "${{ matrix.abi }}" = "arm64-v8a" ] && [ "${{ matrix.package }}" = "full" ]; then
+            gradle -p . :app:testDebugUnitTest "${ARGS[@]}" --stacktrace 2>&1 | tee runtime-unit-tests.log
+          fi
           gradle -p . assembleDebug "${ARGS[@]}" --stacktrace 2>&1 | tee build-${{ matrix.abi }}-${{ matrix.package }}.log
+          # Verify the installed package identity from the actual APK manifest, not Gradle source alone.
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -x "$AAPT"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='dsh.dsh.mobile'"
           if [ -n "${DSH_RELEASE_STORE_PASSWORD:-}" ] && [ -f keystore/dsh-release.keystore ]; then
             # -PrequireReleaseSigning=true：正式包缺私钥时必须失败，不能产出
             # app-release-unsigned.apk 让发布链路误当正式包上传。
