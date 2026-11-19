@@ -547,7 +547,7 @@ object EngineTriage {
         )
     }
 
-    private const val PKG = "app.dsh.mobile"
+    private const val PKG = "dsh.dsh.mobile"
 
     // ── 事实采集 ──────────────────────────────────────────────────────────
     //

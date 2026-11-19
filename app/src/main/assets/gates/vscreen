@@ -53,11 +53,11 @@ fi
 DIR=$(cd "$(dirname "$0")" && pwd)
 if [ -f "$DIR/_dsh_http.sh" ]; then . "$DIR/_dsh_http.sh"; fi
 
-VS_DIR="${DSH_HOME:-/data/user/0/app.dsh.mobile/files}/vscreen"
+VS_DIR="${DSH_HOME:-/data/user/0/dsh.dsh.mobile/files/dsh-home}/vscreen"
 READY="$VS_DIR/ready.json"
 JOURNAL="$VS_DIR/core.log"
 CORE_CLASS="app.dsh.mobile.engine.vscreen.VScreenCore"
-PKG="app.dsh.mobile"
+PKG="dsh.dsh.mobile"
 
 json_escape() {
   local s="$1"
