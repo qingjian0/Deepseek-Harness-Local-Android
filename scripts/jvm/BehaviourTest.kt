@@ -57,6 +57,7 @@ import app.dsh.mobile.engine.MemorySummary
 import app.dsh.mobile.engine.SceneMemory
 import app.dsh.mobile.engine.MemoryStep
 import app.dsh.mobile.engine.FastPicker
+import app.dsh.mobile.engine.EnginePortPlan
 import app.dsh.mobile.engine.MemoryEdits
 import app.dsh.mobile.engine.MemoryRevision
 import app.dsh.mobile.engine.MemoryIndex
@@ -118,6 +119,7 @@ object BehaviourTest {
         assertPhoneAsk()
         assertPhoneTask()
         assertFastMode()
+        assertEnginePortPlan()
         assertA11yEntry()
         assertAfterActionSuccess()
         assertScrollGeometry()
@@ -3410,6 +3412,21 @@ object BehaviourTest {
     }
 
     /** 从 user.dir 与类的 code source 两处向上找仓库内文件（与 fixtures 定位同一思路）。 */
+    private fun assertEnginePortPlan() {
+        check(
+            EnginePortPlan.fromBase(3080).allPorts == listOf(3080, 3082, 3083, 3085, 3090, 3091),
+            "port plan: default group offsets are stable"
+        )
+        check(
+            EnginePortPlan.fromBase(4080).allPorts == listOf(4080, 4082, 4083, 4085, 4090, 4091),
+            "port plan: any conflict shifts the complete group by 1000"
+        )
+        check(
+            runCatching { EnginePortPlan.fromBase(65525) }.isFailure,
+            "port plan: reject a base that would overflow the port range"
+        )
+    }
+
     private fun findRepoFile(rel: String): File? {
         val candidates = ArrayList<File>()
         var d: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
