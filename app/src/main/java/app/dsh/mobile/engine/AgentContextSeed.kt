@@ -390,7 +390,7 @@ Upstream refuses `0.0.0.0` on purpose, and a naive port-forward breaks in four w
 
 The app also has a built-in LAN proxy (Settings → 局域网访问 WebUI): it listens on its own port, polyfills `crypto.randomUUID`, rewrites the loopback gate and `SameSite=Strict` cookies, and forwards WebSocket upgrades, with a 6-digit code shown once when the user enables it. Prefer telling the user about that switch instead of hand-writing a proxy.
 
-Only if a custom LAN URL is required, write a small node reverse proxy that listens on a new port, not DSH_WEB_PORT / DSH_BRIDGE_PORT. It must polyfill `crypto.randomUUID`, rewrite `isLoopbackHostname(pageLocation)` to a truthy call, set upstream `Host`/`Origin` to `127.0.0.1:${' forward WebSocket upgrades, and append the latest `?token=` read from `${'$'}PREFIX/engine.log`. Warn that this exposes an agent with full file and command access: use trusted networks only and set a password.
+Only if a custom LAN URL is required, write a small node reverse proxy that listens on a port outside the DSH_WEB_PORT / DSH_BRIDGE_PORT group. It must polyfill `crypto.randomUUID`, rewrite `isLoopbackHostname(pageLocation)` to a truthy call, set its upstream host and port from DSH_WEB_PORT, forward WebSocket upgrades, and append the latest `?token=` read from the engine log. Warn that this exposes an agent with full file and command access: use trusted networks only and set a password.
 
 ## Extension troubleshooting (self-heal, then report)
 
