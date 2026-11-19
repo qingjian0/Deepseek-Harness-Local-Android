@@ -128,7 +128,24 @@ class RuntimeInstaller(private val ctx: Context) {
         // ③ 最后清掉上一次中断留下的临时目录（staging / zip 缓存）。
         cleanupInstallResidue()
         val manifest = readManifest()
-        val complete = EngineConfig.nodeBin(ctx).exists() && isRootComplete()
+        var complete = EngineConfig.nodeBin(ctx).exists() && isRootComplete()
+        // Repair only the required ELF files when the rest of the runtime is intact.
+        // This preserves user-added packages under lib/node_modules.
+        if (!complete && manifest.runtime.bundled && hasAsset("runtime.zip") &&
+            isRootCompleteAt(root, validateLibraries = false)
+        ) {
+            val repaired = repairRequiredLibrariesFromBundledAsset()
+            if (!repaired || !isRootComplete()) {
+                // Do not fall through to a whole-runtime swap when the bundled repair source
+                // is itself invalid. Keep the current engine and any rollback snapshot intact.
+                throw IllegalStateException(
+                    "runtime shared libraries are damaged and the bundled repair archive is invalid; " +
+                        "existing engine files were left in place",
+                )
+            }
+            complete = true
+            Log.w(TAG, "repaired damaged runtime shared libraries in place")
+        }
         if (complete) {
             // noruntime 版本可长期复用旧磁盘；先修复/确认前端 polyfill，再启动引擎。
             WebViewPolyfill.healInstalled(ctx)
@@ -627,17 +644,24 @@ class RuntimeInstaller(private val ctx: Context) {
 
     private fun isRootComplete(): Boolean = isRootCompleteAt(root)
 
-    /**
-     * 完整性探针（可对任意目录，用于 staging 校验）。
-     * 只查「必须存在」的锚点文件，避免与运行时裁剪的解耦（不校验具体数量）。
-     */
-    private fun isRootCompleteAt(base: File): Boolean {
+    /** Completeness probe for installed and staged runtimes. */
+    private fun isRootCompleteAt(base: File, validateLibraries: Boolean = true): Boolean {
         val node = File(base, "bin/node")
-        // 1) 引擎入口 bin.js（MODULE_NOT_FOUND 的直接案发现场）
+        // 1) Engine entry point.
         if (!File(base, "lib/node_modules/@deepseek-ai/dsh/lib/bin.js").isFile) return false
-        // 2) bash 依赖闭环：readline SONAME 别名（m1.5 事故）
-        if (!File(base, "lib/libreadline.so.8").isFile) return false
-        // 3) node 本体可执行位（安装器 restoreExecBits 之后应为 true）
+        // 2) Dynamic linker closure. A present zero-byte .so is unusable.
+        val want = expectedElfMachine()
+        if (validateLibraries) {
+            for (name in listOf("libreadline.so.8", "libz.so.1", "libssl.so")) {
+                val lib = File(base, "lib/$name")
+                val problem = RuntimeElfIntegrity.inspect(lib, want)
+                if (problem != null) {
+                    Log.e(TAG, "runtime incomplete: $name ${lib.length()} bytes: $problem")
+                    return false
+                }
+            }
+        }
+        // 3) Node executable bit.
         if (!node.canExecute()) return false
         // 4) @deepseek-ai 固定锚点抽样（覆盖入口包、核心框架、内置 profile 层与前端 bundle）
         val dshAi = File(base, "lib/node_modules/@deepseek-ai")
@@ -655,7 +679,6 @@ class RuntimeInstaller(private val ctx: Context) {
             }
         }
         // 5) 架构必须匹配（跨架构 ELF 会在 execve 被 linker 拒绝）
-        val want = expectedElfMachine()
         if (want > 0) {
             val got = elfMachine(node)
             if (got != want) {
@@ -665,6 +688,69 @@ class RuntimeInstaller(private val ctx: Context) {
         }
         return true
     }
+
+    /**
+     * Repair required linker libraries from the APK's bundled runtime.
+     * Deduplicated ZIP aliases carry a LINK:<target> entry comment and empty payload;
+     * resolve the chain and write a normal, non-empty ELF file.
+     * No other engine files or user-installed packages are touched.
+     */
+    private fun repairRequiredLibrariesFromBundledAsset(): Boolean = runCatching {
+        val archive = File(ctx.cacheDir, "runtime-library-repair.zip")
+        try {
+            ctx.assets.open("runtime.zip").use { input ->
+                archive.outputStream().use { output -> input.copyTo(output, 1 shl 20) }
+            }
+            val libDir = File(root, "lib")
+            check(libDir.isDirectory) { "runtime lib directory missing" }
+            val expected = expectedElfMachine()
+            val required = listOf("libreadline.so.8", "libz.so.1", "libssl.so")
+            java.util.zip.ZipFile(archive).use { zip ->
+                fun readResolved(path: String, seen: Set<String> = emptySet()): ByteArray {
+                    check(path !in seen) { "runtime ZIP LINK cycle at $path" }
+                    val entry = zip.getEntry(path) ?: error("runtime ZIP entry missing: $path")
+                    val comment = entry.comment.orEmpty()
+                    if (comment.startsWith(LINK_PREFIX)) {
+                        return readResolved(comment.removePrefix(LINK_PREFIX), seen + path)
+                    }
+                    return zip.getInputStream(entry).use { it.readBytes() }
+                }
+                for (name in required) {
+                    val bytes = readResolved("lib/$name")
+                    val problem = RuntimeElfIntegrity.inspectHeader(
+                        bytes.copyOf(minOf(bytes.size, 64)), bytes.size.toLong(), expected,
+                    )
+                    check(problem == null) { "bundled lib/$name is invalid: $problem" }
+                    val target = File(libDir, name)
+                    val temp = File(libDir, ".$name.repair.tmp")
+                    java.io.FileOutputStream(temp).use { output ->
+                        output.write(bytes)
+                        output.flush()
+                        output.fd.sync()
+                    }
+                    try {
+                        java.nio.file.Files.move(
+                            temp.toPath(), target.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                            java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        )
+                    } catch (_: Exception) {
+                        java.nio.file.Files.move(
+                            temp.toPath(), target.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        )
+                    }
+                    check(target.length() == bytes.size.toLong()) { "short write repairing $name" }
+                    Log.i(TAG, "repaired runtime library $name (${bytes.size} bytes)")
+                }
+            }
+            true
+        } finally {
+            archive.delete()
+        }
+    }.onFailure {
+        Log.e(TAG, "in-place runtime library repair failed: ${it.message}", it)
+    }.getOrDefault(false)
 
     /** ELF e_machine 取值（System V ABI） */
     private val EM_ARM = 40
@@ -926,6 +1012,7 @@ class RuntimeInstaller(private val ctx: Context) {
                 onProgress = { p -> onProgress(if (bundled) p else 0.45f + p * 0.55f) },
                 onDetail = onDetail,
             )
+            preserveUserProvisionedPackages(staging)
             restoreExecBits(staging)
             check(isRootCompleteAt(staging)) {
                 "staged runtime incomplete (${staging.absolutePath})"
@@ -1174,6 +1261,26 @@ class RuntimeInstaller(private val ctx: Context) {
             if (dest.exists()) dest.delete()
             src.copyTo(dest, overwrite = true)
         }.onFailure { Log.w(TAG, "alias materialise failed for ${dest.name}: ${it.message}") }
+    }
+
+    /**
+     * Keep manually provisioned LibreOffice runtime packages across a runtime refresh.
+     * The current runtime bundle wins when it already contains a package; otherwise copy
+     * the installed package into staging before the top-level lib/ swap.
+     */
+    private fun preserveUserProvisionedPackages(staging: File) {
+        val packages = listOf(
+            "@deepseek-ai/libreoffice-kit",
+            "@deepseek-ai/libreoffice-kit-wasm",
+        )
+        for (relative in packages) {
+            val source = File(root, "lib/node_modules/$relative")
+            val destination = File(staging, "lib/node_modules/$relative")
+            if (!source.isDirectory || destination.exists()) continue
+            destination.parentFile?.mkdirs()
+            source.copyRecursively(destination, overwrite = false)
+            Log.i(TAG, "preserved locally provisioned runtime package $relative")
+        }
     }
 
     /**
