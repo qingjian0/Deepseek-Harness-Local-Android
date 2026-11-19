@@ -22,7 +22,7 @@ import java.net.URL
 internal object MemoryBridge {
 
     /** 桥端口固定 3083（见 EngineConfig 与 StatusOverlay，勿改）。 */
-    private const val BASE = "http://127.0.0.1:3083"
+    private val base: String get() = app.dsh.mobile.engine.AgentBridge.baseUrl
 
     private const val CONNECT_TIMEOUT_MS = 3000
 
@@ -56,7 +56,7 @@ internal object MemoryBridge {
     ): Reply {
         val token = app.dsh.mobile.engine.AgentBridge.currentToken() ?: return Reply(0, "")
         val conn = try {
-            (URL(BASE + path).openConnection() as HttpURLConnection).apply {
+            (URL(base + path).openConnection() as HttpURLConnection).apply {
                 requestMethod = method
                 setRequestProperty("X-DSH-Token", token)
                 connectTimeout = CONNECT_TIMEOUT_MS

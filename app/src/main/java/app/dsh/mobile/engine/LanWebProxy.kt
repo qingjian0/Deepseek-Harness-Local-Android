@@ -37,7 +37,7 @@ object LanWebProxy {
     private const val TAG = "LanWebProxy"
 
     /** 独立端口（禁止占用 3080/3083） */
-    const val PORT = 3090
+    val PORT: Int get() = EnginePortManager.current().lanWeb
 
     /** 「已开启」常驻通知的 channel / id（v1.2.188） */
     private const val NOTIF_CHANNEL = "lan_web"
@@ -47,7 +47,7 @@ object LanWebProxy {
     const val ACTION_LAN_OFF = "app.dsh.mobile.action.LAN_WEB_OFF"
 
     private const val UPSTREAM_HOST = "127.0.0.1"
-    private const val UPSTREAM_PORT = 3080
+    private val UPSTREAM_PORT: Int get() = EnginePortManager.current().web
     private const val COOKIE = "dsh_lan_pw"
 
     /** HTTP 换行（源码里不写转义，避免多层转义失真） */
@@ -176,7 +176,7 @@ object LanWebProxy {
                 val sh = "cd " + workDir.absolutePath + " && " + envPrefix +
                     " DSH_LAN_PW='" + pw + "'" +
                     " nohup " + node.absolutePath + " " + scriptPath +
-                    " --port " + PORT + " --pw '" + pw + "'" +
+                    " --port " + PORT + " --upstream '" + UPSTREAM_HOST + ":" + UPSTREAM_PORT + "' --pw '" + pw + "'" +
                     " > " + logPath + " 2>&1 &"
                 val proc = ProcessBuilder("sh", "-c", sh).start()
                 val exit = proc.waitFor()

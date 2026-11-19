@@ -608,7 +608,7 @@ object StatusOverlay {
                 Thread {
                     runCatching {
                         val tok = app.dsh.mobile.engine.AgentBridge.currentToken() ?: return@Thread
-                        val c = (java.net.URL("http://127.0.0.1:3083/daemon/stop")
+                        val c = (java.net.URL(app.dsh.mobile.engine.AgentBridge.baseUrl + "/daemon/stop")
                             .openConnection() as java.net.HttpURLConnection).apply {
                             requestMethod = "POST"
                             setRequestProperty("X-DSH-Token", tok)
@@ -982,7 +982,7 @@ object StatusOverlay {
     /** 向本机桥发一个 GET，返回响应体（失败返回 null）。 */
     private fun getBridge(path: String): String? {
         val tok = app.dsh.mobile.engine.AgentBridge.currentToken() ?: return null
-        val c = (java.net.URL("http://127.0.0.1:3083" + path)
+        val c = (java.net.URL(app.dsh.mobile.engine.AgentBridge.baseUrl + path)
             .openConnection() as java.net.HttpURLConnection).apply {
             requestMethod = "GET"
             setRequestProperty("X-DSH-Token", tok)
@@ -1009,7 +1009,7 @@ object StatusOverlay {
 
     private fun postBridge(path: String, json: String) {
         val tok = app.dsh.mobile.engine.AgentBridge.currentToken() ?: return
-        val c = (java.net.URL("http://127.0.0.1:3083" + path)
+        val c = (java.net.URL(app.dsh.mobile.engine.AgentBridge.baseUrl + path)
             .openConnection() as java.net.HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -1049,7 +1049,7 @@ object StatusOverlay {
                     val active = runCatching {
                         val tok = app.dsh.mobile.engine.AgentBridge.currentToken()
                         if (tok == null) false else {
-                            val c = (java.net.URL("http://127.0.0.1:3083/daemon/status")
+                            val c = (java.net.URL(app.dsh.mobile.engine.AgentBridge.baseUrl + "/daemon/status")
                                 .openConnection() as java.net.HttpURLConnection).apply {
                                 setRequestProperty("X-DSH-Token", tok)
                                 connectTimeout = 2000; readTimeout = 2000

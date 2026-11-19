@@ -27,8 +27,9 @@ const name = "android-ask-bridge";
 /** 只监听事件，不需要注入任何服务。 */
 const inject = [];
 
-/** 桥固定监听 127.0.0.1:3083（AgentBridge.PORT）。 */
-const BRIDGE = "http://127.0.0.1:3083";
+/** Bridge port is injected by EngineConfig.buildEnv. */
+const BRIDGE_PORT = process.env.DSH_BRIDGE_PORT || "3083";
+const BRIDGE = `http://127.0.0.1:${BRIDGE_PORT}`;
 
 /** 引擎自带的提问工具名（@deepseek-ai/dsh-tool-ask-user）。 */
 const ASK_TOOL = "ask_user_question";

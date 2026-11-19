@@ -21,7 +21,7 @@ import java.nio.file.Files
  */
 object EngineConfig {
 
-    const val DEFAULT_PORT = 3080
+    val DEFAULT_PORT: Int get() = EnginePortManager.current().web
     const val HEALTH_TIMEOUT_MS = 45_000L
     /**
      * 健康轮询间隔。
@@ -1441,7 +1441,7 @@ object EngineConfig {
             |  disabled: false
             |  config:
             |    host: !!js ctx.webStartup.host ?? '127.0.0.1'
-            |    port: !!js ctx.webStartup.port ?? 3080
+            |    port: !!js Number(process.env.PORT || ctx.webStartup.port || 3080)
             |    compression: gzip
             |    compressionLevel: 1
             |    compressionThresholdBytes: 1024
@@ -1860,6 +1860,12 @@ object EngineConfig {
             "DSH_HOME=${dshHome(ctx)}",
             "TMPDIR=${tmpDir(ctx)}",
             "PORT=$port",
+            "DSH_WEB_PORT=$port",
+            "DSH_COMPANION_PORT=${EnginePortManager.current().companion}",
+            "DSH_BRIDGE_PORT=${EnginePortManager.current().bridge}",
+            "DSH_EMBEDDING_PORT=${EnginePortManager.current().embedding}",
+            "DSH_LAN_WEB_PORT=${EnginePortManager.current().lanWeb}",
+            "DSH_REMOTE_ACCESS_PORT=${EnginePortManager.current().remoteAccess}",
             "NODE_ENV=production",
             // Node 编译缓存（v1.5.2）：原生模式此前**完全没有**这个变量，而 Linux 模式
             // 一直有（`LinuxEngineLauncher` 注入 `/dsh/.node-compile-cache`）——

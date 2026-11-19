@@ -738,6 +738,7 @@ class EngineSupervisor(private val ctx: Context) {
             // 立刻切到真正在跑的那一步。
             fun mark(name: String) = BootTrace.mark(name)
             try {
+                EnginePortManager.load(ctx)
                 // 孤儿进程回收必须先于任何监听桥 bind，也先于文件树修复：
                 // 避免旧 node/后代继续持有 3080/3083 socket 或并发写入 engine/dsh-home。
                 // v1.6.1 启动提速：orphan-reap / home-owner-check / guardian-restore
@@ -798,6 +799,8 @@ class EngineSupervisor(private val ctx: Context) {
                 BootTrace.stepElapsed("home-owner-check", ownerMs)
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
                 BootTrace.stepElapsed("guardian-restore", guardianMs)
+                val portPlan = EnginePortManager.select(ctx)
+                Log.i(TAG, "selected port group: ${portPlan.allPorts.joinToString()}")
 
                 // 三项互不依赖的启动准备任务并行执行：
                 //  - AgentContextSeed 只写 dsh-home/AGENTS.md；
