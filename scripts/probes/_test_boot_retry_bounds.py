@@ -127,6 +127,14 @@ check("普通监督重试复用本 App 服务端口，真实绑定冲突才重�
       and "portBlockSelected" in sup
       and "reallocatePortBlockAfterConflict()" in sup
       and "val reallocated = withContext(Dispatchers.IO)" in sup)
+rotation_start = sup.index("private fun reallocatePortBlockAfterConflict()")
+rotation_end = sup.index("private fun portInUse(", rotation_start)
+rotation = sup[rotation_start:rotation_end]
+check("端口轮换只停止本应用持有的服务进程",
+      "LanWebProxy.stopOwnedForPortRotation()" in rotation
+      and "LocalModel.stopOwnedForPortRotation()" in rotation
+      and "LanWebProxy.stop()" not in rotation
+      and "LocalModel.stop()" not in rotation)
 check("插件健康探针有 20 秒硬截止且进程退出即停止等待",
       "System.currentTimeMillis() + 20_000L" in sup and "while (System.currentTimeMillis() < deadline && !proc.exitFuture.isDone)" in sup)
 
