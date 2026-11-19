@@ -367,6 +367,7 @@ object AgentBridge {
     fun stop() {
         runCatching { server?.close() }
         server = null; thread = null
+        lastBindError = null
         Log.i(TAG, "agent bridge stopped")
     }
 
