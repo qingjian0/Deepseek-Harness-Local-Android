@@ -96,6 +96,34 @@ verify_pair() {
   return 0
 }
 
+# A matching zip/meta hash proves transport integrity, not runtime usability.
+# Older stable releases may predate scriptsSha256 and can still contain a
+# zero-byte libz.so.1. Reject them before choosing a source; tier 3 rebuilds
+# with the current collector/deduper and its ELF gate.
+verify_critical_payload() {
+  local zip="$1"
+  python3 - "$zip" "$ABI" <<'PY'
+import sys, zipfile
+path, abi = sys.argv[1:]
+want = {"arm64-v8a": 183, "x86_64": 62}[abi]
+try:
+    with zipfile.ZipFile(path) as z:
+        info = z.getinfo("lib/libz.so.1")
+        if info.file_size < 20:
+            raise ValueError(f"libz.so.1 is empty/truncated ({info.file_size} bytes)")
+        with z.open(info) as f:
+            head = f.read(20)
+except Exception as exc:
+    raise SystemExit(f"invalid runtime critical dependency: {exc}")
+if len(head) < 20 or head[:4] != b"\\x7fELF":
+    raise SystemExit(f"libz.so.1 is not a valid ELF ({len(head)} header bytes)")
+got = int.from_bytes(head[18:20], "little")
+if got != want:
+    raise SystemExit(f"libz.so.1 ABI mismatch: e_machine={got}, expected={want}")
+print(f"runtime critical dependency OK: libz.so.1 ELF e_machine={got}")
+PY
+}
+
 # 用 gh api 下载 release 资产（与 runtime-build 的 decide 同一机制，走 api.github.com，
 # 而非 release-asset CDN）。gh release download 在本仓库的 android-build runner 上对
 # prerelease 标签整体失败（decide 用 gh api 能成功，证明 api 路径可用），故统一走 api。
@@ -148,7 +176,7 @@ if api_asset "tags/runtime" "runtime-${ABI}.zip" "$WORK/runtime-${ABI}.zip" \
   if [ -f "$WORK/runtime-${ABI}.zip" ] && [ -f "$WORK/runtime-meta-${ABI}.json" ]; then
     mv "$WORK/runtime-${ABI}.zip" "$OUT"
     mv "$WORK/runtime-meta-${ABI}.json" "$META"
-    if verify_pair "$OUT" "$META"; then
+    if verify_pair "$OUT" "$META" && verify_critical_payload "$OUT"; then
       if tier1_fresh; then
         source_note "runtime prerelease（tag runtime，sha256${EXPECT_SHA:+ + 指纹} 已校验）"
         echo "done (tier 1)"
@@ -162,7 +190,7 @@ if api_asset "tags/runtime" "runtime-${ABI}.zip" "$WORK/runtime-${ABI}.zip" \
       fi
       echo "warn: tier 1 非当前脚本构建，降级到 tier 2" >&2
     else
-      echo "warn: tier 1 产物不一致，降级到 tier 2" >&2
+      echo "warn: tier 1 产物哈希/关键 ELF 校验失败，降级到 tier 2" >&2
     fi
   else
     echo "warn: tier 1 资产不全（缺 zip 或 meta），降级到 tier 2" >&2
@@ -189,7 +217,7 @@ if api_asset "latest" "runtime-${ABI}.zip" "$WORK/runtime-${ABI}.zip" \
    && [ -f "$WORK/runtime-${ABI}.zip" ]; then
   mv "$WORK/runtime-${ABI}.zip" "$OUT"
   python3 "$SCRIPT_DIR/make-runtime-meta.py" "$OUT" "$META"
-  if verify_pair "$OUT" "$META"; then
+  if verify_pair "$OUT" "$META" && verify_critical_payload "$OUT"; then
     # 新鲜度（仅指定 --expect-sha 时生效）：stable 发布若含 runtime-inputs.json 且与
     # 当前脚本不符，不允许静默用旧包 —— strict 档硬失败，非 strict 降级到 tier3 本地
     # 重建（重建产物与当前脚本一致，比用旧包更正确）。
@@ -216,7 +244,7 @@ if api_asset "latest" "runtime-${ABI}.zip" "$WORK/runtime-${ABI}.zip" \
       exit 0
     fi
   else
-    echo "warn: tier 2 重建 meta 校验失败，降级到 tier 3" >&2
+    echo "warn: tier 2 哈希/关键 ELF 校验失败，降级到 tier 3" >&2
   fi
 else
   echo "warn: tier 2 无 runtime-${ABI}.zip，降级到 tier 3" >&2
