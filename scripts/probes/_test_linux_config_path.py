@@ -96,8 +96,8 @@ def main():
           'guest.startsWith(b.guest.trimEnd(\'/\') + "/")' in body)
 
     # ---- [C] 语义逐例核对 ----
-    DSH = '/data/user/0/app.dsh.mobile/files/dsh-home'
-    ENG = '/data/user/0/app.dsh.mobile/files/engine'
+    DSH = '/data/user/0/dsh.dsh.mobile/files/dsh-home'
+    ENG = '/data/user/0/dsh.dsh.mobile/files/engine'
     WS = '/storage/emulated/0/Documents/dshdata/workspaces'
     PUB = '/storage/emulated/0/Download/DSH MOBILE'
     # 真实 bind 表形状：三个别名 + 宿主同名挂载三类
@@ -117,8 +117,8 @@ def main():
         ('/eng/lib/bin.js', ENG + '/lib/bin.js'),
         ('/ws/proj/a.txt', WS + '/proj/a.txt'),
         # 宿主同名挂载是恒等映射
-        ('/data/user/0/app.dsh.mobile/files/engine/x',
-         '/data/user/0/app.dsh.mobile/files/engine/x'),
+        ('/data/user/0/dsh.dsh.mobile/files/engine/x',
+         '/data/user/0/dsh.dsh.mobile/files/engine/x'),
         ('/storage/emulated/0/Documents/dshdata/workspaces/k', WS + '/k'),
         # 无匹配 / 非绝对 / 前缀不落边界
         ('/nope/x', None),

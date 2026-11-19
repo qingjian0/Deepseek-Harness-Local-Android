@@ -135,14 +135,14 @@ if [ "$MODE" = "all" ] || [ "$MODE" = "release" ]; then
     fi
     # 无障碍必须**在 App 停着的时候**重新绑定：直接 put 同值不会重绑，
     # 先 force-stop 再 '' → 真值，然后才启动（实测顺序反了会「服务未启用」）。
-    "$ADB" -s "$SERIAL" shell am force-stop app.dsh.mobile >/dev/null 2>&1
+    "$ADB" -s "$SERIAL" shell am force-stop dsh.dsh.mobile >/dev/null 2>&1
     sleep 1
     "$ADB" -s "$SERIAL" shell "settings put secure enabled_accessibility_services ''" >/dev/null 2>&1
     sleep 1
     "$ADB" -s "$SERIAL" shell settings put secure enabled_accessibility_services \
-      app.dsh.mobile/app.dsh.mobile.DshAccessibilityService >/dev/null 2>&1
+      dsh.dsh.mobile/app.dsh.mobile.DshAccessibilityService >/dev/null 2>&1
     sleep 1
-    "$ADB" -s "$SERIAL" shell am start -n app.dsh.mobile/.MainActivity >/dev/null 2>&1
+    "$ADB" -s "$SERIAL" shell am start -n dsh.dsh.mobile/app.dsh.mobile.MainActivity >/dev/null 2>&1
     sleep 9
     # Android 11 + Chrome 83 的 WebView 门：冷启动要点一次「继续」
     "$ADB" -s "$SERIAL" shell input tap 653 1505 >/dev/null 2>&1
@@ -158,7 +158,7 @@ if [ "$MODE" = "all" ] || [ "$MODE" = "release" ]; then
     if [ -n "${PID:-}" ]; then
       say "  engine pid=$PID"
       "$ADB" -s "$SERIAL" forward tcp:13086 tcp:3083 >/dev/null 2>&1
-      TOK="$("$ADB" -s "$SERIAL" shell "run-as app.dsh.mobile cat /proc/$PID/environ" \
+      TOK="$("$ADB" -s "$SERIAL" shell "run-as dsh.dsh.mobile cat /proc/$PID/environ" \
             | tr '\0' '\n' | grep DSH_BRIDGE_TOKEN | tr -d '\r' | cut -d= -f2)"
       # 不落盘：token 是桥的完整凭据，写到 /e/tmp 等于给本机任何进程留一份明文，
       # 而且没有任何脚本消费它（只需在本次运行内传给 curl）。需要复现时从

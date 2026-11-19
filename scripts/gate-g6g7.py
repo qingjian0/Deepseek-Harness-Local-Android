@@ -27,7 +27,7 @@ def refresh_token():
     pids = [l.split()[0] for l in lines if l.strip().endswith(' node')]
     if not pids:
         return ''
-    env = sh('run-as', 'app.dsh.mobile', 'cat', '/proc/%s/environ' % pids[0])
+    env = sh('run-as', 'dsh.dsh.mobile', 'cat', '/proc/%s/environ' % pids[0])
     for kv in env.split('\0'):
         if kv.startswith('DSH_BRIDGE_TOKEN='):
             TOKEN = kv.split('=', 1)[1].strip()
@@ -52,13 +52,13 @@ def bind_a11y():
     sh('settings', 'delete', 'secure', 'enabled_accessibility_services')
     time.sleep(1)
     sh('settings', 'put', 'secure', 'enabled_accessibility_services',
-       'app.dsh.mobile/app.dsh.mobile.DshAccessibilityService')
+       'dsh.dsh.mobile/app.dsh.mobile.DshAccessibilityService')
     time.sleep(4)
 
 
 def home_screen():
     subprocess.run([ADB, '-s', DEV, 'shell', 'am', 'start', '-n',
-                    'app.dsh.mobile/.MainActivity'], capture_output=True)
+                    'dsh.dsh.mobile/app.dsh.mobile.MainActivity'], capture_output=True)
     time.sleep(3)
 
 

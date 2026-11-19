@@ -34,7 +34,7 @@ import urllib.request
 ADB = os.environ.get("ADB", r"E:/Android/Sdk/platform-tools/adb.exe")
 SERIAL = os.environ.get("SERIAL", "emulator-5556")
 PORT = int(os.environ.get("BRIDGE_PORT", "13086"))
-PKG = "app.dsh.mobile"
+PKG = "dsh.dsh.mobile"
 
 fails = []
 skips = []
@@ -148,9 +148,9 @@ def main():
     # ---------------- 0. 环境 ----------------
     stage("环境：引擎 / 无障碍 / 令牌")
     a11y = shell("settings get secure enabled_accessibility_services")
-    if not a11y.endswith("app.dsh.mobile/app.dsh.mobile.DshAccessibilityService"):
+    if not a11y.endswith("dsh.dsh.mobile/app.dsh.mobile.DshAccessibilityService"):
         skip("无障碍服务未启用 —— 先跑：adb shell settings put secure "
-             "enabled_accessibility_services app.dsh.mobile/app.dsh.mobile.DshAccessibilityService")
+             "enabled_accessibility_services dsh.dsh.mobile/app.dsh.mobile.DshAccessibilityService")
         print("\n==== 汇总：%d 段，失败 %d ====" % (stage_no, len(fails)))
         return 1
     subprocess.run([ADB, "-s", SERIAL, "forward", "tcp:%d" % PORT, "tcp:3083"],
