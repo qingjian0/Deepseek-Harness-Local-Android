@@ -1531,7 +1531,7 @@ class EngineSupervisor(private val ctx: Context) {
         ShizukuHttpBridge.stop()
         RemoteAccessServer.stop()
         AgentBridge.stop()
-        LocalModel.stop()
+        LocalModel.stopOwnedForPortRotation()
 
         runCatching { OrphanReaper.reap(ctx) }
             .onFailure { Log.w(TAG, "orphan reap before port reallocation failed: ${it.message}") }
