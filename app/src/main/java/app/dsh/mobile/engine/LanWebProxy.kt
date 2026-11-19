@@ -135,6 +135,10 @@ object LanWebProxy {
             Log.i(TAG, "already running")
             return
         }
+        if (!EnginePortManager.isSelected()) {
+            Log.i(TAG, "deferring LAN proxy start until EngineSupervisor selects the port group")
+            return
+        }
         password = pw
         running.set(true)
         // v1.2.160 架构修正：**不再由 app 自己 bind 端口**，改为拉起 node 代理脚本

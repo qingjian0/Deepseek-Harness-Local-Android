@@ -55,6 +55,8 @@ object EnginePortManager {
 
     fun current(): EnginePortPlan = active
 
+    fun isSelected(): Boolean = selected
+
     fun load(context: Context) {
         if (loaded) return
         synchronized(lock) {
