@@ -25,7 +25,14 @@ data class EnginePortPlan(
 
         fun fromBase(base: Int): EnginePortPlan {
             require(base in 1024..(65535 - 11)) { "invalid base port: $base" }
-            return EnginePortPlan(base, base + 2, base + 3, base + 5, base + 10, base + 11)
+            return EnginePortPlan(
+                web = base,
+                companion = base + 2,
+                bridge = base + 3,
+                embedding = base + 5,
+                lanWeb = base + 10,
+                remoteAccess = base + 11,
+            )
         }
     }
 }
