@@ -61,6 +61,8 @@ object AgentBridge {
 
     @Volatile private var server: ServerSocket? = null
     @Volatile private var thread: Thread? = null
+    @Volatile var lastBindError: String? = null
+        private set
 
     /**
      * 实际绑定到哪个地址（v1.7.1）。
@@ -220,9 +222,10 @@ object AgentBridge {
         Log.i(TAG, "bridge rebound on $boundAddress:$PORT")
     }
 
-    fun start(ctx: Context) {
+    fun start(ctx: Context): Boolean {
         ServicePortConfig.initialize(ctx)
-        if (server != null) return
+        if (server != null) return true
+        lastBindError = null
         shotCtx = ctx.applicationContext
         // v1.2.160：LAN 代理需要 app context 推导引擎目录（部署脚本 / 拉起 node 进程）
         runCatching { LanWebProxy.setContext(ctx) }
@@ -249,7 +252,9 @@ object AgentBridge {
             TurnWatcher.start(ctx.applicationContext) { session ->
                 onTurnEnd(ctx.applicationContext, session)
             }
+            return true
         } catch (e: Exception) {
+            lastBindError = e.message ?: e.javaClass.simpleName
             // ⚠️ v1.2.104：**bind 失败绝不能再静默**（主人反馈的起点）。
             // 旧实现只打一行 Log.w，于是「notify / scr / say 全哑」在现场被反复
             // 误判成「无障碍没开 / 桥没就绪」，真因（端口被占）谁也看不见。
@@ -283,6 +288,7 @@ object AgentBridge {
                 )
             }.onFailure { Log.w(TAG, "bridge-down notify failed: ${it.message}") }
         }
+        return false
     }
 
     /**
