@@ -1194,6 +1194,14 @@ class EngineSupervisor(private val ctx: Context) {
                     EnginePortManager.rotateAfterBindConflict(ctx)
                 }
                 Log.w(TAG, "web bind conflict on :${EngineConfig.DEFAULT_PORT}; moved to :${nextPlan.web} without reclaiming foreign listener")
+                // Preflight listeners were bound to the old companion/bridge/remote ports.
+                // Rebind our own listeners to the new plan before the next engine spawn.
+                withContext(Dispatchers.IO) {
+                    AgentBridge.stop()
+                    AgentBridge.start(ctx)
+                    RemoteAccessServer.stop()
+                    if (RemoteAccess.isEnabled(ctx)) RemoteAccessServer.start(ctx)
+                }
                 deterministicFailure = null
                 delay(1_200)
                 continue
