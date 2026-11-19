@@ -321,7 +321,7 @@ object RemoteAccessServer {
         # messages into mojibake. Use English here, not resource strings.
         set -e
 
-        BASE="${'
+        BASE="http://__PHONE_IP__:${PORT}"
         # The key is already inlined below (it came from the ?key= of this request).
         # DSH_PHONE_KEY can still override it, e.g. after re-pairing with a new device.
         KEY="${'$'}{DSH_PHONE_KEY:-__KEY_PLACEHOLDER__}"
