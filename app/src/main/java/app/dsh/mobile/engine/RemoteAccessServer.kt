@@ -71,6 +71,8 @@ object RemoteAccessServer {
     @Volatile private var server: ServerSocket? = null
     @Volatile private var thread: Thread? = null
     @Volatile private var appCtx: Context? = null
+    @Volatile var lastBindError: String? = null
+        private set
 
     /** 每 IP 的配对尝试计数（窗口期内有效；窗口关闭时清空）。 */
     private val pairAttempts = java.util.concurrent.ConcurrentHashMap<String, Int>()
@@ -86,15 +88,16 @@ object RemoteAccessServer {
     // ------------------------------------------------------------ 生命周期
 
     /** 启动（幂等）。总开关没开时直接返回 —— 调用方不需要再判一次。 */
-    fun start(ctx: Context) {
+    fun start(ctx: Context): Boolean {
         ServicePortConfig.initialize(ctx)
         appCtx = ctx.applicationContext
+        lastBindError = null
         if (!RemoteAccess.isEnabled(ctx)) {
             Log.i(TAG, "not starting: remote access disabled")
-            return
+            return true
         }
-        if (server != null) return
-        runCatching {
+        if (server != null) return true
+        val result = runCatching {
             val ss = ServerSocket()
             // 绑 0.0.0.0 而不是 127.0.0.1：这个端口存在的意义就是被局域网发现。
             // 真正的安全靠「只私网来源 + 已配对密钥」，不靠绑定位置。
@@ -118,9 +121,11 @@ object RemoteAccessServer {
             }, "RemoteAccessServer").apply { isDaemon = true; start() }
             Log.i(TAG, "listening on 0.0.0.0:$PORT")
         }.onFailure {
+            lastBindError = it.message ?: it.javaClass.simpleName
             Log.w(TAG, "bind failed on $PORT: ${it.message}")
             running.set(false)
         }
+        return result.isSuccess
     }
 
     /** 停止（幂等）。 */
