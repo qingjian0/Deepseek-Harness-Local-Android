@@ -935,6 +935,32 @@ class EngineSupervisor(private val ctx: Context) {
                             )
                         }
                     }
+                    // A required WebServer bind collision can leave the Node process alive while
+                    // the plugin health probe reports a degraded profile. The ordinary crash
+                    // path below never runs in that case, so rotate the complete app-owned port
+                    // block here, but only when plugin identity, missing service, and this boot's
+                    // EADDRINUSE evidence all agree.
+                    val webServerPortConflict = health != null && EnginePortConflictDetector.shouldRotate(
+                        missingServices = health.missingServices,
+                        failedPluginIds = health.failedEntries.map { it.id },
+                        logHasPortConflict = looksLikePortConflict(),
+                    )
+                    if (webServerPortConflict) {
+                        Log.e(TAG, "required WebServer failed with EADDRINUSE; rotating the complete port block")
+                        proc.stop(graceMs = 1_500)
+                        process = null
+                        val reallocated = withContext(Dispatchers.IO) { reallocatePortBlockAfterConflict() }
+                        if (!reallocated) {
+                            failTerminal(
+                                ctx.getString(R.string.error_port_foreign, activePort),
+                                overrideCause = EngineTriage.Cause.PORT_FOREIGN,
+                            )
+                            return
+                        }
+                        deterministicFailure = null
+                        delay(1_200)
+                        continue
+                    }
                     if (health?.ok == true) {
                         withContext(Dispatchers.IO) { PluginRecovery.onHealthy(ctx) }
                     }
