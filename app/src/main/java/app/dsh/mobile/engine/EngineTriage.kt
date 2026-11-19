@@ -489,8 +489,14 @@ object EngineTriage {
         // 都弱 —— 前面六类是我们直接观测到的失败原因，而体检报的是「环境有毛病」，
         // 不一定就是这次起不来的直接原因。所以只在前面都没命中时才用它。
         facts.selfCheck?.let { report ->
-            val bad = report.items.filter {
-                it.status == SelfCheck.Item.Status.WARN || it.status == SelfCheck.Item.Status.FAIL
+            // WARN is not automatically a startup failure: optional shared-storage
+            // access and a not-yet-created first-boot profile are informational.
+            // FAIL remains actionable; other WARN items retain their existing triage.
+            val bad = report.items.filter { item ->
+                item.status == SelfCheck.Item.Status.FAIL ||
+                    (item.status == SelfCheck.Item.Status.WARN &&
+                        item.id != "storage.allfiles" &&
+                        !(facts.neverBooted && item.id == "profile"))
             }
             if (bad.isNotEmpty()) {
                 // 按体检项的 id 前缀反推最贴近的 cause，让界面上的修复按钮对得上
