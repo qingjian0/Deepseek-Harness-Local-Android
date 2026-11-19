@@ -134,6 +134,7 @@ object RemoteAccessServer {
         runCatching { server?.close() }
         server = null
         thread = null
+        lastBindError = null
         pairAttempts.clear()
         Log.i(TAG, "stopped")
     }
