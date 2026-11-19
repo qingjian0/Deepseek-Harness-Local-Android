@@ -59,6 +59,7 @@ check("LAN proxy uses selected LAN and upstream ports", (
     and '--upstream' in lan
 ))
 check("remote access uses selected remote port", "PORT: Int get() = EnginePortManager.current().remoteAccess" in remote)
+check("remote access toggle defers until port plan selected", "EnginePortManager.isSelected()" in remote)
 
 # LAN proxy must not race the port selection during foreground-service startup.
 check("EngineService does not start LAN proxy before selection", "LanWebProxy.start(" not in service)
