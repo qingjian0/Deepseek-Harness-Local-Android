@@ -92,6 +92,10 @@ object RemoteAccessServer {
             Log.i(TAG, "not starting: remote access disabled")
             return
         }
+        if (!EnginePortManager.isSelected()) {
+            Log.i(TAG, "deferring remote access until EngineSupervisor selects the port group")
+            return
+        }
         if (server != null) return
         runCatching {
             val ss = ServerSocket()
