@@ -60,19 +60,6 @@ class EngineService : Service() {
 
         app.supervisor.start(app.appScope)
 
-        // v1.2.160：按偏好恢复「局域网访问 WebUI」代理（默认关闭）。
-        // 刻意与引擎解耦：独立线程 + 独立端口 3090，失败只记日志，不抛出、不重启。
-        runCatching {
-            // ⚠️ 先注入 context：LanWebProxy.start() 需要它推导引擎目录。
-            // 原设计靠 AgentBridge 注入，但 AgentBridge 在 EngineSupervisor 启动流程里
-            // （比这里晚）→ 实测 start() 拿不到 ctx、静默不做任何事（日志一行都没有）。
-            LanWebProxy.setContext(this)
-            if (DshApp.lanWebEnabled(this)) {
-                val pw = DshApp.lanWebPassword(this)
-                Thread({ runCatching { LanWebProxy.start(pw) } }, "lan-boot").apply { isDaemon = true }.start()
-            }
-        }.onFailure { android.util.Log.w("EngineService", "lan proxy: ${it.message}") }
-
         // 🔴 v1.2.73 修主人实测「引擎明明在线，小字一直显示正在启动引擎」：
         // startAsForeground() 每次都把通知重置成 status_starting，而 StateFlow 只在
         // 状态**变化**时才发事件 —— MainActivity.onResume() 每次都调 EngineService.start()，

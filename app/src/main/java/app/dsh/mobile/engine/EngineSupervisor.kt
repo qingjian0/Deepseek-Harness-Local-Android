@@ -1019,6 +1019,17 @@ class EngineSupervisor(private val ctx: Context) {
                         val safe = guardian.inSafeMode()
                         val tokenUrl = extractTokenUrl()
                         val notice = recoveredPlugin
+                        // LAN Web proxy must start only after the port group is selected and
+                        // the engine is healthy; starting it from EngineService races selection.
+                        if (app.dsh.mobile.DshApp.lanWebEnabled(ctx)) {
+                            val lanPassword = app.dsh.mobile.DshApp.lanWebPassword(ctx)
+                            withContext(Dispatchers.IO) {
+                                runCatching {
+                                    LanWebProxy.setContext(ctx)
+                                    LanWebProxy.start(lanPassword)
+                                }.onFailure { Log.w(TAG, "LAN Web proxy start failed: ${it.message}") }
+                            }
+                        }
                         recoveredPlugin = null
                         val t1 = System.currentTimeMillis()
                         val restartMs = restartStartedAt?.let { " (total restart took ${t1 - it}ms)" } ?: ""
