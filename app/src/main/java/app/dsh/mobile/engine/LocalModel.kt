@@ -185,6 +185,23 @@ object LocalModel {
     /** 停止服务（用户关闭开关时调用） */
     @Volatile private var serverProcess: Process? = null
 
+    /**
+     * Stop only the process instance launched and retained by this app.
+     * Port rotation must never pkill an unrelated llama-server that happens
+     * to use the same numeric port.
+     */
+    fun stopOwnedForPortRotation() {
+        val owned = serverProcess
+        if (owned != null) {
+            runCatching {
+                owned.destroy()
+                if (!owned.waitFor(1_500, TimeUnit.MILLISECONDS)) owned.destroyForcibly()
+            }.onFailure { Log.w(TAG, "owned embedding server stop failed: ${it.message}") }
+        }
+        serverProcess = null
+        LocalEmbedder.resetProbe()
+    }
+
     fun stop() {
         runCatching {
             Privilege.runSu("pkill -f 'llama-server.*${LocalEmbedder.PORT}'")
