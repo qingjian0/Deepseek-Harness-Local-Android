@@ -32,6 +32,9 @@ import sys
 import zipfile
 
 LINK_PREFIX = "LINK:"
+# Keep critical dynamic-linker dependencies as real ZIP payloads; they are tiny and
+# must not depend on LINK comment handling during Android extraction.
+NEVER_DEDUPE = {"lib/libreadline.so.8", "lib/libz.so.1", "lib/libssl.so"}
 
 
 def is_so(name: str) -> bool:
@@ -52,7 +55,7 @@ def main() -> int:
     # 1) 只对 lib/ 下的 .so 求哈希（按内容分组）
     by_hash: dict[str, list[zipfile.ZipInfo]] = {}
     for i in infos:
-        if i.is_dir() or not i.filename.startswith("lib/") or not is_so(i.filename):
+        if i.is_dir() or i.filename in NEVER_DEDUPE or not i.filename.startswith("lib/") or not is_so(i.filename):
             continue
         if i.compress_size == 0 and i.file_size == 0:
             continue
