@@ -86,7 +86,7 @@ lenv = read(LINUX_ENV)
 proc = read(PROCESS)
 
 # ---------- A. buildEnv 注入 NODE_COMPILE_CACHE ----------
-build_env = fn_body(cfg, "fun buildEnv(")
+build_env = fn_body(cfg, "fun buildEnv(", max_len=7000)
 ok(len(build_env) > 800, "A1 buildEnv 函数体可定位（%d 字符）" % len(build_env))
 ok(
     "NODE_COMPILE_CACHE=" in build_env,

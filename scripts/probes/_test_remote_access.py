@@ -160,9 +160,13 @@ def main():
     )
 
     # ---- C 段：3091 服务端 ----
+    ports_file = os.path.join(ENG, "EnginePortManager.kt")
+    ports = _kstrip.strip_comments(read(ports_file))
     check(
-        "C1 端口独立，不占 3080/3083/3090",
-        "PORT = 3091" in ras.replace(" ", " "),
+        "C1 远程访问使用统一端口组的 base+11",
+        "val PORT: Int get() = EnginePortManager.current().remoteAccess" in ras
+        and "remoteAccess = base + 11" in ports
+        and "GROUP_STEP = 1000" in ports,
     )
     check(
         "C2 每个请求都过私网检查（断言调用点，不是函数定义）",
@@ -236,8 +240,8 @@ def main():
         "fun rebindForRemoteAccess" in bridge and "rebindForRemoteAccess" in ra,
     )
     check(
-        "D4 启动时按开关拉起 3091",
-        "RemoteAccessServer.start(ctx)" in sup,
+        "D4 启动前选择端口组，按开关拉起远程访问服务",
+        "EnginePortManager.select(ctx)" in sup and "RemoteAccessServer.start(ctx)" in sup,
     )
     check(
         "D5 设置页有开关与副标题",
