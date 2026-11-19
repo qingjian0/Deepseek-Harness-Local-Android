@@ -21,11 +21,20 @@ class EnginePortManagerTest {
     @Test fun oneOccupiedApplicationPortBlocksTheWholePortGroup() {
         val ports = ServicePortConfig.portsForOffset(0)
         val allAvailable = EnginePortManager.isPortBlockAvailable(ports, 3080) { true }
-        val bridgeOccupied = EnginePortManager.isPortBlockAvailable(ports, 3080) { it != ports.agentBridge }
-        val companionOccupied = EnginePortManager.isPortBlockAvailable(ports, 3080) { it != 3082 }
         assertTrue(allAvailable)
-        assertFalse(bridgeOccupied)
-        assertFalse(companionOccupied)
+
+        // Every listener in the app's block is mandatory: a single collision
+        // must reject the whole block so the allocator can advance by +1000.
+        val listeners = setOf(
+            ports.engine, ports.engine + 2, ports.agentBridge,
+            ports.embedding, ports.lanWeb, ports.remoteAccess,
+        )
+        for (occupied in listeners) {
+            assertFalse(
+                "port $occupied must invalidate the complete application block",
+                EnginePortManager.isPortBlockAvailable(ports, ports.engine) { it != occupied },
+            )
+        }
     }
 
     @Test fun portBlockMovesInExactThousandPortSteps() {
