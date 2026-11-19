@@ -589,15 +589,25 @@ console.log("dsh-fs-local patched ok: createIfAbsent -> lstat+rename");
 # Android linker 按 NEEDED 里记录的 SONAME 精确文件名查找；deb 只带完整版本号
 # 文件（如 .8.3）。Android SELinux 禁 symlink/link()，必须 cp 出普通文件别名。
 copy_soname() {
-  dst="$ROOT/lib/$2"
-  [ -e "$dst" ] && return 0
-  for s in "$ROOT"/lib/"$1"; do
-    [ -f "$s" ] || continue
-    cp -p "$s" "$dst"
-    echo "soname alias $(basename "$s") -> $2"
+  local pattern="$1" soname="$2"
+  local dst="$ROOT/lib/$soname"
+  # -e 只表示路径存在，不代表它是完整文件：历史上 0 字节占位项因此被保留。
+  # 仅复用非空普通文件；符号链接/空文件一律重新物化为实体副本。
+  if [ -f "$dst" ] && [ ! -L "$dst" ] && [ -s "$dst" ]; then
     return 0
+  fi
+  rm -f "$dst"
+  for s in "$ROOT"/lib/$pattern; do
+    [ "$s" = "$dst" ] && continue
+    [ -f "$s" ] && [ -s "$s" ] || continue
+    cp -L -p "$s" "$dst"
+    if [ -f "$dst" ] && [ ! -L "$dst" ] && [ -s "$dst" ]; then
+      echo "soname alias $(basename "$s") -> $soname ($(stat -c %s "$dst") bytes)"
+      return 0
+    fi
+    rm -f "$dst"
   done
-  echo "错误：SONAME 别名 $2 无源文件（glob: lib/$1）" >&2
+  echo "错误：SONAME 别名 $soname 无非空源文件（glob: lib/$pattern）" >&2
   exit 1
 }
 copy_soname 'libreadline.so.[0-9]*'  libreadline.so.8
@@ -605,6 +615,17 @@ copy_soname 'libhistory.so.[0-9]*'   libhistory.so.8
 copy_soname 'libncursesw.so.[0-9]*'  libncursesw.so.6
 copy_soname 'libncursesw.so.[0-9]*'  libncurses.so.6
 copy_soname 'libncursesw.so.[0-9]*'  libncurses.so
+# Node's runtime linker needs concrete SONAME files, not package-manager symlink stubs.
+copy_soname 'libz.so*'               libz.so.1
+copy_soname 'libssl.so.[0-9]*'       libssl.so
+
+for required in libreadline.so.8 libz.so.1 libssl.so; do
+  f="$ROOT/lib/$required"
+  if [ ! -f "$f" ] || [ -L "$f" ] || [ ! -s "$f" ]; then
+    echo "错误：运行时依赖 $required 未物化为非空普通文件" >&2
+    exit 1
+  fi
+done
 
 # ---- 3.8 bin 工具 wrapper（真机 m1.6.7/8 验证版，与 build_runtime.py 对齐）----
 # corepack 家族（corepack/npm/npx/pnpm/pnpx/yarn/yarnpkg）：dist/*.js 的 shebang 硬编码
