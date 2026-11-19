@@ -1185,7 +1185,19 @@ class EngineSupervisor(private val ctx: Context) {
             // 现在：只要本次是**异常退出**（deterministicFailure != null 说明
             // 启动期自己死了，或日志确证端口冲突），就先做一次彻底清场，
             // 再进入正常退避重试。清场对空闲端口是无害 no-op，代价只是几百毫秒。
+            val bindConflict = looksLikePortConflict() && withContext(Dispatchers.IO) { portInUse() }
             val crashed = deterministicFailure != null || looksLikePortConflict()
+            // A real listener bind race is not an orphan-reclaim case: the holder may
+            // be another app. Rotate the entire group instead of killing an unknown PID.
+            if (bindConflict) {
+                val nextPlan = withContext(Dispatchers.IO) {
+                    EnginePortManager.rotateAfterBindConflict(ctx)
+                }
+                Log.w(TAG, "web bind conflict on :${EngineConfig.DEFAULT_PORT}; moved to :${nextPlan.web} without reclaiming foreign listener")
+                deterministicFailure = null
+                delay(1_200)
+                continue
+            }
             // ── v1.4.24：凭证/token 类失败 → 不无限重启 ──────────────────────
             // 用户反馈「token 过期就显示进程异常退出、反复重启」。这类失败
             // 重启多少次都不会好（需要用户重新登录或换 key），必须收敛成

@@ -96,6 +96,34 @@ object EnginePortManager {
         }
     }
 
+    /**
+     * Move to the next complete group after the real web listener reports EADDRINUSE.
+     * Unlike reclaimPort(), this never kills the process that won the bind race.
+     */
+    fun rotateAfterBindConflict(context: Context): EnginePortPlan {
+        load(context)
+        synchronized(lock) {
+            var candidate = active.web + EnginePortPlan.GROUP_STEP
+            var attempts = 0
+            while (candidate <= 65535 - 11 && attempts < 64) {
+                val plan = EnginePortPlan.fromBase(candidate)
+                if (groupAvailable(plan)) {
+                    val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                        .edit().putInt(KEY_BASE, candidate).commit()
+                    if (!saved) throw IOException("cannot persist rotated port group")
+                    active = plan
+                    selected = true
+                    Log.w(TAG, "rotated port group after bind conflict: ${plan.allPorts.joinToString()}")
+                    return plan
+                }
+                Log.w(TAG, "next port group busy: ${plan.allPorts.joinToString()}; trying +${EnginePortPlan.GROUP_STEP}")
+                candidate += EnginePortPlan.GROUP_STEP
+                attempts++
+            }
+            throw IOException("no free DSH port group found after bind conflict ($attempts attempts)")
+        }
+    }
+
     private fun groupAvailable(plan: EnginePortPlan): Boolean {
         val held = ArrayList<ServerSocket>(plan.allPorts.size)
         return try {

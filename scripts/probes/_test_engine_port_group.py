@@ -34,6 +34,12 @@ check("availability probe binds all sockets together", (
     and "held.forEach" in manager
 ))
 check("probe never kills unknown processes", "Process.killProcess" not in manager and "pkill" not in manager)
+check("real bind conflict rotates the full group", "fun rotateAfterBindConflict(context: Context)" in manager and "candidate = active.web + EnginePortPlan.GROUP_STEP" in manager)
+check("bind race rotates without reclaiming foreign listener", (
+    "val bindConflict = looksLikePortConflict() && withContext(Dispatchers.IO) { portInUse() }" in supervisor
+    and supervisor.find("if (bindConflict)") < supervisor.find("val portEvidence")
+    and "rotateAfterBindConflict(ctx)" in supervisor
+))
 
 # Startup ordering is essential: load persisted base -> reap -> select -> bind app services.
 i_load = supervisor.find("EnginePortManager.load(ctx)")
