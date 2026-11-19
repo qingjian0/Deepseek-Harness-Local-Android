@@ -1175,7 +1175,10 @@ class EngineSupervisor(private val ctx: Context) {
                 Log.i(TAG, "crash detected — stale app processes handled by OrphanReaper; allocator will choose a free port")
             }
             val portEvidence = withContext(Dispatchers.IO) {
-                portInUse() && (deterministicFailure != null || looksLikePortConflict())
+                // EADDRINUSE is authoritative even when the foreign socket is bound but
+                // not listening: a loopback connect would be refused, while bind() still
+                // fails. Fall back to connect-based evidence for silent process exits.
+                looksLikePortConflict() || (deterministicFailure != null && portInUse())
             }
             if (portEvidence) {
                 totalPortReclaims++
