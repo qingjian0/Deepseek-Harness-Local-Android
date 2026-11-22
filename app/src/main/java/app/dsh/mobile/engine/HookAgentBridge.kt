@@ -38,6 +38,7 @@ object HookAgentBridge {
     fun status(context: Context): Pair<Int, String> = guarded {
         val state = snapshot(context)
         val report = parseReport(state.getString(KEY_REPORT))
+        val discoveryTask = state.getString(KEY_DISCOVERY_TASK)?.takeIf { it.isNotBlank() }?.let(::JSONObject)
         JSONObject()
             .put("ok", true)
             .put("targetPackage", "com.openai.chatgpt")
@@ -47,6 +48,8 @@ object HookAgentBridge {
             .put("enabled", state.getBoolean(KEY_ENABLED, true))
             .put("eventCount", report.optJSONArray("events")?.length() ?: 0)
             .put("configUpdatedAt", state.getLong(KEY_CONFIG_UPDATED, 0L))
+            .put("discoveryStatus", discoveryTask?.optString("status") ?: "idle")
+            .put("discoveryAttempt", discoveryTask?.optInt("attempt", 0) ?: 0)
             .toString()
     }
 
