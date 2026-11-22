@@ -23,8 +23,10 @@ object HookAgentBridge {
     private const val METHOD_SET_ENABLED = "host_set_enabled"
     private const val METHOD_DISCOVER = "host_discover"
     private const val METHOD_DISCOVERY_RESULT = "host_discovery_result"
+    private const val METHOD_DISCOVERY_CANCEL = "host_discovery_cancel"
     private const val KEY_DISCOVERY_REQUEST = "discoveryRequest"
     private const val KEY_DISCOVERY_RESULT = "discoveryResult"
+    private const val KEY_DISCOVERY_TASK = "discoveryTask"
     private const val KEY_DISCOVERY_ID = "discoveryId"
     private const val KEY_REPORT = "report"
     private const val KEY_CONFIG = "config"
@@ -111,8 +113,9 @@ object HookAgentBridge {
     fun discover(context: Context, body: String): Pair<Int, String> = guarded {
         val request = JSONObject(body)
         val prefix = request.optString("prefix", "com.openai.")
-        val className = request.optString("className").takeIf { it.isNotBlank() }
+        val className = request.optString("className").takeIf { it.isNotBlank() && it != "null" }
         val limit = request.optInt("limit", 100).coerceIn(1, 500)
+        val cursor = request.optInt("cursor", 0).coerceAtLeast(0)
         require(prefix.startsWith("com.openai.") && prefix.length <= 180) {
             "prefix must be within com.openai.*"
         }
@@ -126,6 +129,7 @@ object HookAgentBridge {
             .put("prefix", prefix)
             .put("className", className ?: JSONObject.NULL)
             .put("limit", limit)
+            .put("cursor", cursor)
         val queuedResult = call(context, METHOD_DISCOVER, Bundle().apply {
             putString(KEY_DISCOVERY_REQUEST, queued.toString())
         })
@@ -133,18 +137,77 @@ object HookAgentBridge {
             throw IllegalStateException("Module provider rejected the discovery request")
         }
 
-        // The target process polls independently; stay within the Agent plugin's 15-second client timeout.
+        // The target process claims a lease and can retry transient failures. Do not return
+        // a non-terminal attempt result: it may be queued again by the Provider.
         val deadline = SystemClock.elapsedRealtime() + 12_000L
         while (SystemClock.elapsedRealtime() < deadline) {
-            val result = call(context, METHOD_DISCOVERY_RESULT, Bundle().apply {
+            val state = call(context, METHOD_DISCOVERY_RESULT, Bundle().apply {
                 putString(KEY_DISCOVERY_ID, requestId)
-            }).getString(KEY_DISCOVERY_RESULT)
-            if (!result.isNullOrBlank()) return@guarded result
+            })
+            val taskRaw = state.getString(KEY_DISCOVERY_TASK)
+            if (!taskRaw.isNullOrBlank()) {
+                val task = JSONObject(taskRaw)
+                when (task.optString("status")) {
+                    "SUCCEEDED" -> {
+                        val envelope = state.getString(KEY_DISCOVERY_RESULT)
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let(::JSONObject)
+                            ?: throw IllegalStateException("Discovery completed without a result")
+                        return@guarded (envelope.optJSONObject("result")
+                            ?: throw IllegalStateException("Discovery result envelope is invalid"))
+                            .put("requestId", requestId)
+                            .toString()
+                    }
+                    "FAILED", "EXPIRED", "CANCELLED" -> {
+                        val envelope = state.getString(KEY_DISCOVERY_RESULT)
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let(::JSONObject)
+                        throw IllegalStateException(
+                            "Discovery ${task.optString("status").lowercase()}: " +
+                                (task.optString("errorCode").takeIf { it.isNotBlank() && it != "null" }
+                                    ?: envelope?.optJSONObject("result")?.optString("error")
+                                    ?: "unknown_error")
+                        )
+                    }
+                    // QUEUED/RUNNING are non-terminal; continue waiting through retries.
+                }
+            }
             SystemClock.sleep(150L)
         }
         throw java.util.concurrent.TimeoutException(
-            "Target process did not complete discovery within 12 seconds; retry the same query"
+            "Target process did not finish discovery within 12 seconds; requestId=$requestId"
         )
+    }
+
+    fun discoverStatus(context: Context, query: String): Pair<Int, String> = guarded {
+        val requestId = parseQuery(query)["requestId"].orEmpty()
+        require(requestId.matches(Regex("[A-Fa-f0-9-]{16,64}"))) { "requestId is invalid" }
+        val state = call(context, METHOD_DISCOVERY_RESULT, Bundle().apply {
+            putString(KEY_DISCOVERY_ID, requestId)
+        })
+        val taskRaw = state.getString(KEY_DISCOVERY_TASK)
+            ?: throw IllegalArgumentException("Discovery request was not found")
+        val resultRaw = state.getString(KEY_DISCOVERY_RESULT)
+        JSONObject()
+            .put("ok", true)
+            .put("task", JSONObject(taskRaw))
+            .put("result", resultRaw?.takeIf { it.isNotBlank() }?.let(::JSONObject)?.opt("result") ?: JSONObject.NULL)
+            .toString()
+    }
+
+    fun cancelDiscovery(context: Context, body: String): Pair<Int, String> = guarded {
+        val requestId = JSONObject(body).optString("requestId")
+        require(requestId.matches(Regex("[A-Fa-f0-9-]{16,64}"))) { "requestId is invalid" }
+        val state = call(context, METHOD_DISCOVERY_CANCEL, Bundle().apply {
+            putString(KEY_DISCOVERY_ID, requestId)
+        })
+        if (!state.getBoolean(KEY_ACCEPTED, false)) {
+            throw IllegalStateException("Module Provider did not persist discovery cancellation")
+        }
+        JSONObject()
+            .put("ok", true)
+            .put("task", state.getString(KEY_DISCOVERY_TASK)?.let(::JSONObject) ?: JSONObject.NULL)
+            .toString()
     }
 
     private fun snapshot(context: Context): Bundle =
