@@ -125,7 +125,7 @@ async function apply(ctx) {
     name: "dsh_hook_rules_update",
     description: "Validate and apply a complete declarative Hook configuration snapshot.",
     parameters: {
-      config: { type: "object", required: true, description: "Complete Hook config: schemaVersion, targetPackage and rules." },
+      config: { type: "object", required: true, description: "Complete Hook config: schemaVersion, targetPackage and rules; optional observeClassLoads=true enables bounded metadata-only ClassLoader observation." },
     },
     execute: async ({ config }) => {
       if (!config || typeof config !== "object" || Array.isArray(config)) {
