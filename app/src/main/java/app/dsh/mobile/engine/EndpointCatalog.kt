@@ -2188,6 +2188,7 @@ object EndpointCatalog {
                     "取消排队或运行中的发现任务",
                     body = "{\"requestId\":\"<request-id>\"}",
                     examples = listOf("dev api POST /hook/discover/cancel '{\"requestId\":\"<request-id>\"}'"),
+                    limits = "Only the current request ID can be cancelled; terminal tasks remain unchanged and stale IDs are rejected.",
                 ),
                 e(
                     "hook-control", "POST", "/hook/control",
