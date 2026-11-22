@@ -142,12 +142,43 @@ async function apply(ctx) {
       prefix: { type: "string", description: "Class/package prefix, for example com.openai." },
       className: { type: "string", description: "Optional exact class name to inspect." },
       limit: { type: "integer", description: "Maximum metadata records, from 1 to 500." },
+      cursor: { type: "integer", description: "Page cursor returned by the previous discovery result." },
     },
-    execute: async ({ prefix = "com.openai.", className, limit = 100 } = {}) => request("POST", "/hook/discover", {
+    execute: async ({ prefix = "com.openai.", className, limit = 100, cursor = 0 } = {}) => request("POST", "/hook/discover", {
       prefix: String(prefix),
       ...(className ? { className: String(className) } : {}),
       limit: Math.min(500, Math.max(1, Number(limit) || 100)),
+      cursor: Math.max(0, Number(cursor) || 0),
     }),
+  });
+
+  register(ctx, defineTool, {
+    name: "dsh_hook_discover_status",
+    description: "Read the lifecycle state and latest result for a previously submitted discovery request.",
+    parameters: {
+      requestId: { type: "string", required: true, description: "Discovery request ID returned by dsh_hook_discover." },
+    },
+    execute: async ({ requestId }) => {
+      if (typeof requestId !== "string" || !/^[a-f0-9-]{16,64}$/i.test(requestId)) {
+        throw new Error("requestId is invalid");
+      }
+      const query = new URLSearchParams({ requestId });
+      return request("GET", "/hook/discover?" + query.toString());
+    },
+  });
+
+  register(ctx, defineTool, {
+    name: "dsh_hook_discover_cancel",
+    description: "Cancel a queued or running discovery request.",
+    parameters: {
+      requestId: { type: "string", required: true, description: "Discovery request ID returned by dsh_hook_discover." },
+    },
+    execute: async ({ requestId }) => {
+      if (typeof requestId !== "string" || !/^[a-f0-9-]{16,64}$/i.test(requestId)) {
+        throw new Error("requestId is invalid");
+      }
+      return request("POST", "/hook/discover/cancel", { requestId });
+    },
   });
 
   register(ctx, defineTool, {
