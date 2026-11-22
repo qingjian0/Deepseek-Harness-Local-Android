@@ -505,6 +505,8 @@ object AgentBridge {
         "GET /hook/rules" to Route("GET") { c, _, _ -> HookAgentBridge.rules(c) },
         "POST /hook/rules" to Route("POST") { c, _, b -> HookAgentBridge.updateRules(c, b) },
         "POST /hook/discover" to Route("POST") { c, _, b -> HookAgentBridge.discover(c, b) },
+        "GET /hook/discover" to Route("GET") { c, q, _ -> HookAgentBridge.discoverStatus(c, q) },
+        "POST /hook/discover/cancel" to Route("POST") { c, _, b -> HookAgentBridge.cancelDiscovery(c, b) },
         "POST /hook/control" to Route("POST") { c, _, b -> HookAgentBridge.control(c, b) },
         "POST /notify" to Route("POST") { c, _, b -> notify(c, b) },
         "GET /screen" to Route("GET") { _, q, _ -> screen(q) },
