@@ -2167,13 +2167,27 @@ object EndpointCatalog {
                 e(
                     "hook-discover", "POST", "/hook/discover",
                     "在目标进程 ClassLoader 中发现 com.openai.* 类与方法签名（只读元数据）",
-                    body = "{\"prefix\":\"com.openai.\",\"limit\":100}",
+                    body = "{\"prefix\":\"com.openai.\",\"limit\":100,\"cursor\":0}",
                     examples = listOf(
                         "dev api POST /hook/discover '{\"prefix\":\"com.openai.\",\"limit\":100}'",
                         "dev api POST /hook/discover '{\"className\":\"com.openai.auth.a\",\"limit\":100}'",
                     ),
-                    limits = "① 不执行发现到的方法，不读取参数、返回值、字段或应用内容。" +
-                        "\n② 目标进程未运行、ClassLoader 索引不可用或 12 秒内未返回时会明确报错。",
+                    limits = "① 只返回类、方法、构造器与字段元数据；不执行发现到的方法，也不读取字段值。" +
+                        "\n② 单次发现受 DEX/类/成员/时长/响应大小预算限制，结果会明确标记截断与游标。" +
+                        "\n③ 目标进程未运行、ClassLoader 索引不可用或超过 12 秒会明确报错。",
+                ),
+                e(
+                    "hook-discover-status", "GET", "/hook/discover",
+                    "读取发现任务状态、重试次数与最近结果",
+                    params = "requestId=<POST /hook/discover 返回的请求 ID>",
+                    examples = listOf("dev api GET '/hook/discover?requestId=<request-id>'"),
+                    limits = "只返回任务状态和元数据发现结果，不包含目标应用运行数据。",
+                ),
+                e(
+                    "hook-discover-cancel", "POST", "/hook/discover/cancel",
+                    "取消排队或运行中的发现任务",
+                    body = "{\"requestId\":\"<request-id>\"}",
+                    examples = listOf("dev api POST /hook/discover/cancel '{\"requestId\":\"<request-id>\"}'"),
                 ),
                 e(
                     "hook-control", "POST", "/hook/control",
