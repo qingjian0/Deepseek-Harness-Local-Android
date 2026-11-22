@@ -74,7 +74,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   # main 上新 push 取代旧构建，避免并发的 edge 发布互相覆盖（最新提交最终生效）；
   # tag 构建不互相取消，避免半个正式发布。
-  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/refactor/dsh-gpt-hook-bridge-hardening' }}
 
 jobs:
   # ---------------------------------------------------------------------------
