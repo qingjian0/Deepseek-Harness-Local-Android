@@ -40,6 +40,10 @@ final. Transient Provider/index errors may be retried within the task's bounded 
 budget. A stale worker revision is rejected. A timed-out HTTP request leaves the task
 queryable by request ID; it is not silently discarded.
 
+## Agent verification contract
+
+`POST /hook/rules` returning `accepted=true` means only that the complete configuration snapshot was persisted. The host status response now includes the target runtime state, active Hook count, installed HookHandle inventory, and last apply report. The profile plugin exposes `dsh_hook_verify_revision`; after every rules update the Agent must call it with the returned `configUpdatedAt` revision and, when known, the expected rule IDs. A rule is reported installed only when its ID appears in the live target-process HookHandle inventory. A timeout or missing rule returns a pending/failed result for adaptive replanning; it must never be narrated as success.
+
 ## Security boundary and remaining work
 
 - HTTP Agent authentication uses the DSH bridge token.
