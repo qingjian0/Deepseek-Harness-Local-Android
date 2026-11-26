@@ -123,7 +123,7 @@ async function apply(ctx) {
 
   register(ctx, defineTool, {
     name: "dsh_hook_rules_update",
-    description: "Validate and apply a complete declarative Hook configuration snapshot.",
+    description: "Validate and store a complete declarative Hook configuration snapshot. This is NOT proof of installation; immediately call dsh_hook_verify_revision with the returned configUpdatedAt revision.",
     parameters: {
       config: { type: "object", required: true, description: "Complete Hook config: schemaVersion, targetPackage and rules; optional observeClassLoads=true enables bounded metadata-only ClassLoader observation." },
     },
@@ -132,6 +132,50 @@ async function apply(ctx) {
         throw new Error("config must be a JSON object");
       }
       return request("POST", "/hook/rules", config);
+    },
+  });
+
+  register(ctx, defineTool, {
+    name: "dsh_hook_verify_revision",
+    description: "Verify a stored Hook revision against the target process apply report and live HookHandle inventory. Always call after dsh_hook_rules_update; never treat accepted=true as installed=true.",
+    parameters: {
+      revision: { type: "integer", required: true, description: "configUpdatedAt revision returned by dsh_hook_rules_update." },
+      ruleIds: { type: "array", items: { type: "string" }, description: "Optional expected enabled Hook rule IDs. Verification waits until all appear in installedHooks." },
+      timeoutMs: { type: "integer", description: "Wait budget in milliseconds, clamped to 1-20000." },
+    },
+    execute: async ({ revision, ruleIds = [], timeoutMs = 12000 }) => {
+      const targetRevision = Number(revision);
+      if (!Number.isFinite(targetRevision) || targetRevision <= 0) throw new Error("revision must be a positive number");
+      if (!Array.isArray(ruleIds) || ruleIds.some((id) => typeof id !== "string" || !id.trim())) {
+        throw new Error("ruleIds must be an array of non-empty strings");
+      }
+      const deadline = Date.now() + Math.min(20000, Math.max(1000, Number(timeoutMs) || 12000));
+      let latest;
+      while (Date.now() < deadline) {
+        latest = await request("GET", "/hook/status");
+        const apply = latest.lastApplyReport || {};
+        const appliedRevision = Number(apply.revision);
+        if (appliedRevision >= targetRevision) {
+          if (Number(apply.failed || 0) > 0) {
+            return { verified: false, state: "apply_failed", status: latest, reason: "target reported failed Hook installations" };
+          }
+          const installed = new Set((latest.installedHooks || []).map((hook) => hook?.ruleId).filter(Boolean));
+          const missingRuleIds = ruleIds.filter((id) => !installed.has(id));
+          if (missingRuleIds.length === 0) {
+            return { verified: true, state: "installed", revision: appliedRevision, activeHookCount: latest.activeHookCount, installedHooks: latest.installedHooks || [] };
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      return {
+        verified: false,
+        state: latest?.targetObserved ? "pending_or_missing_hooks" : "target_process_not_observed",
+        requestedRevision: targetRevision,
+        lastApplyReport: latest?.lastApplyReport || null,
+        activeHookCount: latest?.activeHookCount ?? 0,
+        installedHooks: latest?.installedHooks || [],
+        message: "The revision is not confirmed in the target HookHandle inventory. Re-discover/re-plan or wait for the target process; do not report success.",
+      };
     },
   });
 
