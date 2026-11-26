@@ -140,10 +140,10 @@ async function apply(ctx) {
     description: "Verify a stored Hook revision against the target process apply report and live HookHandle inventory. Always call after dsh_hook_rules_update; never treat accepted=true as installed=true.",
     parameters: {
       revision: { type: "integer", required: true, description: "configUpdatedAt revision returned by dsh_hook_rules_update." },
-      ruleIds: { type: "array", items: { type: "string" }, description: "Optional expected enabled Hook rule IDs. Verification waits until all appear in installedHooks." },
+      ruleIds: { type: "array", required: true, items: { type: "string" }, description: "Exact expected enabled Hook rule IDs from the submitted config. Use an empty array only when verifying that all hooks were removed." },
       timeoutMs: { type: "integer", description: "Wait budget in milliseconds, clamped to 1-20000." },
     },
-    execute: async ({ revision, ruleIds = [], timeoutMs = 12000 }) => {
+    execute: async ({ revision, ruleIds, timeoutMs = 12000 }) => {
       const targetRevision = Number(revision);
       if (!Number.isFinite(targetRevision) || targetRevision <= 0) throw new Error("revision must be a positive number");
       if (!Array.isArray(ruleIds) || ruleIds.some((id) => typeof id !== "string" || !id.trim())) {
@@ -159,10 +159,14 @@ async function apply(ctx) {
           if (Number(apply.failed || 0) > 0) {
             return { verified: false, state: "apply_failed", status: latest, reason: "target reported failed Hook installations" };
           }
+          if (latest.hookInventoryTruncated) {
+            return { verified: false, state: "inventory_truncated", revision: appliedRevision, activeHookCount: latest.activeHookCount, message: "The live HookHandle inventory is truncated; exact verification is unavailable." };
+          }
           const installed = new Set((latest.installedHooks || []).map((hook) => hook?.ruleId).filter(Boolean));
           const missingRuleIds = ruleIds.filter((id) => !installed.has(id));
-          if (missingRuleIds.length === 0) {
-            return { verified: true, state: "installed", revision: appliedRevision, activeHookCount: latest.activeHookCount, installedHooks: latest.installedHooks || [] };
+          const removalVerified = ruleIds.length === 0 && Number(latest.activeHookCount || 0) === 0;
+          if ((ruleIds.length > 0 && missingRuleIds.length === 0) || removalVerified) {
+            return { verified: true, state: ruleIds.length > 0 ? "installed" : "all_hooks_removed", revision: appliedRevision, activeHookCount: latest.activeHookCount, installedHooks: latest.installedHooks || [] };
           }
         }
         await new Promise((resolve) => setTimeout(resolve, 200));
