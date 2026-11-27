@@ -2426,13 +2426,21 @@ document.getElementById('api').textContent = checks.map(function(c){
     // 解法：把节点树读取丢进单线程 executor，有界等待；超时返回 504 并明确报错，
     // 让上层能区分「服务未开启(503)」与「IPC 卡住(504)」。单线程同时限制了并发，
     // 避免多个僵死任务堆积。
-    // v1.2.152 审查修复：原先只有 1 条线程，而 `/loop/run` 会在这个线程上占满
-    // 整段执行时间（最长 180s）——期间任何并发读屏（`/screen`、`/pick`、`/memory`）
-    // 都排在后面，2s 上限一到全部 504，AI 收到"无障碍坏了"的错误信号。
-    // 2 条线程：长任务占一条，快速读屏仍有可用线程（读操作互不冲突）。
-    private val screenExec = java.util.concurrent.Executors.newFixedThreadPool(2) { r ->
-        Thread(r, "dsh-screen-ipc").apply { isDaemon = true }
-    }
+    // v1.2.152：两条线程避免长 loop 独占读屏通道。队列也必须有界：
+    // 如果无障碍 Binder IPC 卡死，超时任务不能无限堆积并拖垮后续所有读屏。
+    // 超时会取消 Future、清理已取消的排队任务；底层 IPC 若不可中断，最多占住两条工作线程，
+    // 新请求快速拒绝并返回可诊断的 504，而不是无限排队。
+    private val screenExec = java.util.concurrent.ThreadPoolExecutor(
+        2,
+        2,
+        0L,
+        java.util.concurrent.TimeUnit.MILLISECONDS,
+        java.util.concurrent.ArrayBlockingQueue<Runnable>(2),
+        java.util.concurrent.ThreadFactory { r ->
+            Thread(r, "dsh-screen-ipc").apply { isDaemon = true }
+        },
+        java.util.concurrent.ThreadPoolExecutor.AbortPolicy(),
+    )
 
     /** 节点树 IPC 的默认上限：稳定后读屏几十毫秒，冷读（见下）约 2.5s */
     private val SCREEN_IPC_TIMEOUT_MS = 2_000L
@@ -2461,15 +2469,30 @@ document.getElementById('api').textContent = checks.map(function(c){
         return screenReadOnce(what, SCREEN_IPC_COLD_RETRY_MS, block)
     }
 
-    /** 单次有界读树：超时返回 null，异常返回 failure */
-    private fun <T> screenReadOnce(what: String, timeoutMs: Long, block: () -> T): Result<T>? = try {
-        val future = screenExec.submit(java.util.concurrent.Callable { block() })
-        Result.success(future.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS))
-    } catch (e: java.util.concurrent.TimeoutException) {
-        Log.w(TAG, "screen ipc timeout: $what (>${timeoutMs}ms) — node tree stalled")
-        null
-    } catch (e: java.util.concurrent.ExecutionException) {
-        Result.failure(e.cause ?: e)
+    /** 单次有界读树：超时取消任务；线程池饱和时快速拒绝，避免无限排队。 */
+    private fun <T> screenReadOnce(what: String, timeoutMs: Long, block: () -> T): Result<T>? {
+        val future = try {
+            screenExec.submit(java.util.concurrent.Callable { block() })
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            Log.w(TAG, "screen ipc saturated: $what — rejecting queued read")
+            return null
+        }
+        return try {
+            Result.success(future.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS))
+        } catch (e: java.util.concurrent.TimeoutException) {
+            // Binder IPC may ignore interruption, but cancelling still releases queued work
+            // and asks an interruptible implementation to stop. purge() removes cancelled
+            // FutureTasks that would otherwise occupy the bounded queue.
+            future.cancel(true)
+            screenExec.purge()
+            Log.w(TAG, "screen ipc timeout: $what (>${timeoutMs}ms) — node tree stalled")
+            null
+        } catch (e: java.util.concurrent.ExecutionException) {
+            Result.failure(e.cause ?: e)
+        } catch (e: java.util.concurrent.CancellationException) {
+            Log.w(TAG, "screen ipc cancelled: $what")
+            null
+        }
     }
 
     /**
