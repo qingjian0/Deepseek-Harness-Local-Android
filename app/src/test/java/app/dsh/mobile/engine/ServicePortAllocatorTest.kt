@@ -1,6 +1,7 @@
 package app.dsh.mobile.engine
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,6 +46,30 @@ class ServicePortAllocatorTest {
             assertTrue(ports.all.all { it in 1024..65535 })
             assertEquals(6, ports.all.distinct().size)
             assertEquals(0, ports.offset % 1000)
+        }
+    }
+
+    @Test
+    fun wildcardProbeAcceptsAFreePort() {
+        val port = java.net.ServerSocket(0).use { it.localPort }
+        assertTrue(ServicePortAllocator.canBind(port))
+    }
+
+    @Test
+    fun wildcardProbeRejectsLoopbackListener() {
+        java.net.ServerSocket().use { listener ->
+            listener.reuseAddress = false
+            listener.bind(java.net.InetSocketAddress(java.net.InetAddress.getByName("127.0.0.1"), 0))
+            assertFalse(ServicePortAllocator.canBind(listener.localPort))
+        }
+    }
+
+    @Test
+    fun wildcardProbeRejectsWildcardListener() {
+        java.net.ServerSocket().use { listener ->
+            listener.reuseAddress = false
+            listener.bind(java.net.InetSocketAddress(java.net.InetAddress.getByName("0.0.0.0"), 0))
+            assertFalse(ServicePortAllocator.canBind(listener.localPort))
         }
     }
 
