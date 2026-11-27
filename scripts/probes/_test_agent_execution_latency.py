@@ -1,51 +1,72 @@
 #!/usr/bin/env python3
-"""Regression guards for avoidable latency in Android agent execution paths."""
+"""Regression guards for avoidable latency in Android agent execution paths.
+
+These are source-contract checks, not a substitute for Kotlin compilation or
+on-device timing tests. Keep assertions independent of comment placement.
+"""
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PACE = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/HumanPace.kt")
-LOOP = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine/LocalLoopExecutor.kt")
-A11Y = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/DshAccessibilityService.kt")
-BRIDGE = os.path.join(ROOT, "app/src/main/java/app/dsh/mobile/engine/AgentBridge.kt")
+PATHS = {
+    "pace": "app/src/main/java/app/dsh/mobile/HumanPace.kt",
+    "loop": "app/src/main/java/app/dsh/mobile/engine/LocalLoopExecutor.kt",
+    "a11y": "app/src/main/java/app/dsh/mobile/DshAccessibilityService.kt",
+    "bridge": "app/src/main/java/app/dsh/mobile/engine/AgentBridge.kt",
+}
 
 
-def read(path: str) -> str:
-    with open(path, encoding="utf-8") as f:
+def read(key: str) -> str:
+    with open(os.path.join(ROOT, PATHS[key]), encoding="utf-8") as f:
         return f.read()
 
 
+pace, loop, a11y, bridge = (read(k) for k in ("pace", "loop", "a11y", "bridge"))
 checks: list[tuple[str, bool]] = []
-pace, loop, a11y, bridge = map(read, (PACE, LOOP, A11Y, BRIDGE))
 
-checks.append(("human-like pacing is disabled by default", "const val DEFAULT_ENABLED = false" in pace))
-checks.append(("local loop uses the shared opt-in default",
-               'plan.optBoolean("humanPace", HumanPace.DEFAULT_ENABLED)' in loop))
-
-batch_start = a11y.index("fun runBatch(")
-batch_end = a11y.index("\n    /**", batch_start)
-batch = a11y[batch_start:batch_end]
-checks.append(("batch API defaults human pacing off",
-               "humanPace: Boolean = HumanPace.DEFAULT_ENABLED" in batch))
-checks.append(("batch delay is conditional, not unconditional",
-               "if (humanPace) HumanPace.pause(HumanPace.stepPauseMs())" in batch
-               and batch.count("HumanPace.pause(") == 1))
-checks.append(("bridge forwards explicit humanPace opt-in",
-               'obj.optBoolean("humanPace", HumanPace.DEFAULT_ENABLED)' in bridge))
-
-screen_exec_start = bridge.index("private val screenExec")
-screen_exec_end = bridge.index("/** 节点树 IPC 的默认上限", screen_exec_start)
-screen_exec = bridge[screen_exec_start:screen_exec_end]
-checks.append(("screen IPC worker queue is bounded",
-               "ThreadPoolExecutor(" in screen_exec
-               and "ArrayBlockingQueue<Runnable>(2)" in screen_exec))
-screen_read_start = bridge.index("private fun <T> screenReadOnce")
-screen_read_end = bridge.index("\n    /**", screen_read_start)
-screen_read = bridge[screen_read_start:screen_read_end]
-checks.append(("timed-out screen IPC is cancelled and purged",
-               "future.cancel(true)" in screen_read and "screenExec.purge()" in screen_read))
+checks.append((
+    "human-like pacing is disabled by default",
+    bool(re.search(r"const\\s+val\\s+DEFAULT_ENABLED\\s*=\\s*false\\b", pace)),
+))
+checks.append((
+    "local loop uses the shared opt-in default",
+    'plan.optBoolean("humanPace", HumanPace.DEFAULT_ENABLED)' in loop,
+))
+checks.append((
+    "loop and bridge import HumanPace from the app package",
+    "import app.dsh.mobile.HumanPace" in loop and
+    "import app.dsh.mobile.HumanPace" in bridge,
+))
+checks.append((
+    "batch API defaults human pacing off",
+    bool(re.search(r"humanPace:\\s*Boolean\\s*=\\s*HumanPace.DEFAULT_ENABLED", a11y)),
+))
+checks.append((
+    "batch delay is conditional, not unconditional",
+    "if (humanPace) HumanPace.pause(HumanPace.stepPauseMs())" in a11y and
+    a11y.count("HumanPace.pause(") == 1,
+))
+checks.append((
+    "bridge forwards explicit humanPace opt-in",
+    'obj.optBoolean("humanPace", HumanPace.DEFAULT_ENABLED)' in bridge,
+))
+checks.append((
+    "screen IPC worker queue is bounded",
+    "private val screenExec = java.util.concurrent.ThreadPoolExecutor(" in bridge and
+    "java.util.concurrent.ArrayBlockingQueue<Runnable>(2)" in bridge and
+    "java.util.concurrent.ThreadPoolExecutor.AbortPolicy()" in bridge,
+))
+checks.append((
+    "timed-out screen IPC is cancelled and purged",
+    "future.cancel(true)" in bridge and "screenExec.purge()" in bridge,
+))
+checks.append((
+    "screen IPC saturation is handled explicitly",
+    "RejectedExecutionException" in bridge and "screen ipc saturated" in bridge,
+))
 
 failed = 0
 for label, ok in checks:
