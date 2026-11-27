@@ -98,6 +98,26 @@ object ServicePortAllocator {
         return chosen
     }
 
+    /**
+     * Move to the next complete block after a listener bind race. This is safe only
+     * during preflight, before the other DSH listeners have started.
+     */
+    @Synchronized
+    fun advanceAfterBindFailure(ctx: Context, failedAgentPort: Int): ServicePortMap? {
+        if (current.agentBridge != failedAgentPort) return null
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val maxEngine = prefs.getInt(KEY_MAX_ENGINE, ServicePortMap.DEFAULT_MAX_ENGINE_PORT)
+        val next = ServicePortMap.candidates(current.offset, maxEngine)
+            .asSequence()
+            .filter { it.offset != current.offset }
+            .firstOrNull { map -> map.all.all(::canBind) }
+            ?: return null
+        current = next
+        prefs.edit().putInt(KEY_OFFSET, next.offset).apply()
+        Log.w(TAG, "bind race: advanced complete service block to offset=${next.offset}: ${next.all}")
+        return next
+    }
+
     /** Test hook; production code should never reset the process-wide selection. */
     @Synchronized
     internal fun resetForTests() {
