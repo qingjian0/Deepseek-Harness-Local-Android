@@ -18,11 +18,14 @@ import kotlin.random.Random
  *
  * 量级是用户定的：v1.6.33 先按 220–900ms 做，用户反馈「延迟不需要 0.5 秒这么高，
  * 0.1 秒就够了，正常人类操纵也很快」——真人连续操作确实很快，整齐才是破绽，慢不是。
- * 默认开启，计划里传 `"humanPace": false` 可以关掉。
+ * 默认关闭；只有计划显式传 `"humanPace": true` 才启用。
  *
  * 纯 Kotlin、只返回毫秒数，睡眠交给调用方 —— 这样 JVM 上能断言分布，不用真睡。
  */
 object HumanPace {
+
+    /** Normal execution must not add artificial per-step latency. */
+    const val DEFAULT_ENABLED = false
 
     /** 常规思考停顿的下界（v1.6.34：0.5s 太重，用户要的是「够快但别整齐」） */
     const val MIN_THINK_MS = 60L
