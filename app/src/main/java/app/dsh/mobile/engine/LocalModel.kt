@@ -63,6 +63,7 @@ object LocalModel {
      * @param onProgress (0f..1f 下载进度, 说明文字)
      * @return 成功与否
      */
+    @Synchronized
     fun ensureReady(ctx: Context, onProgress: (Float, String) -> Unit = { _, _ -> }): Boolean {
         if (isServerRunning()) return true
 
@@ -119,6 +120,7 @@ object LocalModel {
             }
             if (ok) {
                 if (part.renameTo(target)) {
+                    LocalEmbedder.clearEmbeddingCache()
                     Log.i(TAG, "model ready: ${target.absolutePath} (${target.length()} bytes)")
                     return true
                 }
