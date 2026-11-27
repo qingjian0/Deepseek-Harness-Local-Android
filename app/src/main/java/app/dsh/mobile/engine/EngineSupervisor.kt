@@ -655,15 +655,6 @@ class EngineSupervisor(private val ctx: Context) {
         stopping || !kotlinx.coroutines.currentCoroutineContext().isActive
 
     private suspend fun supervisionLoop() {
-        // Select and publish the entire service block before preflight starts any listener.
-        val selectedPorts = runCatching {
-            withContext(Dispatchers.IO) { ServicePortAllocator.select(ctx) }
-        }.getOrElse { error ->
-            Log.e(TAG, "service port allocation failed: ${error.message}", error)
-            _state.value = State.Failed("无法分配完整的 DSH 服务端口组：${error.message}")
-            return
-        }
-        Log.i(TAG, "service port block ready: ${selectedPorts.all} (offset=${selectedPorts.offset})")
         var backoffIndex = 0
         // 端口清场计数（v1.3.1）：防「非引擎进程永久占端口」时绕过退避无限重试
         var portReclaimCount = 0
@@ -807,6 +798,17 @@ class EngineSupervisor(private val ctx: Context) {
                 BootTrace.stepElapsed("home-owner-check", ownerMs)
                 if (healed > 0) Log.w(TAG, "guardian: restored $healed quarantined builtin overlay(s)")
                 BootTrace.stepElapsed("guardian-restore", guardianMs)
+
+                // Allocate only after orphan cleanup has had a chance to free stale DSH sockets,
+                // but before AgentBridge / RemoteAccessServer bind in parallel-preflight.
+                val selectedPorts = runCatching {
+                    withContext(Dispatchers.IO) { ServicePortAllocator.select(ctx) }
+                }.getOrElse { error ->
+                    Log.e(TAG, "service port allocation failed: ${error.message}", error)
+                    _state.value = State.Failed("无法分配完整的 DSH 服务端口组：${error.message}")
+                    return
+                }
+                Log.i(TAG, "service port block ready: ${selectedPorts.all} (offset=${selectedPorts.offset})")
 
                 // 三项互不依赖的启动准备任务并行执行：
                 //  - AgentContextSeed 只写 dsh-home/AGENTS.md；
