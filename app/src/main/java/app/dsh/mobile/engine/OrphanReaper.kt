@@ -129,6 +129,8 @@ object OrphanReaper {
             orphans++
             val cmd = cmdlineOf(p) ?: continue
             if (cmd.isBlank()) continue
+            // LAN proxy is intentionally detached from the engine lifecycle.
+            if (cmd.contains("lan-web-proxy")) continue
             if (marks.none { cmd.contains(it) }) continue
             Log.w(TAG, "reaping orphan pid=$pid cmd=${cmd.take(140)}")
             runCatching { android.os.Process.killProcess(pid) }
