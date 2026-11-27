@@ -67,7 +67,12 @@ object OrphanReaper {
      * 后面 spawnEngine 的 EADDRINUSE 与退避重试仍会兜住。
      */
     private fun portLooksBusy(): Boolean = runCatching {
-        val portHex = String.format("%04X", ServicePortAllocator.current.engine)
+        // Any known DSH block may still be held by a previous process. Check all candidate
+        // layouts so root-mode orphan cleanup runs before the allocator chooses a new block.
+        val ports = ServicePortMap.candidates(ServicePortAllocator.current.offset)
+            .flatMap { it.all }
+            .toSet()
+        val portHexes = ports.map { String.format("%04X", it) }.toSet()
         for (f in arrayOf("/proc/net/tcp", "/proc/net/tcp6")) {
             val file = File(f)
             if (!file.canRead()) continue
@@ -75,11 +80,13 @@ object OrphanReaper {
             file.useLines { seq ->
                 for (line in seq.drop(1)) {
                     val cols = line.trim().split(WS)
-                    if (cols.size < 4) continue
-                    if (cols[3] != listenState) continue
-                    val local = cols[1]                    // HEXADDR:HEXPORT
+                    if (cols.size < 4 || cols[3] != listenState) continue
+                    val local = cols[1]
                     val hexPort = local.substring(local.lastIndexOf(':') + 1)
-                    if (hexPort.equals(portHex, ignoreCase = true)) { hit = true; break }
+                    if (hexPort.uppercase() in portHexes) {
+                        hit = true
+                        break
+                    }
                 }
             }
             if (hit) return@runCatching true
