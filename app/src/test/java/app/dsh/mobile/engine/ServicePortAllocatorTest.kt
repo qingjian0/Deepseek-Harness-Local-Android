@@ -34,7 +34,7 @@ class ServicePortAllocatorTest {
     fun candidatesPreferPersistedOffsetThenTryOtherCompleteBlocks() {
         val candidates = ServicePortMap.candidates(preferredOffset = 2000, maxEnginePort = 8000)
         assertEquals(5, candidates.size)
-        assertEquals(listOf(2000, 0, 1000, 3000, 4000), candidates.map { it.offset })
+        assertEquals(listOf(2000, 3000, 4000, 0, 1000), candidates.map { it.offset })
     }
 
     @Test
