@@ -3781,7 +3781,7 @@ document.getElementById('api').textContent = checks.map(function(c){
                         val label = (st?.get("text") ?: st?.get("desc"))?.toString().orEmpty()
                         StatusOverlay.setAction("[$i/${steps.size}] $t${if (label.isBlank()) "" else " \"" + label.take(20) + "\""}")
                     }
-                }, obj.optBoolean("abortOnInterference", false))
+                }, obj.optBoolean("abortOnInterference", false), obj.optBoolean("humanPace", HumanPace.DEFAULT_ENABLED))
             } ?: return 504 to """{"ok":false,"error":"batch timed out (node tree stalled)"}"""
 
             val results = r.getOrElse { return 500 to """{"ok":false,"error":"${it.message}"}""" }
