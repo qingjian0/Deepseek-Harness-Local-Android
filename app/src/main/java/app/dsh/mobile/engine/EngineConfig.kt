@@ -1555,7 +1555,7 @@ object EngineConfig {
             |  disabled: false
             |  config:
             |    host: !!js ctx.webStartup.host ?? '127.0.0.1'
-            |    port: !!js ctx.webStartup.port ?? 3080
+            |    port: !!js ctx.webStartup.port ?? ${ServicePortAllocator.current.engine}
             |    compression: gzip
             |    compressionLevel: 1
             |    compressionThresholdBytes: 1024
