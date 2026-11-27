@@ -672,11 +672,17 @@ class ExtensionManager(private val ctx: Context) {
                         downloadDebWithFailover(allMirrors, pkg.filename, file, label, { stage ->
                             synchronized(progressLock) { report(null, stage) }
                         }) { fraction ->
-                            completedBytes.set(idx, (pkg.size * fraction).toLong().coerceIn(0L, pkg.size))
-                            val done = (0 until closure.size).sumOf { completedBytes.get(it) }
                             synchronized(progressLock) {
+                                val nextBytes = (pkg.size * fraction).toLong().coerceIn(0L, pkg.size)
+                                completedBytes.set(idx, maxOf(completedBytes.get(idx), nextBytes))
+                                val done = (0 until closure.size).sumOf { completedBytes.get(it) }
                                 report((done.toDouble() / totalBytes).toFloat() * 0.95f, "")
                             }
+                        }
+                        synchronized(progressLock) {
+                            completedBytes.set(idx, pkg.size)
+                            val done = (0 until closure.size).sumOf { completedBytes.get(it) }
+                            report((done.toDouble() / totalBytes).toFloat() * 0.95f, "")
                         }
                         check(pkg.sha256.isEmpty() || RuntimeInstaller.sha256(file) == pkg.sha256.lowercase()) {
                             runCatching { file.delete() }
