@@ -24,6 +24,9 @@ import kotlin.random.Random
  */
 object HumanPace {
 
+    /** Normal execution must not add artificial per-step latency. */
+    const val DEFAULT_ENABLED = false
+
     /** 常规思考停顿的下界（v1.6.34：0.5s 太重，用户要的是「够快但别整齐」） */
     const val MIN_THINK_MS = 60L
 
