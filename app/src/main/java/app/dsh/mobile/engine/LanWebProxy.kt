@@ -37,7 +37,7 @@ object LanWebProxy {
     private const val TAG = "LanWebProxy"
 
     /** 独立端口（禁止占用 3080/3083） */
-    const val PORT = 3090
+    val PORT: Int get() = ServicePortAllocator.current.lanProxy
 
     /** 「已开启」常驻通知的 channel / id（v1.2.188） */
     private const val NOTIF_CHANNEL = "lan_web"
@@ -47,7 +47,7 @@ object LanWebProxy {
     const val ACTION_LAN_OFF = "app.dsh.mobile.action.LAN_WEB_OFF"
 
     private const val UPSTREAM_HOST = "127.0.0.1"
-    private const val UPSTREAM_PORT = 3080
+    private val UPSTREAM_PORT: Int get() = ServicePortAllocator.current.engine
     private const val COOKIE = "dsh_lan_pw"
 
     /** HTTP 换行（源码里不写转义，避免多层转义失真） */
@@ -156,7 +156,7 @@ object LanWebProxy {
                 val workDir: java.io.File = EngineConfig.engineRoot(ctx)
                 // 复用引擎的环境构造（正确处理 Termux 硬编码 OpenSSL 路径 / LD_LIBRARY_PATH /
                 // PREFIX / TMPDIR 等；手写会漏，实测漏 OPENSSL_CONF 导致 node exit=13）
-                val engineEnv: Array<String> = EngineConfig.buildEnv(ctx, EngineConfig.DEFAULT_PORT)
+                val engineEnv: Array<String> = EngineConfig.buildEnv(ctx, ServicePortAllocator.current.engine)
                 // 清掉上一次可能残留的代理进程：否则新进程会撞 EADDRINUSE。
                 // 自己拉起的子进程优先用 destroy（不需要提权），su 兜底覆盖"换进程后残留"。
                 killStaleProxy(ctx)
@@ -176,7 +176,7 @@ object LanWebProxy {
                 val sh = "cd " + workDir.absolutePath + " && " + envPrefix +
                     " DSH_LAN_PW='" + pw + "'" +
                     " nohup " + node.absolutePath + " " + scriptPath +
-                    " --port " + PORT + " --pw '" + pw + "'" +
+                    " --port " + PORT + " --upstream " + UPSTREAM_HOST + ":" + UPSTREAM_PORT + " --pw '" + pw + "'" +
                     " > " + logPath + " 2>&1 &"
                 val proc = ProcessBuilder("sh", "-c", sh).start()
                 val exit = proc.waitFor()
