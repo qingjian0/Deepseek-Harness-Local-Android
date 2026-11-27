@@ -54,7 +54,7 @@ import java.nio.charset.StandardCharsets
 object AgentBridge {
 
     private const val TAG = "AgentBridge"
-    const val PORT = 3083
+    val PORT: Int get() = ServicePortAllocator.current.agentBridge
     private const val CHANNEL_ID = "agent_notify"
 
     /** 请求体上限（字节）。超限直接 413，见 handleOnWorker 里的说明。 */
