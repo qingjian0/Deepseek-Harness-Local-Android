@@ -170,7 +170,7 @@ object LocalLoopExecutor {
         val optimistic = plan.optBoolean("optimistic", false)
         // v1.6.33：真人节奏（每步 60–220ms 思考停顿 + 5% 概率额外犹豫 0.7–1.8s，v1.6.34 下调）。
         // 计划里传 "humanPace": false 可关闭。
-        val humanPace = plan.optBoolean("humanPace", true)
+        val humanPace = plan.optBoolean("humanPace", false)
         val stepReports = JSONArray()
         var escalated = false
         var yielded = false
