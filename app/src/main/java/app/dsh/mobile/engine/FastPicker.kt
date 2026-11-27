@@ -264,12 +264,13 @@ object LocalEmbedder {
     /** Shared cached single-text embedding used by memory indexing as well as FastPicker. */
     fun embeddingVector(text: String): List<Float>? {
         if (text.isBlank() || !isReady()) return null
-        val key = cacheKey(text)
+        val normalized = text.trim()
+        val key = cacheKey(normalized)
         cachedVector(key)?.let { return it.map(Double::toFloat) }
         return runCatching {
             val body = JSONObject().apply {
                 put("model", "local")
-                put("input", JSONArray().put(text))
+                put("input", JSONArray().put(normalized))
             }.toString()
             val conn = java.net.URL("http://127.0.0.1:$PORT/v1/embeddings").openConnection()
             conn.doOutput = true
@@ -292,7 +293,8 @@ object LocalEmbedder {
         if (!isReady()) return null
         return runCatching {
             val inputs = listOf(target) + candidates
-            val keys = inputs.map(::cacheKey)
+            val normalizedInputs = inputs.map { it.trim() }
+            val keys = normalizedInputs.map(::cacheKey)
             val vectors = arrayOfNulls<DoubleArray>(inputs.size)
             val missing = ArrayList<Int>()
             keys.forEachIndexed { index, key ->
@@ -300,7 +302,7 @@ object LocalEmbedder {
                 if (cached == null) missing.add(index) else vectors[index] = cached
             }
             if (missing.isNotEmpty()) {
-                val requestInputs = missing.map { inputs[it] }
+                val requestInputs = missing.map { normalizedInputs[it] }
                 val body = JSONObject().apply {
                     put("model", "local")
                     put("input", JSONArray(requestInputs))
