@@ -868,10 +868,21 @@ class EngineSupervisor(private val ctx: Context) {
                         async {
                             runParallelInit("bridge") {
                                 AgentBridge.start(ctx)
+                                // start() reports bind failures through logs/notifications for legacy
+                                // callers. The supervisor must additionally verify readiness so a
+                                // failed listener cannot be mistaken for a successful preflight.
+                                check(AgentBridge.isRunning()) {
+                                    "AgentBridge failed to bind selected port ${AgentBridge.PORT}"
+                                }
                                 // v1.7.1：远程访问总开关开着就一并起 3091（发现+配对）。
                                 // 放在这里而不是 App.onCreate：它依赖 DSH_HOME 与引擎目录，
                                 // 必须等 preflight 落盘之后才有意义。
-                                if (RemoteAccess.isEnabled(ctx)) RemoteAccessServer.start(ctx)
+                                if (RemoteAccess.isEnabled(ctx)) {
+                                    RemoteAccessServer.start(ctx)
+                                    check(RemoteAccessServer.isRunning()) {
+                                        "RemoteAccessServer is enabled but failed to bind selected port ${RemoteAccessServer.PORT}"
+                                    }
+                                }
                             }
                         },
                     ).awaitAll()
