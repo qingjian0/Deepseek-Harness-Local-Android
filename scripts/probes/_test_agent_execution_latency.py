@@ -29,7 +29,7 @@ checks: list[tuple[str, bool]] = []
 
 checks.append((
     "human-like pacing is disabled by default",
-    bool(re.search(r"const\\s+val\\s+DEFAULT_ENABLED\\s*=\\s*false\\b", pace)),
+    bool(re.search(r"const\s+val\s+DEFAULT_ENABLED\s*=\s*false\b", pace)),
 ))
 checks.append((
     "local loop uses the shared opt-in default",
@@ -42,7 +42,7 @@ checks.append((
 ))
 checks.append((
     "batch API defaults human pacing off",
-    bool(re.search(r"humanPace:\\s*Boolean\\s*=\\s*HumanPace.DEFAULT_ENABLED", a11y)),
+    bool(re.search(r"humanPace:\s*Boolean\s*=\s*HumanPace.DEFAULT_ENABLED", a11y)),
 ))
 checks.append((
     "batch delay is conditional, not unconditional",
