@@ -85,35 +85,13 @@ object MemoryIndex {
      */
     fun embed(text: String): List<Float>? {
         if (text.isBlank()) return null
-        if (!LocalEmbedder.isReady()) {
-            Log.i(TAG, "embed via none (llama-server not ready on :" + LocalEmbedder.PORT + ")")
-            return null
+        val vector = LocalEmbedder.embeddingVector(text)
+        if (vector == null) {
+            Log.i(TAG, "embed via none (local embedding service unavailable)")
+        } else {
+            Log.i(TAG, "embed via bge dim=${vector.size} (shared vector cache)")
         }
-        return runCatching {
-            val body = JSONObject().apply {
-                put("model", "local")
-                put("input", JSONArray().put(text))
-            }.toString()
-            val conn = java.net.URL("http://127.0.0.1:" + LocalEmbedder.PORT + "/v1/embeddings").openConnection()
-            conn.doOutput = true
-            conn.connectTimeout = 2000
-            // 与 LocalEmbedder 同口径：热态毫秒级，冷加载不该由这里买单（实测一次冷调用能吃 8s）
-            conn.readTimeout = 2500
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.outputStream.use { it.write(body.toByteArray()) }
-            val resp = conn.inputStream.bufferedReader().use { it.readText() }
-            val vec = parseVector(resp)
-            if (vec.isEmpty()) {
-                Log.w(TAG, "embed via none (empty vector from llama-server)")
-                null
-            } else {
-                Log.i(TAG, "embed via bge dim=" + vec.size)
-                vec
-            }
-        }.getOrElse {
-            Log.w(TAG, "embed via none (bge failed: " + it.message + ")")
-            null
-        }
+        return vector
     }
 
     private fun parseVector(json: String): List<Float> = runCatching {
