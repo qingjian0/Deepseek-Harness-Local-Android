@@ -1,7 +1,6 @@
 package app.dsh.mobile.engine
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,14 +44,14 @@ class ServicePortAllocatorTest {
             assertTrue(ports.engine <= 8000)
             assertTrue(ports.all.all { it in 1024..65535 })
             assertEquals(6, ports.all.distinct().size)
-            assertFalse(ports.offset % 1000 != 0)
+            assertEquals(0, ports.offset % 1000)
         }
     }
 
     @Test
     fun ceilingBelowFirstShiftDoesNotCreatePartialBlocks() {
-        val candidates = ServicePortMap.candidates(preferredOffset = 1000, maxEnginePort = 4000)
-        assertEquals(listOf(0, 1000), candidates.map { it.offset })
-        assertTrue(candidates.all { it.remoteAccess <= 4011 })
+        val candidates = ServicePortMap.candidates(preferredOffset = 1000, maxEnginePort = 5000)
+        assertEquals(listOf(1000, 0), candidates.map { it.offset })
+        assertTrue(candidates.all { it.engine <= 5000 && it.remoteAccess <= 5091 })
     }
 }
