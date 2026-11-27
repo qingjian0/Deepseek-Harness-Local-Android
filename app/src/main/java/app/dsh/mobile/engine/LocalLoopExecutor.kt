@@ -169,8 +169,8 @@ object LocalLoopExecutor {
         // （终态必须确认）；明确失败证据出现时仍然停止/升级，纠错能力不丢。
         val optimistic = plan.optBoolean("optimistic", false)
         // v1.6.33：真人节奏（每步 60–220ms 思考停顿 + 5% 概率额外犹豫 0.7–1.8s，v1.6.34 下调）。
-        // 计划里传 "humanPace": false 可关闭。
-        val humanPace = plan.optBoolean("humanPace", false)
+        // 默认关闭；只有计划显式传 "humanPace": true 才启用。
+        val humanPace = plan.optBoolean("humanPace", HumanPace.DEFAULT_ENABLED)
         val stepReports = JSONArray()
         var escalated = false
         var yielded = false
@@ -229,9 +229,7 @@ object LocalLoopExecutor {
                     .put("steps", stepReports)
                     .toString()
             }
-            // v1.6.33：每步之前来一段不均匀的思考停顿。本地闭环的间隔原本整齐得像
-            // 节拍器（每步 1.7s 上下），这是比轨迹更便宜的一类特征。
-            // 用户明确说过「不用考虑每步变慢，AI 思考和给出动作本身就慢」，故默认开。
+            // Optional human-like pacing is deliberately opt-in; normal automation must not sleep.
             if (humanPace) HumanPace.pause(HumanPace.stepPauseMs())
             val r = try {
                 runStep(ctx, svc, id, step, collected, planDebug, useScreenEvents, waitSliceMs)
