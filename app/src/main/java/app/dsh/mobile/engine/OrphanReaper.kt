@@ -67,7 +67,7 @@ object OrphanReaper {
      * 后面 spawnEngine 的 EADDRINUSE 与退避重试仍会兜住。
      */
     private fun portLooksBusy(): Boolean = runCatching {
-        val portHex = String.format("%04X", EngineConfig.DEFAULT_PORT)
+        val portHex = String.format("%04X", ServicePortAllocator.current.engine)
         for (f in arrayOf("/proc/net/tcp", "/proc/net/tcp6")) {
             val file = File(f)
             if (!file.canRead()) continue
