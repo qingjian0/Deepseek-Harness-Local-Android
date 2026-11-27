@@ -250,6 +250,17 @@ object AgentBridge {
                 onTurnEnd(ctx.applicationContext, session)
             }
         } catch (e: Exception) {
+            // A bind race can happen after the complete-block probe. During preflight
+            // no other DSH listener has started yet, so advancing the whole block is safe.
+            if (e is java.net.BindException) {
+                val failedPort = PORT
+                val next = ServicePortAllocator.advanceAfterBindFailure(ctx, failedPort)
+                if (next != null) {
+                    Log.w(TAG, "bind race on $failedPort; retrying AgentBridge on ${next.agentBridge}")
+                    start(ctx)
+                    return
+                }
+            }
             // ⚠️ v1.2.104：**bind 失败绝不能再静默**（主人反馈的起点）。
             // 旧实现只打一行 Log.w，于是「notify / scr / say 全哑」在现场被反复
             // 误判成「无障碍没开 / 桥没就绪」，真因（端口被占）谁也看不见。
