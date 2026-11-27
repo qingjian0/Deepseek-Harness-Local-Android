@@ -9,7 +9,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.Callable
-import java.util.concurrent.Executors
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
 /**
@@ -47,23 +49,37 @@ object LocalLoopExecutor {
 
     /** 无障碍节点树 IPC 专用线程（与 AgentBridge.screenExec 同款原因：
      *  节点树 IPC 偶发挂起，必须带超时隔离，不能阻塞循环线程） */
-    private val ipc = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "LocalLoop-ipc").apply { isDaemon = true }
-    }
+    // 单线程串行化无障碍 IPC，但队列必须有界：Binder 卡死且忽略中断时，
+    // 无界队列会让每次超时的请求持续堆积，后续请求只能排队等待永远不会释放的线程。
+    // 一个工作线程 + 一个待执行槽位提供背压；饱和时快速失败，不让延迟无限增长。
+    private val ipc = ThreadPoolExecutor(
+        1, 1, 0L, TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue<Runnable>(1),
+        { r -> Thread(r, "LocalLoop-ipc").apply { isDaemon = true } },
+        ThreadPoolExecutor.AbortPolicy(),
+    )
 
     private fun <T> withTimeout(name: String, ms: Long, block: () -> T): T? {
         if (ms <= 0L) return null
-        val future = ipc.submit(Callable { block() })
+        val future = try {
+            ipc.submit(Callable { block() })
+        } catch (e: RejectedExecutionException) {
+            Log.w(TAG, "ipc saturated: $name")
+            return null
+        }
         return try {
             future.get(ms, TimeUnit.MILLISECONDS)
         } catch (e: InterruptedException) {
             future.cancel(true)
+            ipc.purge()
             // 上层请求已经被取消时不能吞掉中断，继续派发后续动作。
             Thread.currentThread().interrupt()
             throw e
         } catch (e: Exception) {
-            // get 超时不等于任务取消：否则旧 tap 仍在队列里，稍后可能点到下一页。
+            // get 超时不等于任务取消：Binder IPC 可能不响应中断；取消并清除排队任务，
+            // 防止过期动作在后续页面执行。正在运行的 Binder 调用仍可能无法被强制终止。
             future.cancel(true)
+            ipc.purge()
             Log.w(TAG, "ipc timeout/fail: $name (${e.javaClass.simpleName}: ${e.message})")
             null
         }
