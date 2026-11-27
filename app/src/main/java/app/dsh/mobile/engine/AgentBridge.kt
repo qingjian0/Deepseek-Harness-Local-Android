@@ -369,6 +369,9 @@ object AgentBridge {
                 .getBoolean("tts_on_complete", false)
         }.getOrDefault(false)
 
+    /** True only while the selected-port listener is actually bound and open. */
+    fun isRunning(): Boolean = server?.isClosed == false
+
     fun stop() {
         runCatching { server?.close() }
         server = null; thread = null
