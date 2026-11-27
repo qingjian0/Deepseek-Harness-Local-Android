@@ -3087,6 +3087,8 @@ class DshAccessibilityService : AccessibilityService() {
          * 而不是跑完再报」。默认关闭，避免影响现有调用方。
          */
         abortOnInterference: Boolean = false,
+        /** Optional human-like delay; disabled for normal automation. */
+        humanPace: Boolean = HumanPace.DEFAULT_ENABLED,
     ): List<StepResult> {
         val results = mutableListOf<StepResult>()
         var interferenceMark = System.currentTimeMillis()
@@ -3097,9 +3099,8 @@ class DshAccessibilityService : AccessibilityService() {
                 results.add(StepResult(i, (step["type"] as? String).orEmpty(), false, "aborted: $reason"))
                 return results
             }
-            // v1.6.33：批次里每步之前也来一段不均匀停顿，与 /loop 保持一致 ——
-            // 整齐的固定间隔是比轨迹更便宜的一类机器特征。
-            HumanPace.pause(HumanPace.stepPauseMs())
+            // Human-like pacing is optional; normal batch execution must not add sleep.
+            if (humanPace) HumanPace.pause(HumanPace.stepPauseMs())
             val type = (step["type"] as? String).orEmpty()
             val optional = step["optional"] == true
             var ok = false
