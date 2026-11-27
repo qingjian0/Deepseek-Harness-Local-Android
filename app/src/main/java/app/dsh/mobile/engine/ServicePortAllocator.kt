@@ -51,7 +51,12 @@ data class ServicePortMap(
             val maxOffset = ((maxEnginePort.coerceIn(BASE_ENGINE, 65524) - BASE_ENGINE) / BLOCK_STEP) * BLOCK_STEP
             val offsets = (0..maxOffset step BLOCK_STEP).toList()
             val preferred = preferredOffset.takeIf { it in offsets }
-            return (listOfNotNull(preferred) + offsets.filter { it != preferred }).map(::at)
+            val remaining = if (preferred == null) {
+                offsets
+            } else {
+                offsets.filter { it > preferred } + offsets.filter { it < preferred }
+            }
+            return (listOfNotNull(preferred) + remaining).map(::at)
         }
     }
 }
