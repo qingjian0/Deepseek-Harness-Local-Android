@@ -125,7 +125,7 @@ object ServicePortAllocator {
         current = ServicePortMap.at(0)
     }
 
-    private fun canBind(port: Int): Boolean = runCatching {
+    internal fun canBind(port: Int): Boolean = runCatching {
         ServerSocket().use { socket ->
             socket.reuseAddress = false
             socket.bind(InetSocketAddress(InetAddress.getByName("0.0.0.0"), port))
