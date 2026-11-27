@@ -816,6 +816,7 @@ object BehaviourTest {
 
     private fun assertHumanPace() {
         println("== 17. HumanPace 动作间隔节拍 ==")
+        check(!HumanPace.DEFAULT_ENABLED, "normal automation disables artificial pacing by default")
 
         // 1) 常规停顿落在区间内，且真的每次都不同
         val rnd = Random(11)
