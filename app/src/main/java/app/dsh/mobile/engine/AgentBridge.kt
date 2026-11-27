@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Log
 import app.dsh.mobile.A11ySwitch
 import app.dsh.mobile.DshAccessibilityService
+import app.dsh.mobile.HumanPace
 import app.dsh.mobile.FastMode
 import app.dsh.mobile.Handoff
 import app.dsh.mobile.NumFmt
