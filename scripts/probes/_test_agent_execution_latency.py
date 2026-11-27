@@ -41,6 +41,20 @@ checks.append((
     "import app.dsh.mobile.HumanPace" in bridge,
 ))
 checks.append((
+    "local loop IPC worker queue is bounded",
+    "private val ipc = ThreadPoolExecutor(" in loop and
+    "ArrayBlockingQueue<Runnable>(1)" in loop and
+    "ThreadPoolExecutor.AbortPolicy()" in loop,
+))
+checks.append((
+    "timed-out local loop IPC is cancelled and purged",
+    "future.cancel(true)" in loop and "ipc.purge()" in loop,
+))
+checks.append((
+    "local loop IPC saturation is handled explicitly",
+    "RejectedExecutionException" in loop and "ipc saturated" in loop,
+))
+checks.append((
     "batch API defaults human pacing off",
     bool(re.search(r"humanPace:\s*Boolean\s*=\s*HumanPace.DEFAULT_ENABLED", a11y)),
 ))
