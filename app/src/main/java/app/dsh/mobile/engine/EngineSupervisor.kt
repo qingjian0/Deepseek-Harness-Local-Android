@@ -1590,18 +1590,7 @@ class EngineSupervisor(private val ctx: Context) {
         reclaimPortByPort()
     }
 
-    /**
-     * 彻底清场（v1.4.24，宝宝要求）：
-     * 「把当前 3080 端口的所有东西全部杀掉，然后重新完整启动一遍 dsh web，
-     *  相当于把应用关了重开」。
-     *
-     * 与 [reclaimPort] 的区别：**不按 cmdline 匹配，直接按端口找持有者**。
-     * 因此无论是引擎 node、su 外壳、僵尸孙进程，还是任何第三方进程占着 3080，
-     * 都会被清掉。这是异常退出后的默认处置，不再只在「检测到端口占用」时触发。
-     *
-     * 安全边界：只针对**监听 3080 的进程**，绝不误伤 LAN 反向代理（它监听别的
-     * 端口；即便 cmdline 含 engine node，只要不占 3080 就不动）。
-     */
+    /** Port-conflict recovery is restricted to DSH-owned orphan processes. */
     /**
      * Reclaim only verified DSH orphan processes. A listener occupying a candidate
      * port may belong to another app or to the user; port ownership alone is never
