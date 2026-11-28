@@ -258,9 +258,14 @@ class BackupActivity : ThemedActivity() {
             runOnUiThread {
                 importing = false
                 result.onSuccess { s ->
+                    val promptNote = if (s.userPromptRestored) {
+                        " · " + getString(R.string.import_prompt_restored)
+                    } else {
+                        ""
+                    }
                     importSub?.text = getString(
                         R.string.import_done, s.sessionFiles, s.workspaceFiles, s.overwritten,
-                    )
+                    ) + promptNote
                     if (s.sessionFiles > 0 || s.workspaceFiles > 0) {
                         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                             .setTitle(R.string.import_done_title)
