@@ -1432,54 +1432,67 @@ object AgentBridge {
             .toString()
     }
 
-    /** GET /dev/prompt —— 用户提示词（AGENTS.md 的用户段）。 */
+    /** GET /dev/prompt —— 用户提示词（独立存储，渲染到 AGENTS.md）。 */
     private fun devPrompt(ctx: Context): Pair<Int, String> {
-        val body = runCatching { AgentContextSeed.readUserSection(ctx) }.getOrNull()
-        val f = File(EngineConfig.dshHome(ctx), "AGENTS.md")
+        val migration = runCatching { UserPromptRepository.migrateLegacyIfNeeded(ctx) }.exceptionOrNull()
+        if (migration != null) {
+            return 500 to JSONObject().put("ok", false).put("error", "migration_failed")
+                .put("detail", migration.message.orEmpty().take(200)).toString()
+        }
+        val body = UserPromptRepository.content(ctx)
+        val file = File(EngineConfig.dshHome(ctx), "AGENTS.md")
         return 200 to JSONObject()
             .put("ok", true)
-            .put("file", f.absolutePath)
-            .put("exists", f.isFile)
-            .put("chars", body?.length ?: 0)
-            .put("text", body.orEmpty())
+            .put("file", file.absolutePath)
+            .put("exists", file.isFile)
+            .put("enabled", UserPromptRepository.isEnabled(ctx))
+            .put("chars", body.length)
+            .put("text", body)
             .put(
                 "note",
-                "this is the user-owned section of AGENTS.md; the app never overwrites it. " +
-                    "writing here changes your own long-term instructions - use POST with confirm=write",
+                "this is the canonical user prompt stored in app settings and rendered into AGENTS.md; " +
+                    "writing here changes your long-term instructions - use POST with confirm=write",
             )
             .toString()
     }
 
-    /** POST /dev/prompt —— 覆写用户提示词（必须 confirm=write）。 */
+    /** POST /dev/prompt —— 覆写独立存储的用户提示词（必须 confirm=write）。 */
     private fun devPromptWrite(ctx: Context, body: String): Pair<Int, String> {
         val obj = runCatching { JSONObject(body.ifBlank { "{}" }) }.getOrNull()
             ?: return 400 to """{"ok":false,"error":"invalid json"}"""
-        // 这是「AI 给自己改长期指令」的通道，必须显式确认。默认拒绝而不是默认允许：
-        // 一个 JSON 手滑（比如把 text 当成查询参数）不该静默改写用户的指令文件。
+        // 这是「AI 给自己改长期指令」的通道，必须显式确认。默认拒绝而不是默认允许。
         if (obj.optString("confirm") != "write") {
             return 409 to JSONObject().put("ok", false)
                 .put("error", "confirm_required")
-                .put("hint", "POST {\"text\":\"...\",\"confirm\":\"write\"} to overwrite the user section")
+                .put("hint", "POST {\"text\":\"...\",\"confirm\":\"write\"} to overwrite the user prompt")
                 .toString()
         }
         if (!obj.has("text")) {
             return 400 to """{"ok":false,"error":"field 'text' required (send an empty string to clear)"}"""
         }
-        val text = obj.optString("text")
-        val before = runCatching { AgentContextSeed.readUserSection(ctx) }.getOrNull().orEmpty()
-        val err = runCatching { AgentContextSeed.writeUserSection(ctx, text.ifBlank { null }) }.exceptionOrNull()
-        if (err != null) {
-            return 500 to JSONObject().put("ok", false)
-                .put("error", "write_failed")
-                .put("detail", err.message.orEmpty().take(200)).toString()
+        val migration = runCatching { UserPromptRepository.migrateLegacyIfNeeded(ctx) }.exceptionOrNull()
+        if (migration != null) {
+            return 500 to JSONObject().put("ok", false).put("error", "migration_failed")
+                .put("detail", migration.message.orEmpty().take(200)).toString()
         }
-        val after = runCatching { AgentContextSeed.readUserSection(ctx) }.getOrNull().orEmpty()
+        val text = obj.optString("text")
+        val before = UserPromptRepository.content(ctx)
+        val saved = UserPromptRepository.saveContent(ctx, text)
+        if (!saved) {
+            return 500 to JSONObject().put("ok", false).put("error", "write_failed")
+                .put("detail", "cannot persist user prompt preferences").toString()
+        }
+        val refreshError = runCatching { UserPromptContextAdapter.refresh(ctx) }.exceptionOrNull()
+        if (refreshError != null) {
+            return 500 to JSONObject().put("ok", false).put("error", "render_failed")
+                .put("detail", refreshError.message.orEmpty().take(200))
+                .put("saved", true).toString()
+        }
+        val after = UserPromptRepository.content(ctx)
         return 200 to JSONObject()
             .put("ok", true)
             .put("before_chars", before.length)
             .put("after_chars", after.length)
-            // 回读自证：写的和读回来的不一致就当场说，别让调用方以为成功了。
-            // （用户段前后空白会被 extractUserSection trim 掉，所以比较也按 trim。）
             .put("verified", after.trim() == text.trim())
             .put("note", "takes effect for new sessions; the running engine keeps its current prompt")
             .toString()
