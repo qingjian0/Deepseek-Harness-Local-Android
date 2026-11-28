@@ -123,12 +123,12 @@
     <string name="setting_plugin">ปลั๊กอินชุมชน</string>
     <string name="setting_plugin_sub">คลิกเดียวติดตั้งปลั๊กอินระบบนิเวศ dsh</string>
     <string name="setting_user_prompt">คำแนะนำผู้ใช้</string>
-    <string name="setting_user_prompt_sub">เพิ่มคำแนะนำในการยืนของคุณเองที่ด้านบนของคำแนะนำสภาพแวดล้อมในตัว</string>
-    <string name="user_prompt_intro">คำแนะนำเหล่านี้จะผนวกเข้ากับคู่มือสภาพแวดล้อมในตัวของแอปและนำไปใช้กับทุกเซสชันใหม่</string>
+    <string name="setting_user_prompt_sub">จัดการคำแนะนำระยะยาวและควบคุมการแทรกในเซสชันใหม่</string>
+    <string name="user_prompt_intro">คำแนะนำที่กำหนดเองจะจัดเก็บแยกต่างหากในการตั้งค่าแอป เมื่อเปิดใช้งานจะถูกแทรกใน AGENTS.md สำหรับเซสชันใหม่ เมื่อปิดใช้งานจะไม่ถูกแทรก การอัปเดตแอปจะไม่เขียนทับคำแนะนำเหล่านี้</string>
     <string name="user_prompt_placeholder">เช่น ให้ตอบเป็นภาษาจีนเสมอ</string>
     <string name="user_prompt_save">บันทึก</string>
     <string name="user_prompt_saved">บันทึกแล้ว</string>
-    <string name="user_prompt_path">เก็บไว้ในส่วนผู้ใช้ของ AGENTS.md (จัดการโดยแอป ของคุณจะไม่ถูกเขียนทับ)</string>
+    <string name="user_prompt_path">จัดเก็บแยกต่างหากในการตั้งค่าแอป และแทรกใน AGENTS.md เมื่อเปิดใช้งาน</string>
     <string name="file_editor_title">ไฟล์</string>
     <string name="file_editor_save">บันทึก</string>
     <string name="file_editor_saved">บันทึกแล้ว</string>
@@ -1979,10 +1979,7 @@
     <string name="full_repair_progress">กำลังซ่อม… (ไม่เกินหนึ่งนาที)</string>
     <string name="full_repair_restart">รีสตาร์ทเอนจิน</string>
     <string name="full_repair_failed">การซ่อมหยุดกะทันหัน ดู full-repair-last.txt</string>
-    <string name="setting_user_prompt_sub">Manage your long-term instructions and control injection into new sessions</string>
-    <string name="user_prompt_intro">Custom instructions are stored independently in app settings. When enabled, they are injected into AGENTS.md for new sessions; when disabled, they are not injected. App upgrades do not overwrite them.</string>
     <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
-    <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
     <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
     <string name="prompt_management_title">การจัดการพรอมป์ต์</string>
     <string name="prompt_management_subtitle">แก้ไข system prompt ต้นทางและขีดจำกัดคำสั่ง</string>
