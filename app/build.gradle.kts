@@ -626,6 +626,7 @@ val hardsshDirProp = (project.findProperty("hardsshDir") as String?)?.takeIf { i
 //   本地覆盖优先级：-P 参数 > local-overrides/<资产目录名>/ > src/main/assets/<资产目录名>/
 val mobileLayoutDirProp = (project.findProperty("mobileLayoutTgzDir") as String?)?.takeIf { it.isNotBlank() }
 val solutionExplorerDirProp = (project.findProperty("solutionExplorerTgzDir") as String?)?.takeIf { it.isNotBlank() }
+val dshGptHookAgentDirProp = (project.findProperty("dshGptHookAgentTgzDir") as String?)?.takeIf { it.isNotBlank() }
 
 /**
  * 内置「用户态插件」资产表：assetRoot → 外部传入目录（可为 null）。
@@ -636,6 +637,7 @@ val solutionExplorerDirProp = (project.findProperty("solutionExplorerTgzDir") as
 val bundledProfilePlugins: List<Pair<String, String?>> = listOf(
     "mobile-layout" to mobileLayoutDirProp,
     "solution-explorer" to solutionExplorerDirProp,
+    "dsh-gpt-hook-agent" to dshGptHookAgentDirProp,
 )
 val proxyBaseProp = (project.findProperty("proxyBase") as String?) ?: "https://gh-proxy.org/"
 val runtimeUrlBaseProp = (project.findProperty("runtimeUrlBase") as String?)?.takeIf { it.isNotBlank() }
@@ -667,6 +669,7 @@ val prepareRuntimeAssets by tasks.registering {
     val hardsshOverride = hardsshDirProp?.let { file(it) }
     val mobileLayoutOverride = mobileLayoutDirProp?.let { file(it) }
     val solutionExplorerOverride = solutionExplorerDirProp?.let { file(it) }
+    val dshGptHookAgentOverride = dshGptHookAgentDirProp?.let { file(it) }
     // ★合并（2026-11-09）：两条线对「内置插件 tgz 放哪」给了不同答案 ——
     //   main 走通用 bundledProfilePlugins（mobile-layout 与 solution-explorer 同一套逻辑，
     //   来源 = -P 参数 > local-overrides/<资产名>/ > src/main/assets/<资产名>/）；
@@ -793,6 +796,7 @@ val prepareRuntimeAssets by tasks.registering {
         val pluginOverrides = mapOf(
             "mobile-layout" to mobileLayoutOverride,
             "solution-explorer" to solutionExplorerOverride,
+            "dsh-gpt-hook-agent" to dshGptHookAgentOverride,
         )
         for ((assetRoot, overrideDir) in bundledProfilePlugins) {
             val src = listOfNotNull(
