@@ -19,10 +19,10 @@
 | 端口清理 | `PortReclaim.kt` 已存在，负责释放监听端口及兜底清理 | 已有实现 | 与 allocator 分工明确，不重复实现分配器 |
 | 开发者模式 | `DeveloperModePrefs.kt`、`DeveloperOptionsActivity.kt` 已存在于 main/dev | 基础功能已存在 | 先核对七击入口、菜单收纳和权限边界；只补缺项 |
 | 权限管理 | `PermissionCenterActivity.kt`、`PermissionListActivity.kt` 已存在；包含运行身份、系统能力、能力开关和权限清单入口 | 基础功能已存在 | 不新建第二套权限中心；逐项核对需求和授权校验 |
-| 用户 Prompt | `UserPromptRepository` 为唯一持久化源；`UserPromptContextAdapter` 将其渲染到 AGENTS.md；Settings、编辑页、`/dev/prompt` API、备份恢复全部走同一仓储；迁移/保存/开关/恢复共用写锁 | PR #44 已提交 17 commits ahead，未合并；无对应 Actions run/check | CI 后再合并；真机验证迁移、开关、AI API 写入、升级、备份恢复 |
+| 用户 Prompt | `UserPromptRepository` 为唯一持久化源；`UserPromptContextAdapter` 将其渲染到 AGENTS.md；Settings、编辑页、`/dev/prompt` API、备份恢复全部走同一仓储；迁移/保存/开关/恢复共用写锁 | PR #44 已提交 22 commits ahead，未合并；无对应 Actions run/check | CI 后再合并；真机验证迁移、开关、AI API 写入、升级、备份恢复 |
 | 环境 Prompt 开关 | PR #9 有独立环境提示注入开关实现，但仍开放，目标 main | 未集成到当前 dev 基线（待复核） | 与用户 Prompt 分开建模，禁止覆盖用户内容 |
 | 用户 Prompt 独立存储 | 已从旧 PR #13 选择性移植到 PR #44；补齐 `/dev/prompt` 读写统一与偏好写锁；旧 PR 还混有 MCP/HID 性能与诊断改动 | PR #44 待 CI/设备验收 | 不合并旧 PR #13 整体；以 PR #44 为唯一用户 Prompt 实现线 |
-| 系统默认 Prompt | DSH 使用 `@deepseek-ai/dsh-system-prompt` 组装 system sections；基础配置包含 Harness identity、runtime context、persona prefix/suffix，其他插件可贡献 sections。旧 `PromptSettingsRepository` 只存 SharedPreferences，未进入启动配置。当前 Android 启动链由 `EngineConfig.ensureAndroidOverlay()` 生成最终 `--patch`，可覆盖现有 `system-prompt` 行；配置 patch 会替换整段 config，必须完整列出字段 | 结构已定位；编辑 UI 与启动配置尚未集成 | 通过现有 Android overlay 接入真实 config；区分固定 identity、persona、runtime context 和插件贡献，不伪造“完整系统 Prompt”编辑能力 |
+| 系统默认 Prompt | 当前上游 DSH 0.2.2-rc.3 的 `@deepseek-ai/dsh-system-prompt` 组装 system sections；基础 bundle 的 `system-prompt` 行仅配置 `personaPrefix: ''`，其余默认是 Harness identity=true、runtime context=true、persona suffix=''。固定 identity 文本由上游代码提供；其他插件可贡献 sections。旧 `PromptSettingsRepository` 只存 SharedPreferences，未进入启动配置。当前 Android 启动链由 `EngineConfig.ensureAndroidOverlay()` 生成最终 `--patch`，可覆盖现有 `system-prompt` 行；配置 patch 会替换整段 config，必须完整列出字段 | 结构已定位；编辑 UI 与启动配置尚未集成 | 通过现有 Android overlay 接入真实 config；区分固定 identity、persona、runtime context 和插件贡献，不伪造“完整系统 Prompt”编辑能力 |
 | DSH-GPT Hook | `dev` 有 `HookAgentSecrets.kt`；另有 ADR 说明 Hook 可选插件化 | 已有部分实现/设计 | 不重新启动旧 Hook 主线；先审查当前范围与用户已取消项 |
 | APK 直接下载 | PR #26 仍开放且为 Draft，目标 dev | 待集成/验收 | 仅验证工作流产物，不重做现有构建流水线 |
 | 应用包名 | main 当前 `applicationId = app.dsh.mobile`；PR #42 提议改为 `io.github.qingjian0.dsh.mobile`，仍为 Draft，CI/真机验证未完成 | 决策未定，禁止自动合并 | 不更改包名；先确认用户最终包名与数据迁移要求 |
@@ -64,9 +64,9 @@
 ## 6. 当前进行中
 
 - PR #44：`integrate/user-prompt-storage` → `dev`，选择性吸收旧 PR #13 的用户 Prompt 部分；PR 链接：https://github.com/qingjian0/Deepseek-Harness-Local-Android/pull/44。
-- PR #44 当前 head 有 18 个提交领先 dev、0 个落后；GitHub Actions 最近一次仓库运行是 2026-11-25，之后未见新的每日 schedule 或 PR #44 run/check。工作流文件说明 fork 可能需要在 Actions → android-build 页面启用。
+- PR #44 当前 head 有 22 个提交领先 dev、0 个落后；GitHub Actions 最近一次仓库运行是 2026-11-25，之后未见新的每日 schedule 或 PR #44 run/check。工作流文件说明 fork 可能需要在 Actions → android-build 页面启用。
 - 最近一次 main 基线运行中，两个 ABI 的 APK 构建均成功；`jvm-behaviour` 单独失败，原因是 Gradle 无法从 Google/Maven Central/Plugin Portal 解析 `org.jetbrains.kotlin.android:1.9.24`，随后编译 classpath 为空。这是依赖解析失败，不是本次 Prompt 测试失败；但 PR #44 本身尚无构建结果。
-- PR #44 静态审查已发现并修复两处一致性风险：偏好写操作原先没有共用迁移锁；`/dev/prompt` 原先绕过独立仓储直接写 AGENTS.md。现在均已统一到仓储/适配器。
+- PR #44 静态审查已发现并修复三处一致性风险：偏好写操作原先没有共用迁移锁；`/dev/prompt` 原先绕过独立仓储直接写 AGENTS.md；备份恢复结果原先未在 UI 提示。现在均已统一到仓储/适配器并显示恢复结果。
 - 系统默认 Prompt 已定位到 DSH 的 `@deepseek-ai/dsh-system-prompt` 组装层；Android 通过 `EngineConfig.ensureAndroidOverlay()` 注入最终 `--patch`。后续应改现有 overlay，不另建并行配置系统。旧 `PromptSettingsRepository` 里的 session/tool 字段仍无实际消费链路，不得显示为已生效。
 
 ## 7. 验收标准
