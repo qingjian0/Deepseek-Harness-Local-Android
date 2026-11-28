@@ -46,6 +46,11 @@ object PromptSettingsRepository {
         }
         listOf(settings.personaPrefix, settings.personaSuffix, settings.sessionPrompt, settings.toolPrompt).forEach { value ->
             require(value.none { it == '\u0000' }) { "Prompt text contains a NUL character" }
+            require(value.toByteArray(Charsets.UTF_8).size <= 131072) {
+                "Each custom prompt section must be at most 131072 UTF-8 bytes"
+            }
+        }
+        listOf(settings.personaPrefix, settings.personaSuffix).forEach { value ->
             require(!value.contains("{{")) {
                 "Persona text cannot contain unresolved {{ variable groups"
             }
