@@ -109,7 +109,12 @@ object PromptSettingsRepository {
 
     fun restoreBackup(context: Context, payload: ByteArray): Boolean = synchronized(lock) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (prefs.contains("include_environment_guide")) return false
+        val hasLocalSettings = listOf(
+            "include_environment_guide", "include_harness_identity", "include_runtime_context",
+            "persona_prefix", "persona_suffix", "session_prompt", "tool_prompt",
+            "max_bytes", "max_source_bytes",
+        ).any { prefs.contains(it) }
+        if (hasLocalSettings) return false
         val settings = parseBackupPayload(payload) ?: return false
         writePrefs(context, settings)
     }
