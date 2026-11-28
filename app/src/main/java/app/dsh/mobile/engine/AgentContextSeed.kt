@@ -73,8 +73,11 @@ object AgentContextSeed {
 
         // ③ 含标记且版本最新 → 只在用户段缺失时补齐，其余不动
         if (containsVersion(existing, SEED_VERSION)) {
-            if (!existing.contains(USER_SECTION_BEGIN)) {
-                write(file, existing.trimEnd() + "\n\n" + userSection(null))
+            val currentApp = appSectionOf(existing).trimEnd()
+            val desiredApp = render(ctx).trimEnd()
+            val userContent = extractUserSection(existing)
+            if (currentApp != desiredApp || !existing.contains(USER_SECTION_BEGIN)) {
+                write(file, desiredApp + userSection(userContent))
             }
             return
         }
@@ -146,6 +149,9 @@ object AgentContextSeed {
         text.contains("$MARKER_PREFIX$v ")
 
     private fun render(ctx: Context): String {
+        if (!PromptSettingsRepository.load(ctx).includeEnvironmentGuide) {
+            return "$MARKER_PREFIX$SEED_VERSION -->\n\n<!-- Built-in environment guide disabled in Prompt Management. -->\n"
+        }
         // ⚠️ 这里不要再算「按模式分支的小段落」：v54 之前的 `mode` + `shz`
         // 两个局部变量算出来却从未拼进模板（全文件只有 privModeTitle /
         // shzNote / linuxMode / roster / active 五处插值），结果是 Shizuku
