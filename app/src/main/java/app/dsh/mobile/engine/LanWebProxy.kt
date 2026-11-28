@@ -135,6 +135,13 @@ object LanWebProxy {
             Log.i(TAG, "already running")
             return
         }
+        if (!ServicePortAllocator.isCorePreflightReady()) {
+            // EngineService and settings callbacks can race the asynchronous allocator.
+            // The preference remains saved; EngineSupervisor retries startup after the
+            // complete port map and required listeners are ready.
+            Log.i(TAG, "deferring start until core service-port preflight completes")
+            return
+        }
         password = pw
         running.set(true)
         // v1.2.160 架构修正：**不再由 app 自己 bind 端口**，改为拉起 node 代理脚本
