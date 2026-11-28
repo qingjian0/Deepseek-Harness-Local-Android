@@ -38,6 +38,11 @@ object PromptSettingsRepository {
     }
 
     fun save(context: Context, settings: Settings): Boolean = synchronized(lock) {
+        validate(settings)
+        writePrefs(context, settings)
+    }
+
+    private fun validate(settings: Settings) {
         require(settings.maxBytes in 1024..262144) {
             "Instruction budget must be 1024..262144 bytes"
         }
@@ -55,6 +60,9 @@ object PromptSettingsRepository {
                 "Persona text cannot contain unresolved {{ variable groups"
             }
         }
+    }
+
+    private fun writePrefs(context: Context, settings: Settings): Boolean =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean("include_environment_guide", settings.includeEnvironmentGuide)
             .putBoolean("include_harness_identity", settings.includeHarnessIdentity)
@@ -66,7 +74,46 @@ object PromptSettingsRepository {
             .putInt("max_bytes", settings.maxBytes)
             .putInt("max_source_bytes", settings.maxSourceBytes)
             .commit()
+
+    fun backupPayload(context: Context): ByteArray {
+        val value = load(context)
+        return JSONObject()
+            .put("includeEnvironmentGuide", value.includeEnvironmentGuide)
+            .put("includeHarnessIdentity", value.includeHarnessIdentity)
+            .put("includeRuntimeContext", value.includeRuntimeContext)
+            .put("personaPrefix", value.personaPrefix)
+            .put("personaSuffix", value.personaSuffix)
+            .put("sessionPrompt", value.sessionPrompt)
+            .put("toolPrompt", value.toolPrompt)
+            .put("maxBytes", value.maxBytes)
+            .put("maxSourceBytes", value.maxSourceBytes)
+            .toString().toByteArray(Charsets.UTF_8)
     }
+
+    private fun parseBackupPayload(payload: ByteArray): Settings? = runCatching {
+        val json = JSONObject(String(payload, Charsets.UTF_8))
+        Settings(
+            includeEnvironmentGuide = json.getBoolean("includeEnvironmentGuide"),
+            includeHarnessIdentity = json.getBoolean("includeHarnessIdentity"),
+            includeRuntimeContext = json.getBoolean("includeRuntimeContext"),
+            personaPrefix = json.getString("personaPrefix"),
+            personaSuffix = json.getString("personaSuffix"),
+            sessionPrompt = json.getString("sessionPrompt"),
+            toolPrompt = json.getString("toolPrompt"),
+            maxBytes = json.getInt("maxBytes"),
+            maxSourceBytes = json.getInt("maxSourceBytes"),
+        ).also(::validate)
+    }.getOrNull()
+
+    fun isValidBackupPayload(payload: ByteArray): Boolean = parseBackupPayload(payload) != null
+
+    fun restoreBackup(context: Context, payload: ByteArray): Boolean = synchronized(lock) {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.contains("include_environment_guide")) return false
+        val settings = parseBackupPayload(payload) ?: return false
+        writePrefs(context, settings)
+    }
+
 
     /** JSON string literals are valid YAML double-quoted scalars. */
     fun yamlString(value: String): String = JSONObject.quote(value)
