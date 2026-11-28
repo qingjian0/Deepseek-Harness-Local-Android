@@ -2052,4 +2052,27 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
     <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
     <string name="import_prompt_restored">Custom instructions restored</string>
+    <string name="prompt_management_title">Prompt management</string>
+    <string name="prompt_management_subtitle">Edit the upstream system prompt and instruction limits</string>
+    <string name="prompt_upstream_description">These controls write to the actual DSH system-prompt and agent-instructions configuration. Changes apply after the engine restarts.</string>
+    <string name="prompt_harness_identity_default">Upstream default identity: “You are an AI agent powered by DeepSeek Harness.” Turn it off to remove it; use the prefix field below to replace it with your own text.</string>
+    <string name="prompt_include_identity">Include the fixed Harness identity</string>
+    <string name="prompt_include_runtime_context">Include optional runtime context</string>
+    <string name="prompt_persona_prefix_label">Persona prefix / replacement identity</string>
+    <string name="prompt_persona_prefix_hint">Leave blank to remove the custom prefix</string>
+    <string name="prompt_persona_suffix_label">Persona suffix</string>
+    <string name="prompt_persona_suffix_hint">Leave blank to remove the suffix</string>
+    <string name="prompt_instruction_budget_title">AGENTS.md instruction limits</string>
+    <string name="prompt_instruction_budget_description">Maximum bytes per instruction chain and maximum bytes read from one instruction file.</string>
+    <string name="prompt_open_user_instructions">Edit my user instructions</string>
+    <string name="prompt_reset_title">Reset prompt settings?</string>
+    <string name="prompt_reset_message">Restore the upstream defaults and the default instruction limits?</string>
+    <string name="prompt_reset_action">Reset defaults</string>
+    <string name="prompt_save_action">Save</string>
+    <string name="prompt_save_failed">Could not save prompt settings.</string>
+    <string name="prompt_invalid_numbers">Enter valid numbers for both instruction limits.</string>
+    <string name="prompt_saved_title">Prompt settings saved</string>
+    <string name="prompt_restart_message">Restart the DSH engine to apply these settings.</string>
+    <string name="prompt_restart_later">Later</string>
+    <string name="prompt_restart_now">Restart now</string>
 </resources>
