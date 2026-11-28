@@ -40,7 +40,7 @@ object HookAgentSecrets {
 
     fun save(context: Context, baseUrl: String, apiKey: String) {
         val base = validateBaseUrl(baseUrl)
-        require(apiKey.length in 16..512 && apiKey.none { it == '\\n' || it == '\\r' }) {
+        require(apiKey.length in 16..512 && apiKey.none { it == '\n' || it == '\r' }) {
             "API Key must contain 16–512 characters and no line breaks"
         }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
