@@ -1989,4 +1989,9 @@ Somente o desenvolvedor lê. Não é público, não é indexado, é apagado apó
     <string name="full_repair_progress">Reparando... (ate um minuto)</string>
     <string name="full_repair_restart">Reiniciar motor</string>
     <string name="full_repair_failed">Reparo interrompido; veja full-repair-last.txt</string>
+    <string name="setting_user_prompt_sub">Manage your long-term instructions and control injection into new sessions</string>
+    <string name="user_prompt_intro">Custom instructions are stored independently in app settings. When enabled, they are injected into AGENTS.md for new sessions; when disabled, they are not injected. App upgrades do not overwrite them.</string>
+    <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
+    <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
+    <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
 </resources>
