@@ -2075,4 +2075,10 @@
     <string name="prompt_restart_message">需要重启 DSH 引擎才能应用这些设置。</string>
     <string name="prompt_restart_later">稍后</string>
     <string name="prompt_restart_now">立即重启</string>
+    <string name="prompt_include_environment_guide">在 AGENTS.md 中注入应用自带的 Android 环境说明</string>
+    <string name="prompt_session_tool_title">会话与工具指导</string>
+    <string name="prompt_session_description">作为独立系统提示词段注入每个新会话。留空即可移除。</string>
+    <string name="prompt_session_hint">希望每个新会话都遵循的指令</string>
+    <string name="prompt_tool_guidance_label">工具使用指导</string>
+    <string name="prompt_tool_guidance_hint">指导 AI 如何选择和使用工具</string>
 </resources>
