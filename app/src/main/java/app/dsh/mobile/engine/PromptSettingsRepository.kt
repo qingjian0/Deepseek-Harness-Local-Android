@@ -25,7 +25,7 @@ object PromptSettingsRepository {
     fun load(context: Context): Settings {
         val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return Settings(
-            includeEnvironmentGuide = p.getBoolean("include_environment_guide", true),
+            includeEnvironmentGuide = AgentContextSeed.isEnabled(context),
             includeHarnessIdentity = p.getBoolean("include_harness_identity", true),
             includeRuntimeContext = p.getBoolean("include_runtime_context", true),
             personaPrefix = p.getString("persona_prefix", "").orEmpty(),
@@ -39,7 +39,8 @@ object PromptSettingsRepository {
 
     fun save(context: Context, settings: Settings): Boolean = synchronized(lock) {
         validate(settings)
-        writePrefs(context, settings)
+        val saved = writePrefs(context, settings)
+        saved && AgentContextSeed.setEnabled(context, settings.includeEnvironmentGuide)
     }
 
     private fun validate(settings: Settings) {
@@ -64,7 +65,6 @@ object PromptSettingsRepository {
 
     private fun writePrefs(context: Context, settings: Settings): Boolean =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putBoolean("include_environment_guide", settings.includeEnvironmentGuide)
             .putBoolean("include_harness_identity", settings.includeHarnessIdentity)
             .putBoolean("include_runtime_context", settings.includeRuntimeContext)
             .putString("persona_prefix", settings.personaPrefix)
@@ -114,9 +114,10 @@ object PromptSettingsRepository {
             "persona_prefix", "persona_suffix", "session_prompt", "tool_prompt",
             "max_bytes", "max_source_bytes",
         ).any { prefs.contains(it) }
-        if (hasLocalSettings) return false
+        if (hasLocalSettings || AgentContextSeed.hasExplicitEnabledSetting(context)) return false
         val settings = parseBackupPayload(payload) ?: return false
-        writePrefs(context, settings)
+        val saved = writePrefs(context, settings)
+        saved && AgentContextSeed.setEnabled(context, settings.includeEnvironmentGuide)
     }
 
 
