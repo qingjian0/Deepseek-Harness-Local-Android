@@ -115,7 +115,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: qingjian0/dsh-gpt
-          ref: f68f5e5a62750c5b2031f44bd1c7734c05c2f3ba
+          ref: b9576082416292abcf4a0fe3dc0499e4d38e394a
           path: dsh-gpt-src
 
       - uses: actions/setup-node@v4
@@ -194,12 +194,11 @@ jobs:
           node - "$TGZ" "dist/${{ matrix.asset }}/bundle.json" <<'NODE'
           const fs = require("fs");
           const crypto = require("crypto");
-          const cp = require("child_process");
           const [tgz, out] = process.argv.slice(2);
           const pkg = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/hook-package.json", "utf8"));
           if (pkg.name !== "@dsh-external/dsh-gpt-hook-agent" || pkg.dsh?.bundle?.patch !== "./cordis.patch.yml") throw new Error("invalid Hook Agent bundle contract");
           const sha = crypto.createHash("sha256").update(fs.readFileSync(tgz)).digest("hex");
-          fs.writeFileSync(out, JSON.stringify({pkg:pkg.name,version:pkg.version,tgz:require("path").basename(tgz),sha256:sha},null,2)+"\\n");
+          fs.writeFileSync(out, JSON.stringify({pkg:pkg.name,version:pkg.version,tgz:require("path").basename(tgz),sha256:sha},null,2)+"\n");
           NODE
           cat "dist/${{ matrix.asset }}/bundle.json"
 
