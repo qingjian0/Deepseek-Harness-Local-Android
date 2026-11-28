@@ -141,12 +141,12 @@
     <string name="setting_plugin">Community-Plugins</string>
     <string name="setting_plugin_sub">dsh-Ökosystem-Plugins mit einem Klick installieren</string>
     <string name="setting_user_prompt">Eigene Anweisungen</string>
-    <string name="setting_user_prompt_sub">Eigene dauerhafte Anweisungen ergänzend zur eingebauten Umgebungsbeschreibung</string>
-    <string name="user_prompt_intro">Diese Anweisungen werden an die eingebaute Umgebungsbeschreibung der App angehängt und gelten für jede neue Sitzung. Die App überschreibt sie nie, auch bei Updates nicht. Du kannst die KI auch bitten, hier für dich zu schreiben.</string>
+    <string name="setting_user_prompt_sub">Eigene dauerhafte Anweisungen verwalten und ihre Übernahme in neue Sitzungen steuern</string>
+    <string name="user_prompt_intro">Benutzeranweisungen werden unabhängig in den App-Einstellungen gespeichert. Bei Aktivierung werden sie für neue Sitzungen in AGENTS.md eingefügt; bei Deaktivierung nicht. App-Updates überschreiben sie nicht.</string>
     <string name="user_prompt_placeholder">Zum Beispiel: Antworte immer auf Deutsch. Oder: Wenn ich "sichern" sage, kopiere den Arbeitsbereich in den Documents-Ordner.</string>
     <string name="user_prompt_save">Speichern</string>
     <string name="user_prompt_saved">Gespeichert. Gilt in neuen Sitzungen.</string>
-    <string name="user_prompt_path">Gespeichert im Nutzerabschnitt von AGENTS.md (von der App verwaltet, deiner wird nie überschrieben)</string>
+    <string name="user_prompt_path">Unabhängig in den App-Einstellungen gespeichert; bei Aktivierung in AGENTS.md eingefügt</string>
 
     <!-- Datei-Editor in der App (v1.4.0, Issue #25). Der Button "Konfigurationsdatei
          öffnen" übergibt den Pfad an einen Desktop-Texteditor, den Android nicht hat;
@@ -2035,10 +2035,7 @@ Nur der Entwickler kann ihn lesen. Nicht öffentlich, nicht indexiert, nach 30 T
     <string name="full_repair_progress">Reparatur laeuft… (bis zu einer Minute)</string>
     <string name="full_repair_restart">Engine neu starten</string>
     <string name="full_repair_failed">Reparatur unerwartet abgebrochen; siehe full-repair-last.txt</string>
-    <string name="setting_user_prompt_sub">Manage your long-term instructions and control injection into new sessions</string>
-    <string name="user_prompt_intro">Custom instructions are stored independently in app settings. When enabled, they are injected into AGENTS.md for new sessions; when disabled, they are not injected. App upgrades do not overwrite them.</string>
     <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
-    <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
     <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
     <string name="prompt_management_title">Prompt-Verwaltung</string>
     <string name="prompt_management_subtitle">Upstream-Systemprompt und Instruktionslimits bearbeiten</string>
