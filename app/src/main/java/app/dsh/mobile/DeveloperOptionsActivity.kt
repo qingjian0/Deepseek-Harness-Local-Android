@@ -41,6 +41,10 @@ class DeveloperOptionsActivity : ThemedActivity() {
             }
         }
 
+        findViewById<android.view.View>(R.id.rowPromptManagement).setOnClickListener {
+            startActivity(android.content.Intent(this, PromptManagementActivity::class.java))
+        }
+
         val hookAgent = findViewById<MaterialSwitch>(R.id.swDshGptHookAgent)
         hookAgent.isChecked = app.dsh.mobile.engine.ProfilePluginProvisioner.requestedEnabled(
             this, app.dsh.mobile.engine.ProfilePluginProvisioner.DSH_GPT_HOOK_AGENT_PKG,

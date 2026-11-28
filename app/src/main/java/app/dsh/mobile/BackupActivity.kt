@@ -258,13 +258,24 @@ class BackupActivity : ThemedActivity() {
             runOnUiThread {
                 importing = false
                 result.onSuccess { s ->
+                    val promptNotes = buildList {
+                        if (s.userPromptRestored) add(getString(R.string.import_prompt_restored))
+                        if (s.promptSettingsRestored) add(getString(R.string.import_prompt_settings_restored))
+                    }
                     importSub?.text = getString(
                         R.string.import_done, s.sessionFiles, s.workspaceFiles, s.overwritten,
-                    )
-                    if (s.sessionFiles > 0 || s.workspaceFiles > 0) {
+                    ) + promptNotes.joinToString(separator = " · ", prefix = if (promptNotes.isEmpty()) "" else " · ")
+                    if (s.sessionFiles > 0 || s.workspaceFiles > 0 || s.promptSettingsRestored) {
+                        val message = buildString {
+                            append(getString(R.string.import_done_body, s.sessionFiles + s.workspaceFiles))
+                            if (s.promptSettingsRestored) {
+                                append("\n\n")
+                                append(getString(R.string.prompt_restart_message))
+                            }
+                        }
                         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                             .setTitle(R.string.import_done_title)
-                            .setMessage(getString(R.string.import_done_body, s.sessionFiles + s.workspaceFiles))
+                            .setMessage(message)
                             .setPositiveButton(R.string.import_done_restart) { _, _ ->
                                 (application as DshApp).supervisor.restart()
                             }

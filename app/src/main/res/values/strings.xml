@@ -138,12 +138,12 @@
     <string name="setting_plugin">Community Plugins</string>
     <string name="setting_plugin_sub">One-click install dsh ecosystem plugins</string>
     <string name="setting_user_prompt">User instructions</string>
-    <string name="setting_user_prompt_sub">Add your own standing instructions on top of the built-in environment guide</string>
-    <string name="user_prompt_intro">These instructions are appended to the app\'s built-in environment guide and apply to every new session. The app never overwrites what you write here, and upgrading keeps it as-is. You can also ask the AI to write here for you.</string>
+    <string name="setting_user_prompt_sub">Manage your long-term instructions and control injection into new sessions</string>
+    <string name="user_prompt_intro">Custom instructions are stored independently in app settings. When enabled, they are injected into AGENTS.md for new sessions; when disabled, they are not injected. App upgrades do not overwrite them.</string>
     <string name="user_prompt_placeholder">For example: always answer in Chinese. Or: when I say "back up", copy the workspace to the Documents folder.</string>
     <string name="user_prompt_save">Save</string>
     <string name="user_prompt_saved">Saved. Takes effect in new sessions.</string>
-    <string name="user_prompt_path">Stored in the user section of AGENTS.md (managed by the app, yours is never overwritten)</string>
+    <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
 
     <!-- In-app file editor (v1.4.0, issue #25). Upstream\'s "open configuration
          file" button hands the path to a desktop text editor that Android does
@@ -2046,4 +2046,37 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="developer_hook_api_reachable">API authenticated; Hook control plane is unavailable. Check dsh-gpt/LSPosed.</string>
     <string name="developer_hook_http_error">API responded with an unexpected HTTP status.</string>
     <string name="developer_hook_unreachable">Cannot reach local API. Check dsh-gpt and port 8766.</string>
+    <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
+    <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
+    <string name="import_prompt_restored">Custom instructions restored</string>
+    <string name="prompt_management_title">Prompt management</string>
+    <string name="prompt_management_subtitle">Edit the upstream system prompt and instruction limits</string>
+    <string name="prompt_upstream_description">These controls write to the actual DSH system-prompt and agent-instructions configuration. Changes apply after the engine restarts.</string>
+    <string name="prompt_harness_identity_default">Upstream default identity: “You are an AI agent powered by DeepSeek Harness.” Turn it off to remove it; use the prefix field below to replace it with your own text.</string>
+    <string name="prompt_include_identity">Include the fixed Harness identity</string>
+    <string name="prompt_include_runtime_context">Include optional runtime context</string>
+    <string name="prompt_persona_prefix_label">Persona prefix / replacement identity</string>
+    <string name="prompt_persona_prefix_hint">Leave blank to remove the custom prefix</string>
+    <string name="prompt_persona_suffix_label">Persona suffix</string>
+    <string name="prompt_persona_suffix_hint">Leave blank to remove the suffix</string>
+    <string name="prompt_instruction_budget_title">AGENTS.md instruction limits</string>
+    <string name="prompt_instruction_budget_description">Maximum bytes per instruction chain and maximum bytes read from one instruction file.</string>
+    <string name="prompt_open_user_instructions">Edit my user instructions</string>
+    <string name="prompt_reset_title">Reset prompt settings?</string>
+    <string name="prompt_reset_message">Restore the upstream defaults and the default instruction limits?</string>
+    <string name="prompt_reset_action">Reset defaults</string>
+    <string name="prompt_save_action">Save</string>
+    <string name="prompt_save_failed">Could not save prompt settings.</string>
+    <string name="prompt_invalid_numbers">Enter valid numbers for both instruction limits.</string>
+    <string name="prompt_saved_title">Prompt settings saved</string>
+    <string name="prompt_restart_message">Restart the DSH engine to apply these settings.</string>
+    <string name="prompt_restart_later">Later</string>
+    <string name="prompt_restart_now">Restart now</string>
+    <string name="prompt_include_environment_guide">Include the built-in Android environment guide in AGENTS.md</string>
+    <string name="prompt_session_tool_title">Session and tool guidance</string>
+    <string name="prompt_session_description">Added as a named system-prompt section to each new agent session. Leave blank to remove it.</string>
+    <string name="prompt_session_hint">Instructions that should apply to every new session</string>
+    <string name="prompt_tool_guidance_label">Tool usage guidance</string>
+    <string name="prompt_tool_guidance_hint">Instructions for how the agent should choose and use tools</string>
+    <string name="import_prompt_settings_restored">Prompt settings restored</string>
 </resources>

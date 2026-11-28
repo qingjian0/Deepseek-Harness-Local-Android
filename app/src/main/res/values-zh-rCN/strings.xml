@@ -138,12 +138,12 @@
     <string name="setting_plugin">社区插件</string>
     <string name="setting_plugin_sub">一键安装 dsh 生态插件</string>
     <string name="setting_user_prompt">自定义指令</string>
-    <string name="setting_user_prompt_sub">在自带的环境说明之上，补写你自己的长期指令</string>
-    <string name="user_prompt_intro">这里的指令会追加到应用自带的环境说明之后，对每个新会话生效。应用永不覆盖你写的内容，升级也会原样保留。也可以直接让 AI 帮你写到这里。</string>
+    <string name="setting_user_prompt_sub">管理自己的长期指令，可独立控制是否注入新会话</string>
+    <string name="user_prompt_intro">自定义指令独立保存在应用设置中。开启后会注入 AGENTS.md 并对新会话生效；关闭后不再注入。应用升级不会覆盖你的指令。也可以直接让 AI 帮你写到这里。</string>
     <string name="user_prompt_placeholder">例如：始终用中文回答。或者：我说「备份」时，把工作区复制到 Documents 目录。</string>
     <string name="user_prompt_save">保存</string>
     <string name="user_prompt_saved">已保存，新会话生效</string>
-    <string name="user_prompt_path">保存在 AGENTS.md 的用户段（由应用管理，你的内容永不被覆盖）</string>
+    <string name="user_prompt_path">独立保存在应用设置中；开启后注入 AGENTS.md</string>
 
     <!-- 应用内文件编辑页（v1.4.0，issue #25）。上游「打开配置文件」把路径交给桌面
          文本编辑器，Android 没有对应程序；引擎现在把这个请求转到本页。 -->
@@ -2049,4 +2049,37 @@
     <string name="developer_hook_api_reachable">API 已认证，但 Hook 控制面不可用；请检查 dsh-gpt/LSPosed。</string>
     <string name="developer_hook_http_error">API 返回了非预期 HTTP 状态。</string>
     <string name="developer_hook_unreachable">无法连接本地 API。请检查 dsh-gpt 和 8766 端口。</string>
+    <string name="setting_user_prompt_toggle">将自定义指令注入新会话</string>
+    <string name="user_prompt_toggle_failed">设置保存失败，请重试</string>
+    <string name="import_prompt_restored">已恢复自定义指令</string>
+    <string name="prompt_management_title">Prompt 管理</string>
+    <string name="prompt_management_subtitle">编辑上游系统提示词和指令长度限制</string>
+    <string name="prompt_upstream_description">这些选项会写入 DSH 实际使用的 system-prompt 与 agent-instructions 配置。重启引擎后生效。</string>
+    <string name="prompt_harness_identity_default">上游默认身份：“You are an AI agent powered by DeepSeek Harness.” 关闭开关即可移除；也可以在下方前缀中填写自己的替代文本。</string>
+    <string name="prompt_include_identity">注入固定的 Harness 身份</string>
+    <string name="prompt_include_runtime_context">注入可选运行时上下文</string>
+    <string name="prompt_persona_prefix_label">Persona 前缀 / 替代身份</string>
+    <string name="prompt_persona_prefix_hint">留空即可移除自定义前缀</string>
+    <string name="prompt_persona_suffix_label">Persona 后缀</string>
+    <string name="prompt_persona_suffix_hint">留空即可移除后缀</string>
+    <string name="prompt_instruction_budget_title">AGENTS.md 指令长度限制</string>
+    <string name="prompt_instruction_budget_description">设置每条指令链的最大字节数，以及单个指令文件的最大读取字节数。</string>
+    <string name="prompt_open_user_instructions">编辑我的用户指令</string>
+    <string name="prompt_reset_title">重置 Prompt 设置？</string>
+    <string name="prompt_reset_message">恢复上游默认配置和默认指令长度限制？</string>
+    <string name="prompt_reset_action">恢复默认</string>
+    <string name="prompt_save_action">保存</string>
+    <string name="prompt_save_failed">Prompt 设置保存失败。</string>
+    <string name="prompt_invalid_numbers">请为两项指令长度限制输入有效数字。</string>
+    <string name="prompt_saved_title">Prompt 设置已保存</string>
+    <string name="prompt_restart_message">需要重启 DSH 引擎才能应用这些设置。</string>
+    <string name="prompt_restart_later">稍后</string>
+    <string name="prompt_restart_now">立即重启</string>
+    <string name="prompt_include_environment_guide">在 AGENTS.md 中注入应用自带的 Android 环境说明</string>
+    <string name="prompt_session_tool_title">会话与工具指导</string>
+    <string name="prompt_session_description">作为独立系统提示词段注入每个新会话。留空即可移除。</string>
+    <string name="prompt_session_hint">希望每个新会话都遵循的指令</string>
+    <string name="prompt_tool_guidance_label">工具使用指导</string>
+    <string name="prompt_tool_guidance_hint">指导 AI 如何选择和使用工具</string>
+    <string name="import_prompt_settings_restored">已恢复 Prompt 管理设置</string>
 </resources>

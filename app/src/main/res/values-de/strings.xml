@@ -141,12 +141,12 @@
     <string name="setting_plugin">Community-Plugins</string>
     <string name="setting_plugin_sub">dsh-Ökosystem-Plugins mit einem Klick installieren</string>
     <string name="setting_user_prompt">Eigene Anweisungen</string>
-    <string name="setting_user_prompt_sub">Eigene dauerhafte Anweisungen ergänzend zur eingebauten Umgebungsbeschreibung</string>
-    <string name="user_prompt_intro">Diese Anweisungen werden an die eingebaute Umgebungsbeschreibung der App angehängt und gelten für jede neue Sitzung. Die App überschreibt sie nie, auch bei Updates nicht. Du kannst die KI auch bitten, hier für dich zu schreiben.</string>
+    <string name="setting_user_prompt_sub">Eigene dauerhafte Anweisungen verwalten und ihre Übernahme in neue Sitzungen steuern</string>
+    <string name="user_prompt_intro">Benutzeranweisungen werden unabhängig in den App-Einstellungen gespeichert. Bei Aktivierung werden sie für neue Sitzungen in AGENTS.md eingefügt; bei Deaktivierung nicht. App-Updates überschreiben sie nicht.</string>
     <string name="user_prompt_placeholder">Zum Beispiel: Antworte immer auf Deutsch. Oder: Wenn ich "sichern" sage, kopiere den Arbeitsbereich in den Documents-Ordner.</string>
     <string name="user_prompt_save">Speichern</string>
     <string name="user_prompt_saved">Gespeichert. Gilt in neuen Sitzungen.</string>
-    <string name="user_prompt_path">Gespeichert im Nutzerabschnitt von AGENTS.md (von der App verwaltet, deiner wird nie überschrieben)</string>
+    <string name="user_prompt_path">Unabhängig in den App-Einstellungen gespeichert; bei Aktivierung in AGENTS.md eingefügt</string>
 
     <!-- Datei-Editor in der App (v1.4.0, Issue #25). Der Button "Konfigurationsdatei
          öffnen" übergibt den Pfad an einen Desktop-Texteditor, den Android nicht hat;
@@ -2035,4 +2035,36 @@ Nur der Entwickler kann ihn lesen. Nicht öffentlich, nicht indexiert, nach 30 T
     <string name="full_repair_progress">Reparatur laeuft… (bis zu einer Minute)</string>
     <string name="full_repair_restart">Engine neu starten</string>
     <string name="full_repair_failed">Reparatur unerwartet abgebrochen; siehe full-repair-last.txt</string>
+    <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
+    <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
+    <string name="prompt_management_title">Prompt-Verwaltung</string>
+    <string name="prompt_management_subtitle">Upstream-Systemprompt und Instruktionslimits bearbeiten</string>
+    <string name="prompt_upstream_description">Diese Optionen schreiben in die tatsächlich verwendete DSH-Konfiguration für system-prompt und agent-instructions. Änderungen gelten nach einem Neustart der Engine.</string>
+    <string name="prompt_harness_identity_default">Upstream-Standardidentität: „You are an AI agent powered by DeepSeek Harness.“ Deaktiviere den Schalter zum Entfernen oder ersetze sie mit eigenem Text im Präfixfeld.</string>
+    <string name="prompt_include_identity">Feste Harness-Identität einfügen</string>
+    <string name="prompt_include_runtime_context">Optionalen Laufzeitkontext einfügen</string>
+    <string name="prompt_persona_prefix_label">Persona-Präfix / Ersatzidentität</string>
+    <string name="prompt_persona_prefix_hint">Leer lassen, um das benutzerdefinierte Präfix zu entfernen</string>
+    <string name="prompt_persona_suffix_label">Persona-Suffix</string>
+    <string name="prompt_persona_suffix_hint">Leer lassen, um das Suffix zu entfernen</string>
+    <string name="prompt_instruction_budget_title">AGENTS.md-Instruktionslimits</string>
+    <string name="prompt_instruction_budget_description">Maximale Bytes pro Instruktionskette und maximale Lesemenge pro Instruktionsdatei.</string>
+    <string name="prompt_open_user_instructions">Eigene Benutzeranweisungen bearbeiten</string>
+    <string name="prompt_reset_title">Prompt-Einstellungen zurücksetzen?</string>
+    <string name="prompt_reset_message">Upstream-Standardwerte und Standardlimits wiederherstellen?</string>
+    <string name="prompt_reset_action">Standardwerte</string>
+    <string name="prompt_save_action">Speichern</string>
+    <string name="prompt_save_failed">Prompt-Einstellungen konnten nicht gespeichert werden.</string>
+    <string name="prompt_invalid_numbers">Gib gültige Zahlen für beide Instruktionslimits ein.</string>
+    <string name="prompt_saved_title">Prompt-Einstellungen gespeichert</string>
+    <string name="prompt_restart_message">Starte die DSH-Engine neu, um diese Einstellungen anzuwenden.</string>
+    <string name="prompt_restart_later">Später</string>
+    <string name="prompt_restart_now">Jetzt neu starten</string>
+    <string name="prompt_include_environment_guide">Integrierte Android-Umgebungsanleitung in AGENTS.md einfügen</string>
+    <string name="prompt_session_tool_title">Sitzungs- und Werkzeughinweise</string>
+    <string name="prompt_session_description">Wird als eigener Systemprompt-Abschnitt jeder neuen Agentensitzung hinzugefügt. Leer lassen zum Entfernen.</string>
+    <string name="prompt_session_hint">Anweisungen für jede neue Sitzung</string>
+    <string name="prompt_tool_guidance_label">Hinweise zur Werkzeugnutzung</string>
+    <string name="prompt_tool_guidance_hint">Anweisungen zur Auswahl und Verwendung von Werkzeugen</string>
+    <string name="import_prompt_settings_restored">Prompt-Einstellungen wiederhergestellt</string>
 </resources>

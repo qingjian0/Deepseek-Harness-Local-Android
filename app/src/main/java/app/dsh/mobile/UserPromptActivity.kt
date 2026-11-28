@@ -5,7 +5,8 @@ import android.os.Bundle
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
-import app.dsh.mobile.engine.AgentContextSeed
+import app.dsh.mobile.engine.UserPromptRepository
+import app.dsh.mobile.engine.UserPromptContextAdapter
 
 /**
  * 用户自定义指令页（v1.3.2，issue #19）。
@@ -37,17 +38,22 @@ class UserPromptActivity : ThemedActivity() {
         val editor = findViewById<EditText>(R.id.editorPrompt)
         val hint = findViewById<TextView>(R.id.txtPath)
 
-        // 载入现有用户段（未写过则为空）
-        val current = AgentContextSeed.readUserSection(this)
-        editor.setText(current.orEmpty())
-        if (current.isNullOrEmpty()) {
+        // 首次打开也先迁移旧 AGENTS.md，避免引擎尚未启动时丢失旧内容。
+        UserPromptRepository.migrateLegacyIfNeeded(this)
+        val current = UserPromptRepository.content(this)
+        editor.setText(current)
+        if (current.isEmpty()) {
             editor.hint = getString(R.string.user_prompt_placeholder)
         }
         hint.text = getString(R.string.user_prompt_path)
 
         findViewById<android.view.View>(R.id.btnSave).setOnClickListener {
             val text = editor.text.toString()
-            AgentContextSeed.writeUserSection(this, text.ifBlank { null })
+            if (!UserPromptRepository.saveContent(this, text)) {
+                Toast.makeText(this, getString(R.string.user_prompt_toggle_failed), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            UserPromptContextAdapter.refreshAsync(this)
             Toast.makeText(this, getString(R.string.user_prompt_saved), Toast.LENGTH_SHORT).show()
             finish()
         }

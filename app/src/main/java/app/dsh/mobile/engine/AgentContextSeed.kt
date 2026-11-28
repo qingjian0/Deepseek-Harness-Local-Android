@@ -22,6 +22,10 @@ object AgentContextSeed {
 
     private const val TAG = "AgentContextSeed"
     private const val FILE_NAME = "AGENTS.md"
+    private const val PREFS_UI = "dsh_ui"
+    private const val KEY_DEFAULT_SEED_ENABLED = "agent_default_prompt_enabled"
+    private const val PREFS = "dsh_agent_seed"
+    private const val KEY_ENVIRONMENT_GUIDE_APPLIED = "environment_guide_applied"
     private const val MARKER_PREFIX = "<!-- dsh-android AGENTS seed v"
     /** 当前模板版本：改文案必须同步递增，旧版才会被升级覆盖 */
     private const val SEED_VERSION = 55
@@ -42,6 +46,19 @@ object AgentContextSeed {
      * 但**再也拿不到 App 的版本升级**，且没有任何界面能追加指令。现在改成：
      * 升级只替换 App 段，用户段原样保留。
      */
+    /** Reuse the existing environment-prompt preference key from the original toggle work. */
+    fun isEnabled(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DEFAULT_SEED_ENABLED, true)
+
+    fun hasExplicitEnabledSetting(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE).contains(KEY_DEFAULT_SEED_ENABLED)
+
+    @Synchronized
+    fun setEnabled(ctx: Context, enabled: Boolean): Boolean =
+        ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_DEFAULT_SEED_ENABLED, enabled).commit()
+
     private const val USER_SECTION_BEGIN = "<!-- >>> user instructions (app never edits below) >>> -->"
     private const val USER_SECTION_END = "<!-- <<< user instructions <<< -->"
 
@@ -50,13 +67,16 @@ object AgentContextSeed {
         "<!-- Add your own instructions below this line. DSH Mobile never overwrites\n" +
             "     this section, and upgrades keep it as-is. Ask the AI to write here for you. -->"
 
+    @Synchronized
     fun ensure(ctx: Context) {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
 
         // ① 文件不存在 → 写入完整模板（含空的用户段）
         if (existing == null) {
-            write(file, render(ctx) + userSection(null))
+            val desired = render(ctx) + userSection(null)
+            write(file, desired)
+            recordEnvironmentGuideApplied(ctx, file, desired)
             return
         }
 
@@ -68,21 +88,42 @@ object AgentContextSeed {
             // 这样「用户的内容」和「App 的环境说明」同时生效且互不覆盖。
             val migrated = render(ctx) + userSection(existing)
             write(file, migrated)
+            recordEnvironmentGuideApplied(ctx, file, migrated)
             return
         }
 
         // ③ 含标记且版本最新 → 只在用户段缺失时补齐，其余不动
         if (containsVersion(existing, SEED_VERSION)) {
-            if (!existing.contains(USER_SECTION_BEGIN)) {
-                write(file, existing.trimEnd() + "\n\n" + userSection(null))
+            val settings = PromptSettingsRepository.load(ctx)
+            val applied = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ENVIRONMENT_GUIDE_APPLIED, true)
+            val missingUserSection = !existing.contains(USER_SECTION_BEGIN)
+            if (applied != settings.includeEnvironmentGuide || missingUserSection) {
+                val desiredApp = render(ctx).trimEnd()
+                val userContent = extractUserSection(existing)
+                val desired = desiredApp + userSection(userContent)
+                write(file, desired)
+                recordEnvironmentGuideApplied(ctx, file, desired)
             }
             return
         }
 
         // ④ 需要升级 → **只替换 App 段**，用户段原封不动
         val userContent = extractUserSection(existing)
-        write(file, render(ctx) + userSection(userContent))
+        val upgraded = render(ctx) + userSection(userContent)
+        write(file, upgraded)
+        recordEnvironmentGuideApplied(ctx, file, upgraded)
         Log.i(TAG, "AGENTS.md upgraded to v$SEED_VERSION (user section preserved, ${userContent?.length ?: 0} chars)")
+    }
+
+    private fun recordEnvironmentGuideApplied(ctx: Context, file: File, expected: String) {
+        val written = runCatching { file.isFile && file.readText() == expected }.getOrDefault(false)
+        if (written) {
+            val enabled = PromptSettingsRepository.load(ctx).includeEnvironmentGuide
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(KEY_ENVIRONMENT_GUIDE_APPLIED, enabled)
+                .commit()
+        }
     }
 
     /** 读取用户段（供设置页编辑）。返回 null 表示尚未有用户内容。 */
@@ -146,6 +187,9 @@ object AgentContextSeed {
         text.contains("$MARKER_PREFIX$v ")
 
     private fun render(ctx: Context): String {
+        if (!isEnabled(ctx)) {
+            return "$MARKER_PREFIX$SEED_VERSION -->\n\n<!-- Built-in environment guide disabled in Prompt Management. -->\n"
+        }
         // ⚠️ 这里不要再算「按模式分支的小段落」：v54 之前的 `mode` + `shz`
         // 两个局部变量算出来却从未拼进模板（全文件只有 privModeTitle /
         // shzNote / linuxMode / roster / active 五处插值），结果是 Shizuku
