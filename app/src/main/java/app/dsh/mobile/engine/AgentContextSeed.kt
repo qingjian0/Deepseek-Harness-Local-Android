@@ -22,6 +22,8 @@ object AgentContextSeed {
 
     private const val TAG = "AgentContextSeed"
     private const val FILE_NAME = "AGENTS.md"
+    private const val PREFS = "dsh_agent_seed"
+    private const val KEY_ENVIRONMENT_GUIDE_APPLIED = "environment_guide_applied"
     private const val MARKER_PREFIX = "<!-- dsh-android AGENTS seed v"
     /** 当前模板版本：改文案必须同步递增，旧版才会被升级覆盖 */
     private const val SEED_VERSION = 55
@@ -56,7 +58,9 @@ object AgentContextSeed {
 
         // ① 文件不存在 → 写入完整模板（含空的用户段）
         if (existing == null) {
-            write(file, render(ctx) + userSection(null))
+            val desired = render(ctx) + userSection(null)
+            write(file, desired)
+            recordEnvironmentGuideApplied(ctx, file, desired)
             return
         }
 
@@ -68,24 +72,42 @@ object AgentContextSeed {
             // 这样「用户的内容」和「App 的环境说明」同时生效且互不覆盖。
             val migrated = render(ctx) + userSection(existing)
             write(file, migrated)
+            recordEnvironmentGuideApplied(ctx, file, migrated)
             return
         }
 
         // ③ 含标记且版本最新 → 只在用户段缺失时补齐，其余不动
         if (containsVersion(existing, SEED_VERSION)) {
-            val currentApp = appSectionOf(existing).trimEnd()
-            val desiredApp = render(ctx).trimEnd()
-            val userContent = extractUserSection(existing)
-            if (currentApp != desiredApp || !existing.contains(USER_SECTION_BEGIN)) {
-                write(file, desiredApp + userSection(userContent))
+            val settings = PromptSettingsRepository.load(ctx)
+            val applied = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ENVIRONMENT_GUIDE_APPLIED, true)
+            val missingUserSection = !existing.contains(USER_SECTION_BEGIN)
+            if (applied != settings.includeEnvironmentGuide || missingUserSection) {
+                val desiredApp = render(ctx).trimEnd()
+                val userContent = extractUserSection(existing)
+                val desired = desiredApp + userSection(userContent)
+                write(file, desired)
+                recordEnvironmentGuideApplied(ctx, file, desired)
             }
             return
         }
 
         // ④ 需要升级 → **只替换 App 段**，用户段原封不动
         val userContent = extractUserSection(existing)
-        write(file, render(ctx) + userSection(userContent))
+        val upgraded = render(ctx) + userSection(userContent)
+        write(file, upgraded)
+        recordEnvironmentGuideApplied(ctx, file, upgraded)
         Log.i(TAG, "AGENTS.md upgraded to v$SEED_VERSION (user section preserved, ${userContent?.length ?: 0} chars)")
+    }
+
+    private fun recordEnvironmentGuideApplied(ctx: Context, file: File, expected: String) {
+        val written = runCatching { file.isFile && file.readText() == expected }.getOrDefault(false)
+        if (written) {
+            val enabled = PromptSettingsRepository.load(ctx).includeEnvironmentGuide
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(KEY_ENVIRONMENT_GUIDE_APPLIED, enabled)
+                .commit()
+        }
     }
 
     /** 读取用户段（供设置页编辑）。返回 null 表示尚未有用户内容。 */
