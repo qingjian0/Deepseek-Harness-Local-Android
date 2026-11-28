@@ -1397,6 +1397,8 @@ object EngineConfig {
     ): File {
         val f = File(engineRoot(ctx), "android-overlay.yml")
         val promptSettings = PromptSettingsRepository.load(ctx)
+        runCatching { PromptSettingsRepository.syncGuidanceFile(ctx, promptSettings) }
+            .onFailure { Log.w(TAG, "prompt guidance file sync failed: ${it.message}") }
         val personaPrefixYaml = PromptSettingsRepository.yamlString(promptSettings.personaPrefix)
         val personaSuffixYaml = PromptSettingsRepository.yamlString(promptSettings.personaSuffix)
         // NOTE: keep this file free of CJK text — the i18n gate scans Kotlin string
@@ -1740,6 +1742,11 @@ object EngineConfig {
             |# trio was removed too — upstream dsh-client-ui-layout handles narrow
             |# viewports natively now. Only chat-perf (pure CSS render relief) remains.
             |
+            |# User-owned session and tool guidance are registered as ordinary system sections.
+            |- insert:
+            |    - id: android-prompt-guidance
+            |      name: ./android-plugins/prompt-guidance.mjs
+            |
             |# Prompt settings are user-owned app preferences. These rows are the final
             |# Android overlay, so the app's saved values are the effective defaults.
             |# The system-prompt config is restated completely because row patches replace
@@ -1788,6 +1795,7 @@ object EngineConfig {
                 "device-tools.mjs",
                 "plugin-health.mjs",
                 "open-file.mjs",
+                "prompt-guidance.mjs",
             ).forEach { fileName ->
                 val src = ctx.assets.open("android-plugins/$fileName").use { it.readBytes() }
                 val dst = File(f.parentFile, "android-plugins/$fileName")
