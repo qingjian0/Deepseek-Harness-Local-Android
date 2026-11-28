@@ -85,6 +85,10 @@ object ServicePortAllocator {
     @Volatile
     private var selected = false
 
+    /** True only after AgentBridge/Remote Access preflight has bound the selected map. */
+    @Volatile
+    private var corePreflightReady = false
+
     @Volatile
     var current: ServicePortMap = ServicePortMap.at(0)
         private set
@@ -105,6 +109,7 @@ object ServicePortAllocator {
         )
 
         current = chosen
+        corePreflightReady = false
         selected = true
         prefs.edit().putInt(KEY_OFFSET, chosen.offset).apply()
         Log.i(TAG, "selected complete service block offset=${chosen.offset}: ${chosen.all}")
@@ -146,15 +151,31 @@ object ServicePortAllocator {
             .firstOrNull { map -> map.all.all(::canBind) }
             ?: return null
         current = next
+        corePreflightReady = false
         prefs.edit().putInt(KEY_OFFSET, next.offset).apply()
         Log.w(TAG, "bind race: advanced complete service block to offset=${next.offset}: ${next.all}")
         return next
+    }
+
+    /**
+     * LAN proxy may start only after the selected map and required core listeners are ready.
+     * This prevents EngineService/settings callbacks from binding the old default port block
+     * while startup is still probing and potentially advancing the allocation.
+     */
+    fun isCorePreflightReady(): Boolean = selected && corePreflightReady
+
+    @Synchronized
+    fun markCorePreflightReady() {
+        check(selected) { "service port block must be selected before core preflight completes" }
+        corePreflightReady = true
+        Log.i(TAG, "core service preflight complete; optional LAN proxy may start")
     }
 
     /** Test hook; production code should never reset the process-wide selection. */
     @Synchronized
     internal fun resetForTests() {
         selected = false
+        corePreflightReady = false
         current = ServicePortMap.at(0)
     }
 
