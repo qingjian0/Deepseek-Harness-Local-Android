@@ -128,13 +128,15 @@ object PromptSettingsRepository {
     fun syncGuidanceFile(context: Context, settings: Settings = load(context)) {
         val target = File(EngineConfig.dshHome(context), "settings/prompt-guidance.json")
         target.parentFile?.mkdirs()
-        val json = JSONObject()
+        val content = JSONObject()
             .put("sessionPrompt", settings.sessionPrompt)
             .put("toolPrompt", settings.toolPrompt)
+            .toString()
+        if (runCatching { target.isFile && target.readText() == content }.getOrDefault(false)) return
         val atomic = AtomicFile(target)
         val stream = atomic.startWrite()
         try {
-            stream.write(json.toString().toByteArray(Charsets.UTF_8))
+            stream.write(content.toByteArray(Charsets.UTF_8))
             atomic.finishWrite(stream)
         } catch (error: Throwable) {
             atomic.failWrite(stream)
