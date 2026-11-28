@@ -36,6 +36,17 @@ class DeveloperOptionsActivity : ThemedActivity() {
                 finish()
             }
         }
+
+        val hookAgent = findViewById<MaterialSwitch>(R.id.swDshGptHookAgent)
+        hookAgent.isChecked = app.dsh.mobile.engine.ProfilePluginProvisioner.requestedEnabled(
+            this, app.dsh.mobile.engine.ProfilePluginProvisioner.DSH_GPT_HOOK_AGENT_PKG,
+        )
+        hookAgent.setOnCheckedChangeListener { _, checked ->
+            app.dsh.mobile.engine.ProfilePluginProvisioner.requestEnabled(
+                this, app.dsh.mobile.engine.ProfilePluginProvisioner.DSH_GPT_HOOK_AGENT_PKG, checked,
+            )
+            Toast.makeText(this, R.string.developer_hook_agent_pending, Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onResume() {
