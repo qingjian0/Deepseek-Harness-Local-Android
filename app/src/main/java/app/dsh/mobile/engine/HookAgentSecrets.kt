@@ -54,6 +54,9 @@ object HookAgentSecrets {
     }
 
     fun environment(context: Context): List<String> {
+        if (!ProfilePluginProvisioner.isEnabled(context, ProfilePluginProvisioner.DSH_GPT_HOOK_AGENT_PKG)) {
+            return emptyList()
+        }
         val config = read(context) ?: return emptyList()
         return listOf(
             "DSH_GPT_HOOK_BASE_URL=${config.baseUrl}",
