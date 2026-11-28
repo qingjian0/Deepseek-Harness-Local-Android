@@ -19,10 +19,10 @@
 | 端口清理 | `PortReclaim.kt` 已存在，负责释放监听端口及兜底清理 | 已有实现 | 与 allocator 分工明确，不重复实现分配器 |
 | 开发者模式 | `DeveloperModePrefs.kt`、`DeveloperOptionsActivity.kt` 已存在于 main/dev | 基础功能已存在 | 先核对七击入口、菜单收纳和权限边界；只补缺项 |
 | 权限管理 | `PermissionCenterActivity.kt`、`PermissionListActivity.kt` 已存在；包含运行身份、系统能力、能力开关和权限清单入口 | 基础功能已存在 | 不新建第二套权限中心；逐项核对需求和授权校验 |
-| 用户 Prompt | 原有 `UserPromptActivity.kt` + `AgentContextSeed` 管理 AGENTS.md 用户段；PR #44 选择性增加 `UserPromptRepository`、迁移适配器、注入开关、备份恢复及 JVM 测试 | PR #44 已提交，未合并；CI 尚未启动 | 只审查/合并 PR #44；真机验证迁移、开关、升级、备份恢复 |
+| 用户 Prompt | `UserPromptRepository` 为唯一持久化源；`UserPromptContextAdapter` 将其渲染到 AGENTS.md；Settings、编辑页、`/dev/prompt` API、备份恢复全部走同一仓储；迁移/保存/开关/恢复共用写锁 | PR #44 已提交 17 commits ahead，未合并；无对应 Actions run/check | CI 后再合并；真机验证迁移、开关、AI API 写入、升级、备份恢复 |
 | 环境 Prompt 开关 | PR #9 有独立环境提示注入开关实现，但仍开放，目标 main | 未集成到当前 dev 基线（待复核） | 与用户 Prompt 分开建模，禁止覆盖用户内容 |
-| 用户 Prompt 独立存储 | 已从旧 PR #13 选择性移植到 PR #44；旧 PR 还混有 MCP/HID 性能与诊断改动 | PR #44 待 CI/设备验收 | 不合并旧 PR #13 整体；以 PR #44 为唯一用户 Prompt 实现线 |
-| 完整 Prompt 管理器 | 旧分支 `fix/package-port-autoselect` 有 `PromptManagementActivity`、`PromptSettingsRepository`；当前检查发现其上游/会话/工具编辑器只写 SharedPreferences，`EngineSupervisor` 与 `AgentBridge` 未消费这些设置；上游项仅提供身份/运行上下文开关及 persona 前后缀，不提供默认 Prompt 正文编辑/删除 | 未集成，属于不完整 UI 原型 | 不移植旧管理器；先定位真实上游默认 Prompt 的装载/组装/发送链路，再实现单一管理入口及可编辑/删除能力 |
+| 用户 Prompt 独立存储 | 已从旧 PR #13 选择性移植到 PR #44；补齐 `/dev/prompt` 读写统一与偏好写锁；旧 PR 还混有 MCP/HID 性能与诊断改动 | PR #44 待 CI/设备验收 | 不合并旧 PR #13 整体；以 PR #44 为唯一用户 Prompt 实现线 |
+| 系统默认 Prompt | DSH 使用 `@deepseek-ai/dsh-system-prompt` 组装 system sections；基础配置包含 Harness identity、runtime context、persona prefix/suffix，其他插件可贡献 sections。旧 `PromptSettingsRepository` 只存 SharedPreferences，未进入启动配置。当前 Android 启动链由 `EngineConfig.ensureAndroidOverlay()` 生成最终 `--patch`，可覆盖现有 `system-prompt` 行；配置 patch 会替换整段 config，必须完整列出字段 | 结构已定位；编辑 UI 与启动配置尚未集成 | 通过现有 Android overlay 接入真实 config；区分固定 identity、persona、runtime context 和插件贡献，不伪造“完整系统 Prompt”编辑能力 |
 | DSH-GPT Hook | `dev` 有 `HookAgentSecrets.kt`；另有 ADR 说明 Hook 可选插件化 | 已有部分实现/设计 | 不重新启动旧 Hook 主线；先审查当前范围与用户已取消项 |
 | APK 直接下载 | PR #26 仍开放且为 Draft，目标 dev | 待集成/验收 | 仅验证工作流产物，不重做现有构建流水线 |
 | 应用包名 | main 当前 `applicationId = app.dsh.mobile`；PR #42 提议改为 `io.github.qingjian0.dsh.mobile`，仍为 Draft，CI/真机验证未完成 | 决策未定，禁止自动合并 | 不更改包名；先确认用户最终包名与数据迁移要求 |
@@ -64,8 +64,9 @@
 ## 6. 当前进行中
 
 - PR #44：`integrate/user-prompt-storage` → `dev`，选择性吸收旧 PR #13 的用户 Prompt 部分；PR 链接：https://github.com/qingjian0/Deepseek-Harness-Local-Android/pull/44。
-- PR #44 当前没有 GitHub Actions check run。仓库工作流文件注明 fork 的 Actions 可能处于 `disabled_fork`，需在 GitHub Actions 页面启用后才会执行；因此目前不能声称构建/单测通过，也不能合并。
-- Prompt 管理器下一阶段不是继续堆 UI：必须先找到实际 system/default prompt 的来源、覆盖/合并顺序和发送入口。旧 `PromptSettingsRepository` 没有引擎消费方，不能当作已完成实现。
+- PR #44 当前 head 有 17 个提交领先 dev、0 个落后；GitHub Actions 最近一次仓库运行仍是 2026-11-25，未发现 PR #44 对应的 run/check。工作流文件说明 fork 可能需要在 Actions → android-build 页面启用；目前不能声称构建/单测通过，也不能合并。
+- PR #44 静态审查已发现并修复两处一致性风险：偏好写操作原先没有共用迁移锁；`/dev/prompt` 原先绕过独立仓储直接写 AGENTS.md。现在均已统一到仓储/适配器。
+- 系统默认 Prompt 已定位到 DSH 的 `@deepseek-ai/dsh-system-prompt` 组装层；Android 通过 `EngineConfig.ensureAndroidOverlay()` 注入最终 `--patch`。后续应改现有 overlay，不另建并行配置系统。旧 `PromptSettingsRepository` 里的 session/tool 字段仍无实际消费链路，不得显示为已生效。
 
 ## 7. 验收标准
 
