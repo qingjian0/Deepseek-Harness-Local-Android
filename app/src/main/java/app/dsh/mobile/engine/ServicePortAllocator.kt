@@ -110,6 +110,26 @@ object ServicePortAllocator {
     @Synchronized
     fun advanceAfterBindFailure(ctx: Context, failedAgentPort: Int): ServicePortMap? {
         if (current.agentBridge != failedAgentPort) return null
+
+        // A block migration is safe only before sidecar listeners have bound their
+        // current ports. LAN proxy is deliberately detached from the engine lifecycle;
+        // Remote Access and Shizuku can also outlive an engine restart. Never move the
+        // process-wide map underneath one of these listeners.
+        val activeSidecars = buildList {
+            if (LanWebProxy.isRunning()) add("LAN proxy")
+            if (RemoteAccessServer.isRunning()) add("Remote Access")
+            if (ShizukuHttpBridge.isRunning()) add("Shizuku bridge")
+            if (LocalEmbedder.isReady()) add("local embedding")
+        }
+        if (activeSidecars.isNotEmpty()) {
+            Log.e(
+                TAG,
+                "refusing port-block migration after AgentBridge bind race: active sidecars=" +
+                    activeSidecars.joinToString(),
+            )
+            return null
+        }
+
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val maxEngine = prefs.getInt(KEY_MAX_ENGINE, ServicePortMap.DEFAULT_MAX_ENGINE_PORT)
         val next = ServicePortMap.candidates(current.offset, maxEngine)
