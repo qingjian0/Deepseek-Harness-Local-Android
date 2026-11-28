@@ -372,6 +372,7 @@ class LinuxEngineLauncher(private val ctx: Context) {
             add("DSH_PROFILE_DIR=/dsh/profiles/web")
             add("PORT=$port")
             add("NODE_ENV=production")
+            addAll(HookAgentSecrets.environment(ctx))
             // v1.6.2：Node 模块编译缓存。实测（真机交替 4 轮）有缓存 1449/1442ms
             // vs 无缓存 1617/1622/1606ms，wall 省约 165ms（10%）、CPU 省约 450ms（12%）。
             // 放在 /dsh 下（已是 bind 的家目录），跟着用户数据一起保留。
