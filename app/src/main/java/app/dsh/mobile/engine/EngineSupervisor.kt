@@ -815,7 +815,7 @@ class EngineSupervisor(private val ctx: Context) {
                 Log.i(TAG, "service port block ready: ${selectedPorts.all} (offset=${selectedPorts.offset})")
 
                 // 三项互不依赖的启动准备任务并行执行：
-                //  - AgentContextSeed 只写 dsh-home/AGENTS.md；
+                //  - UserPromptContextAdapter 先迁移独立偏好，再协调 AgentContextSeed 与用户段渲染；
                 //  - LogJanitor 只裁剪 *.log / plugin-manager operation 日志；
                 //  - AgentBridge 绑定独立 loopback socket，并启动 sessions 轮询器。
                 // 它们都在 owner-fix 与 orphan-reap 之后，且全部 await 完成后才允许 runtime install。
@@ -833,7 +833,7 @@ class EngineSupervisor(private val ctx: Context) {
                     }
                 val initResults = supervisorScope {
                     listOf(
-                        async { runParallelInit("agent-seed") { AgentContextSeed.ensure(ctx) } },
+                        async { runParallelInit("agent-seed") { UserPromptContextAdapter.ensure(ctx) } },
                         async { runParallelInit("log-sweep") { LogJanitor.sweep(ctx); Unit } },
                         // 残留锁清理（v1.7.x）：插件写配置文件时进程被杀（OOM / 后台清理 /
                         // 用户强停）会在目标文件旁留下 <文件>.lock，内容可能是死 pid、
