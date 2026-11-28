@@ -1,6 +1,5 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import '@deepseek-ai/dsh-system-prompt'
 
 export const name = 'android-prompt-guidance'
 export const inject = ['systemPrompt']
