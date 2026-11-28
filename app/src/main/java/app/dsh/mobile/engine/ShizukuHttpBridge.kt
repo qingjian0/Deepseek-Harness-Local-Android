@@ -63,6 +63,9 @@ object ShizukuHttpBridge {
         }
     }
 
+    /** True only while the selected Shizuku listener is bound and open. */
+    fun isRunning(): Boolean = serverSocket?.isClosed == false
+
     @Synchronized
     fun stop() {
         runCatching { serverSocket?.close() }
