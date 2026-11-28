@@ -2051,4 +2051,5 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
     <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
     <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
+    <string name="import_prompt_restored">Custom instructions restored</string>
 </resources>
