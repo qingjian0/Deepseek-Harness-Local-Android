@@ -2063,4 +2063,10 @@
     <string name="prompt_system_saved">系统 Prompt 已保存，将应用于新会话。</string>
     <string name="prompt_system_deleted">系统 Prompt 已删除，用户指令已保留。</string>
     <string name="prompt_both_saved">系统 Prompt 和用户指令均已保存。</string>
+    <string name="setting_root_verified_yes">Root 权限已验证可用</string>
+    <string name="setting_root_verified_no">发现 su，但 Root 授权验证失败</string>
+    <string name="setting_root_verify_title">验证 Root 权限</string>
+    <string name="setting_root_verify_message">将实际执行 su 身份检测。Root 管理器可能弹出授权请求；此检测不会修改系统。</string>
+    <string name="setting_root_verify_action">开始验证</string>
+    <string name="setting_root_verifying">正在验证 Root 权限…</string>
 </resources>

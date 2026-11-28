@@ -35,6 +35,26 @@ object Privilege {
     private const val PREFS = "dsh_priv"
     private const val KEY_MODE = "priv_mode"
     private const val KEY_ONBOARDED = "onboarded"
+    private const val ROOT_VERIFY_PREFS = "dsh_root_verify"
+    private const val KEY_ROOT_VERIFIED = "verified"
+    private const val KEY_ROOT_VERIFIED_AT = "verified_at"
+
+    /** Last explicit Root test result; null means the user has not run a test yet. */
+    fun rootVerification(ctx: Context): Boolean? {
+        val prefs = ctx.getSharedPreferences(ROOT_VERIFY_PREFS, Context.MODE_PRIVATE)
+        return if (prefs.contains(KEY_ROOT_VERIFIED)) prefs.getBoolean(KEY_ROOT_VERIFIED, false) else null
+    }
+
+    /** Run the active su probe only after an explicit user action and remember its result. */
+    fun verifyRootNow(ctx: Context): Boolean {
+        val result = probeRoot()
+        ctx.getSharedPreferences(ROOT_VERIFY_PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_ROOT_VERIFIED, result)
+            .putLong(KEY_ROOT_VERIFIED_AT, System.currentTimeMillis())
+            .apply()
+        return result
+    }
+
 
     // 常见 su 路径（存在其一即视为具备 Root 能力）
     private val SU_PATHS = listOf(

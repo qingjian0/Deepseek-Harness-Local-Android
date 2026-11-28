@@ -2060,4 +2060,10 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="prompt_system_saved">System prompt saved. It applies to new sessions.</string>
     <string name="prompt_system_deleted">System prompt deleted. User instructions were preserved.</string>
     <string name="prompt_both_saved">System and user prompts saved.</string>
+    <string name="setting_root_verified_yes">Root access verified</string>
+    <string name="setting_root_verified_no">su found, but Root access failed</string>
+    <string name="setting_root_verify_title">Verify Root access</string>
+    <string name="setting_root_verify_message">This runs a real su identity check. Your Root manager may display an authorization prompt. No system changes are made.</string>
+    <string name="setting_root_verify_action">Run verification</string>
+    <string name="setting_root_verifying">Verifying Root access…</string>
 </resources>
