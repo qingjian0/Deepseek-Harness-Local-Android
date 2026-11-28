@@ -22,6 +22,8 @@ object AgentContextSeed {
 
     private const val TAG = "AgentContextSeed"
     private const val FILE_NAME = "AGENTS.md"
+    private const val PREFS_UI = "dsh_ui"
+    private const val KEY_DEFAULT_SEED_ENABLED = "agent_default_prompt_enabled"
     private const val PREFS = "dsh_agent_seed"
     private const val KEY_ENVIRONMENT_GUIDE_APPLIED = "environment_guide_applied"
     private const val MARKER_PREFIX = "<!-- dsh-android AGENTS seed v"
@@ -44,6 +46,18 @@ object AgentContextSeed {
      * 但**再也拿不到 App 的版本升级**，且没有任何界面能追加指令。现在改成：
      * 升级只替换 App 段，用户段原样保留。
      */
+    /** Reuse the existing environment-prompt preference key from the original toggle work. */
+    fun isEnabled(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DEFAULT_SEED_ENABLED, true)
+
+    fun hasExplicitEnabledSetting(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE).contains(KEY_DEFAULT_SEED_ENABLED)
+
+    fun setEnabled(ctx: Context, enabled: Boolean): Boolean =
+        ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_DEFAULT_SEED_ENABLED, enabled).commit()
+
     private const val USER_SECTION_BEGIN = "<!-- >>> user instructions (app never edits below) >>> -->"
     private const val USER_SECTION_END = "<!-- <<< user instructions <<< -->"
 
@@ -171,7 +185,7 @@ object AgentContextSeed {
         text.contains("$MARKER_PREFIX$v ")
 
     private fun render(ctx: Context): String {
-        if (!PromptSettingsRepository.load(ctx).includeEnvironmentGuide) {
+        if (!isEnabled(ctx)) {
             return "$MARKER_PREFIX$SEED_VERSION -->\n\n<!-- Built-in environment guide disabled in Prompt Management. -->\n"
         }
         // ⚠️ 这里不要再算「按模式分支的小段落」：v54 之前的 `mode` + `shz`
