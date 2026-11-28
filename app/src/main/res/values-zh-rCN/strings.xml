@@ -2049,4 +2049,9 @@
     <string name="developer_hook_api_reachable">API 已认证，但 Hook 控制面不可用；请检查 dsh-gpt/LSPosed。</string>
     <string name="developer_hook_http_error">API 返回了非预期 HTTP 状态。</string>
     <string name="developer_hook_unreachable">无法连接本地 API。请检查 dsh-gpt 和 8766 端口。</string>
+    <string name="setting_user_prompt_sub">管理自己的长期指令，可独立控制是否注入新会话</string>
+    <string name="user_prompt_intro">自定义指令独立保存在应用设置中。开启后会注入 AGENTS.md 并对新会话生效；关闭后不再注入。应用升级不会覆盖你的指令。也可以直接让 AI 帮你写到这里。</string>
+    <string name="setting_user_prompt_toggle">将自定义指令注入新会话</string>
+    <string name="user_prompt_path">独立保存在应用设置中；开启后注入 AGENTS.md</string>
+    <string name="user_prompt_toggle_failed">设置保存失败，请重试</string>
 </resources>
