@@ -2040,4 +2040,27 @@ Nur der Entwickler kann ihn lesen. Nicht öffentlich, nicht indexiert, nach 30 T
     <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
     <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
     <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
+    <string name="prompt_management_title">Prompt-Verwaltung</string>
+    <string name="prompt_management_subtitle">Upstream-Systemprompt und Instruktionslimits bearbeiten</string>
+    <string name="prompt_upstream_description">Diese Optionen schreiben in die tatsächlich verwendete DSH-Konfiguration für system-prompt und agent-instructions. Änderungen gelten nach einem Neustart der Engine.</string>
+    <string name="prompt_harness_identity_default">Upstream-Standardidentität: „You are an AI agent powered by DeepSeek Harness.“ Deaktiviere den Schalter zum Entfernen oder ersetze sie mit eigenem Text im Präfixfeld.</string>
+    <string name="prompt_include_identity">Feste Harness-Identität einfügen</string>
+    <string name="prompt_include_runtime_context">Optionalen Laufzeitkontext einfügen</string>
+    <string name="prompt_persona_prefix_label">Persona-Präfix / Ersatzidentität</string>
+    <string name="prompt_persona_prefix_hint">Leer lassen, um das benutzerdefinierte Präfix zu entfernen</string>
+    <string name="prompt_persona_suffix_label">Persona-Suffix</string>
+    <string name="prompt_persona_suffix_hint">Leer lassen, um das Suffix zu entfernen</string>
+    <string name="prompt_instruction_budget_title">AGENTS.md-Instruktionslimits</string>
+    <string name="prompt_instruction_budget_description">Maximale Bytes pro Instruktionskette und maximale Lesemenge pro Instruktionsdatei.</string>
+    <string name="prompt_open_user_instructions">Eigene Benutzeranweisungen bearbeiten</string>
+    <string name="prompt_reset_title">Prompt-Einstellungen zurücksetzen?</string>
+    <string name="prompt_reset_message">Upstream-Standardwerte und Standardlimits wiederherstellen?</string>
+    <string name="prompt_reset_action">Standardwerte</string>
+    <string name="prompt_save_action">Speichern</string>
+    <string name="prompt_save_failed">Prompt-Einstellungen konnten nicht gespeichert werden.</string>
+    <string name="prompt_invalid_numbers">Gib gültige Zahlen für beide Instruktionslimits ein.</string>
+    <string name="prompt_saved_title">Prompt-Einstellungen gespeichert</string>
+    <string name="prompt_restart_message">Starte die DSH-Engine neu, um diese Einstellungen anzuwenden.</string>
+    <string name="prompt_restart_later">Später</string>
+    <string name="prompt_restart_now">Jetzt neu starten</string>
 </resources>
