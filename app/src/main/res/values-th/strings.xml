@@ -2004,4 +2004,10 @@
     <string name="prompt_restart_message">รีสตาร์ตเอนจิน DSH เพื่อใช้การตั้งค่าเหล่านี้</string>
     <string name="prompt_restart_later">ภายหลัง</string>
     <string name="prompt_restart_now">รีสตาร์ตทันที</string>
+    <string name="prompt_include_environment_guide">ใส่คู่มือสภาพแวดล้อม Android ในตัวลงใน AGENTS.md</string>
+    <string name="prompt_session_tool_title">คำแนะนำสำหรับเซสชันและเครื่องมือ</string>
+    <string name="prompt_session_description">เพิ่มเป็นส่วนหนึ่งของ system prompt ในทุกเซสชันของเอเจนต์ใหม่ เว้นว่างเพื่อลบ</string>
+    <string name="prompt_session_hint">คำแนะนำที่ต้องการให้ใช้กับทุกเซสชันใหม่</string>
+    <string name="prompt_tool_guidance_label">คำแนะนำการใช้เครื่องมือ</string>
+    <string name="prompt_tool_guidance_hint">คำแนะนำเกี่ยวกับการเลือกและใช้เครื่องมือของเอเจนต์</string>
 </resources>
