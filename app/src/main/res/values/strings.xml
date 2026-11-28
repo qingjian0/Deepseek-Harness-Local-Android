@@ -2032,4 +2032,18 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="developer_hook_agent_title">DSH-GPT Hook Agent</string>
     <string name="developer_hook_agent_sub">Optional DSH profile plugin. Does not enable LSPosed hooks.</string>
     <string name="developer_hook_agent_pending">Change saved; it will apply before the next engine start.</string>
+    <string name="developer_hook_base_url">Local API URL (loopback only)</string>
+    <string name="developer_hook_api_key">dsh-gpt API Key (encrypted at rest)</string>
+    <string name="developer_hook_save">Save</string>
+    <string name="developer_hook_test">Test connection</string>
+    <string name="developer_hook_not_configured">Not configured</string>
+    <string name="developer_hook_saved_encrypted">Configuration saved; API Key is encrypted by Android Keystore.</string>
+    <string name="developer_hook_key_required">Enter an API Key before saving.</string>
+    <string name="developer_hook_invalid_config">Invalid configuration. Use an HTTP loopback URL and a valid API Key.</string>
+    <string name="developer_hook_testing">Testing authenticated Hook API…</string>
+    <string name="developer_hook_connected">Connected: authenticated Hook API responded.</string>
+    <string name="developer_hook_auth_failed">API reachable, but the API Key was rejected.</string>
+    <string name="developer_hook_api_reachable">API authenticated; Hook control plane is unavailable. Check dsh-gpt/LSPosed.</string>
+    <string name="developer_hook_http_error">API responded with an unexpected HTTP status.</string>
+    <string name="developer_hook_unreachable">Cannot reach local API. Check dsh-gpt and port 8766.</string>
 </resources>
