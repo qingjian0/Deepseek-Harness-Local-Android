@@ -34,7 +34,7 @@ object HookAgentSecrets {
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
         val key = String(cipher.doFinal(cipherText), Charsets.UTF_8)
         val base = validateBaseUrl(prefs.getString(KEY_BASE_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL)
-        if (key.length !in 16..512 || key.any { it == '\\n' || it == '\\r' }) return null
+        if (key.length !in 16..512 || key.any { it == '\n' || it == '\r' }) return null
         Config(base, key)
     }.getOrNull()
 
@@ -63,8 +63,8 @@ object HookAgentSecrets {
 
     fun validateBaseUrl(value: String): String {
         val uri = URI(value.trim())
-        val host = uri.host?.lowercase()
-        require(uri.scheme == "http" && host in setOf("127.0.0.1", "localhost", "::1")) {
+        val host = uri.host?.lowercase()?.removePrefix("[")?.removeSuffix("]")
+        require(uri.scheme == "http" && (host == "127.0.0.1" || host == "localhost" || host == "::1")) {
             "Hook API must use HTTP loopback only"
         }
         require(uri.userInfo == null && (uri.path.isNullOrEmpty() || uri.path == "/") &&
