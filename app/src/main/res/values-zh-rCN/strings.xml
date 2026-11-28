@@ -2032,4 +2032,7 @@
     <string name="full_repair_progress">正在修复…（最长约一分钟）</string>
     <string name="full_repair_restart">重启引擎</string>
     <string name="full_repair_failed">修复异常中断，详见 full-repair-last.txt</string>
+    <string name="developer_hook_agent_title">DSH-GPT Hook Agent</string>
+    <string name="developer_hook_agent_sub">可选的 DSH Profile 插件；不会启用 LSPosed Hook。</string>
+    <string name="developer_hook_agent_pending">设置已保存，将在下次引擎启动前生效。</string>
 </resources>
