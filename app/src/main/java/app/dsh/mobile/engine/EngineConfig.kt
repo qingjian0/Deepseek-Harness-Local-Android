@@ -2015,6 +2015,10 @@ object EngineConfig {
             "DSH_PERMISSION_MODE=danger-full-access",
             *(bootId?.let { arrayOf("DSH_ANDROID_BOOT_ID=$it") } ?: emptyArray()),
         )
+        // Optional DSH-GPT Hook Agent credentials: decrypted only into the child process environment.
+        // The API key remains AES-GCM encrypted in app-private preferences at rest.
+        runCatching { env.addAll(HookAgentSecrets.environment(ctx)) }
+            .onFailure { android.util.Log.w("EngineConfig", "Hook Agent credentials unavailable; adapter remains unconfigured") }
         // Perl/Ruby：编译期 @INC/$LOAD_PATH 硬编码 Termux 前缀（重写 shebang 碰不到），
         // 注入扩展内的库路径（Agent 实测注入后 json/openssl 等模块恢复正常）
         val perlLibs = extRoots.flatMap { ext ->
