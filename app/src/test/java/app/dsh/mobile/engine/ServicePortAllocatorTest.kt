@@ -50,6 +50,37 @@ class ServicePortAllocatorTest {
     }
 
     @Test
+    fun constructorRejectsPortsThatDoNotMatchTheCanonicalBlock() {
+        val error = runCatching {
+            ServicePortMap(
+                offset = 1000,
+                engine = 4080,
+                shizuku = 4082,
+                agentBridge = 4083,
+                embedding = 4085,
+                lanProxy = 5090,
+                remoteAccess = 5091,
+            )
+        }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+    }
+
+    @Test
+    fun engineCeilingSelectsOnlyCompleteBlocks() {
+        val candidates = ServicePortMap.candidates(preferredOffset = 1000, maxEnginePort = 5000)
+        assertEquals(listOf(4080, 3080), candidates.map { it.engine })
+        assertEquals(listOf(4091, 3091), candidates.map { it.remoteAccess })
+        assertTrue(candidates.all { it.engine <= 5000 })
+    }
+
+    @Test
+    fun minimumEngineCeilingKeepsTheLegacyBlockOnly() {
+        val candidates = ServicePortMap.candidates(preferredOffset = 9000, maxEnginePort = 3080)
+        assertEquals(listOf(0), candidates.map { it.offset })
+        assertEquals(listOf(3080), candidates.map { it.engine })
+    }
+
+    @Test
     fun wildcardProbeAcceptsAFreePort() {
         val port = java.net.ServerSocket(0).use { it.localPort }
         assertTrue(ServicePortAllocator.canBind(port))
@@ -77,6 +108,8 @@ class ServicePortAllocatorTest {
     fun ceilingBelowFirstShiftDoesNotCreatePartialBlocks() {
         val candidates = ServicePortMap.candidates(preferredOffset = 1000, maxEnginePort = 5000)
         assertEquals(listOf(1000, 0), candidates.map { it.offset })
-        assertTrue(candidates.all { it.engine <= 5000 && it.remoteAccess <= 5091 })
+        assertEquals(listOf(4080, 3080), candidates.map { it.engine })
+        assertEquals(listOf(4091, 3091), candidates.map { it.remoteAccess })
+        assertTrue(candidates.all { it.engine <= 5000 })
     }
 }
