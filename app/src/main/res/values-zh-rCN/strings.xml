@@ -2055,4 +2055,27 @@
     <string name="user_prompt_path">独立保存在应用设置中；开启后注入 AGENTS.md</string>
     <string name="user_prompt_toggle_failed">设置保存失败，请重试</string>
     <string name="import_prompt_restored">已恢复自定义指令</string>
+    <string name="prompt_management_title">Prompt 管理</string>
+    <string name="prompt_management_subtitle">编辑上游系统提示词和指令长度限制</string>
+    <string name="prompt_upstream_description">这些选项会写入 DSH 实际使用的 system-prompt 与 agent-instructions 配置。重启引擎后生效。</string>
+    <string name="prompt_harness_identity_default">上游默认身份：“You are an AI agent powered by DeepSeek Harness.” 关闭开关即可移除；也可以在下方前缀中填写自己的替代文本。</string>
+    <string name="prompt_include_identity">注入固定的 Harness 身份</string>
+    <string name="prompt_include_runtime_context">注入可选运行时上下文</string>
+    <string name="prompt_persona_prefix_label">Persona 前缀 / 替代身份</string>
+    <string name="prompt_persona_prefix_hint">留空即可移除自定义前缀</string>
+    <string name="prompt_persona_suffix_label">Persona 后缀</string>
+    <string name="prompt_persona_suffix_hint">留空即可移除后缀</string>
+    <string name="prompt_instruction_budget_title">AGENTS.md 指令长度限制</string>
+    <string name="prompt_instruction_budget_description">设置每条指令链的最大字节数，以及单个指令文件的最大读取字节数。</string>
+    <string name="prompt_open_user_instructions">编辑我的用户指令</string>
+    <string name="prompt_reset_title">重置 Prompt 设置？</string>
+    <string name="prompt_reset_message">恢复上游默认配置和默认指令长度限制？</string>
+    <string name="prompt_reset_action">恢复默认</string>
+    <string name="prompt_save_action">保存</string>
+    <string name="prompt_save_failed">Prompt 设置保存失败。</string>
+    <string name="prompt_invalid_numbers">请为两项指令长度限制输入有效数字。</string>
+    <string name="prompt_saved_title">Prompt 设置已保存</string>
+    <string name="prompt_restart_message">需要重启 DSH 引擎才能应用这些设置。</string>
+    <string name="prompt_restart_later">稍后</string>
+    <string name="prompt_restart_now">立即重启</string>
 </resources>
