@@ -1979,4 +1979,9 @@
     <string name="full_repair_progress">กำลังซ่อม… (ไม่เกินหนึ่งนาที)</string>
     <string name="full_repair_restart">รีสตาร์ทเอนจิน</string>
     <string name="full_repair_failed">การซ่อมหยุดกะทันหัน ดู full-repair-last.txt</string>
+    <string name="setting_user_prompt_sub">Manage your long-term instructions and control injection into new sessions</string>
+    <string name="user_prompt_intro">Custom instructions are stored independently in app settings. When enabled, they are injected into AGENTS.md for new sessions; when disabled, they are not injected. App upgrades do not overwrite them.</string>
+    <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
+    <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
+    <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
 </resources>
