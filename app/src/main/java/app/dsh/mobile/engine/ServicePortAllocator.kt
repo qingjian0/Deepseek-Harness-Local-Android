@@ -27,6 +27,14 @@ data class ServicePortMap(
 
     init {
         require(offset >= 0 && offset % BLOCK_STEP == 0) { "offset must be a non-negative 1000-port step" }
+        require(
+            engine == BASE_ENGINE + offset &&
+                shizuku == BASE_ENGINE + offset + 2 &&
+                agentBridge == BASE_ENGINE + offset + 3 &&
+                embedding == BASE_ENGINE + offset + 5 &&
+                lanProxy == BASE_ENGINE + offset + 10 &&
+                remoteAccess == BASE_ENGINE + offset + 11,
+        ) { "service ports must match the canonical block offsets" }
         require(all.all { it in 1024..65535 }) { "service port outside TCP range" }
         require(all.distinct().size == all.size) { "service ports must be unique" }
     }
