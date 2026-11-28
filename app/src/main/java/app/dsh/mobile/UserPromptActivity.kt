@@ -17,6 +17,8 @@ class UserPromptActivity : ThemedActivity() {
     private var showingSystem = true
     private var systemDraft = ""
     private var userDraft = ""
+    private var systemOriginal = ""
+    private var userOriginal = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,6 +35,8 @@ class UserPromptActivity : ThemedActivity() {
 
         systemDraft = AgentContextSeed.readSystemPrompt(this).orEmpty()
         userDraft = AgentContextSeed.readUserSection(this).orEmpty()
+        systemOriginal = systemDraft
+        userOriginal = userDraft
 
         fun renderMode() {
             editor.setText(if (showingSystem) systemDraft else userDraft)
@@ -54,17 +58,26 @@ class UserPromptActivity : ThemedActivity() {
         renderMode()
 
         findViewById<android.view.View>(R.id.btnSave).setOnClickListener {
-            val text = editor.text.toString()
-            if (showingSystem) {
-                systemDraft = text
-                if (text.isBlank()) AgentContextSeed.deleteSystemPrompt(this)
-                else AgentContextSeed.writeSystemPrompt(this, text)
-                Toast.makeText(this, R.string.prompt_system_saved, Toast.LENGTH_SHORT).show()
-            } else {
-                userDraft = text
-                AgentContextSeed.writeUserSection(this, text.ifBlank { null })
-                Toast.makeText(this, R.string.user_prompt_saved, Toast.LENGTH_SHORT).show()
+            if (showingSystem) systemDraft = editor.text.toString() else userDraft = editor.text.toString()
+            var savedSystem = false
+            var savedUser = false
+            if (systemDraft != systemOriginal) {
+                if (systemDraft.isBlank()) AgentContextSeed.deleteSystemPrompt(this)
+                else AgentContextSeed.writeSystemPrompt(this, systemDraft)
+                systemOriginal = systemDraft
+                savedSystem = true
             }
+            if (userDraft != userOriginal) {
+                AgentContextSeed.writeUserSection(this, userDraft.ifBlank { null })
+                userOriginal = userDraft
+                savedUser = true
+            }
+            val message = when {
+                savedSystem && savedUser -> R.string.prompt_both_saved
+                savedSystem -> R.string.prompt_system_saved
+                else -> R.string.user_prompt_saved
+            }
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             finish()
         }
 
@@ -76,6 +89,7 @@ class UserPromptActivity : ThemedActivity() {
                 .setPositiveButton(R.string.prompt_delete_system_confirm) { _, _ ->
                     AgentContextSeed.deleteSystemPrompt(this)
                     systemDraft = ""
+                    systemOriginal = ""
                     if (showingSystem) editor.setText("")
                     renderMode()
                     Toast.makeText(this, R.string.prompt_system_deleted, Toast.LENGTH_SHORT).show()
