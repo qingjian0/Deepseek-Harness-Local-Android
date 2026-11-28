@@ -2037,7 +2037,7 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="developer_hook_save">Save</string>
     <string name="developer_hook_test">Test connection</string>
     <string name="developer_hook_not_configured">Not configured</string>
-    <string name="developer_hook_saved_encrypted">Configuration saved; API Key is encrypted by Android Keystore.</string>
+    <string name="developer_hook_saved_encrypted">Configuration saved; API Key is encrypted by Android Keystore. Restart the DSH engine to apply it.</string>
     <string name="developer_hook_key_required">Enter an API Key before saving.</string>
     <string name="developer_hook_invalid_config">Invalid configuration. Use an HTTP loopback URL and a valid API Key.</string>
     <string name="developer_hook_testing">Testing authenticated Hook API…</string>
