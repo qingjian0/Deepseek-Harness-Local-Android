@@ -1994,4 +1994,27 @@ Somente o desenvolvedor lê. Não é público, não é indexado, é apagado apó
     <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
     <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
     <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
+    <string name="prompt_management_title">Gerenciamento de prompts</string>
+    <string name="prompt_management_subtitle">Edite o prompt de sistema upstream e os limites de instruções</string>
+    <string name="prompt_upstream_description">Estas opções gravam na configuração real de system-prompt e agent-instructions do DSH. As alterações entram em vigor após reiniciar o mecanismo.</string>
+    <string name="prompt_harness_identity_default">Identidade padrão upstream: “You are an AI agent powered by DeepSeek Harness.” Desative a opção para removê-la ou substitua-a pelo seu próprio texto no campo de prefixo.</string>
+    <string name="prompt_include_identity">Incluir a identidade fixa do Harness</string>
+    <string name="prompt_include_runtime_context">Incluir contexto opcional de execução</string>
+    <string name="prompt_persona_prefix_label">Prefixo de persona / identidade substituta</string>
+    <string name="prompt_persona_prefix_hint">Deixe em branco para remover o prefixo personalizado</string>
+    <string name="prompt_persona_suffix_label">Sufixo de persona</string>
+    <string name="prompt_persona_suffix_hint">Deixe em branco para remover o sufixo</string>
+    <string name="prompt_instruction_budget_title">Limites de instruções do AGENTS.md</string>
+    <string name="prompt_instruction_budget_description">Máximo de bytes por cadeia de instruções e máximo de bytes lidos de cada arquivo.</string>
+    <string name="prompt_open_user_instructions">Editar minhas instruções de usuário</string>
+    <string name="prompt_reset_title">Redefinir as configurações de prompt?</string>
+    <string name="prompt_reset_message">Restaurar os padrões upstream e os limites padrão de instruções?</string>
+    <string name="prompt_reset_action">Restaurar padrões</string>
+    <string name="prompt_save_action">Salvar</string>
+    <string name="prompt_save_failed">Não foi possível salvar as configurações de prompt.</string>
+    <string name="prompt_invalid_numbers">Informe números válidos para os dois limites de instruções.</string>
+    <string name="prompt_saved_title">Configurações de prompt salvas</string>
+    <string name="prompt_restart_message">Reinicie o mecanismo DSH para aplicar estas configurações.</string>
+    <string name="prompt_restart_later">Mais tarde</string>
+    <string name="prompt_restart_now">Reiniciar agora</string>
 </resources>
