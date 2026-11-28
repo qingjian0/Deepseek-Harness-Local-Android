@@ -2040,7 +2040,7 @@
     <string name="developer_hook_save">保存</string>
     <string name="developer_hook_test">测试连接</string>
     <string name="developer_hook_not_configured">尚未配置</string>
-    <string name="developer_hook_saved_encrypted">配置已保存；API Key 已由 Android Keystore 加密。</string>
+    <string name="developer_hook_saved_encrypted">配置已保存；API Key 已由 Android Keystore 加密。重启 DSH 引擎后生效。</string>
     <string name="developer_hook_key_required">请先输入 API Key。</string>
     <string name="developer_hook_invalid_config">配置无效。请使用 HTTP 回环地址并检查 API Key。</string>
     <string name="developer_hook_testing">正在测试已认证的 Hook API…</string>
