@@ -23,11 +23,13 @@ object UserPromptRepository {
     fun isEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ENABLED, true)
     fun isMigrated(context: Context): Boolean = prefs(context).getBoolean(KEY_MIGRATED, false)
 
-    fun saveContent(context: Context, value: String): Boolean =
+    fun saveContent(context: Context, value: String): Boolean = synchronized(migrationLock) {
         prefs(context).edit().putString(KEY_CONTENT, value).putBoolean(KEY_MIGRATED, true).commit()
+    }
 
-    fun setEnabled(context: Context, enabled: Boolean): Boolean =
+    fun setEnabled(context: Context, enabled: Boolean): Boolean = synchronized(migrationLock) {
         prefs(context).edit().putBoolean(KEY_ENABLED, enabled).commit()
+    }
 
     /** Must run before AgentContextSeed.ensure() can normalize or rewrite the old file. */
     fun migrateLegacyIfNeeded(context: Context) {
