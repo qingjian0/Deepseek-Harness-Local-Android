@@ -2020,4 +2020,5 @@ Somente o desenvolvedor lê. Não é público, não é indexado, é apagado apó
     <string name="prompt_session_hint">Instruções que devem valer para todas as novas sessões</string>
     <string name="prompt_tool_guidance_label">Orientações de uso das ferramentas</string>
     <string name="prompt_tool_guidance_hint">Instruções sobre como o agente deve escolher e usar ferramentas</string>
+    <string name="import_prompt_settings_restored">Configurações de prompt restauradas</string>
 </resources>
