@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Bundle
 import android.text.InputType
 import android.widget.EditText
-import android.widget.TextView
 import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -30,6 +29,9 @@ class PromptManagementActivity : ThemedActivity() {
             .setNavigationOnClickListener { finish() }
 
         val settings = PromptSettingsRepository.load(this)
+        val environmentGuide = findViewById<MaterialSwitch>(R.id.swIncludeEnvironmentGuide).apply {
+            isChecked = settings.includeEnvironmentGuide
+        }
         val identity = findViewById<MaterialSwitch>(R.id.swIncludeHarnessIdentity).apply {
             isChecked = settings.includeHarnessIdentity
         }
@@ -41,6 +43,12 @@ class PromptManagementActivity : ThemedActivity() {
         }
         val suffix = findViewById<EditText>(R.id.etPersonaSuffix).apply {
             setText(settings.personaSuffix)
+        }
+        val sessionPrompt = findViewById<EditText>(R.id.etSessionPrompt).apply {
+            setText(settings.sessionPrompt)
+        }
+        val toolPrompt = findViewById<EditText>(R.id.etToolPrompt).apply {
+            setText(settings.toolPrompt)
         }
         val maxBytes = findViewById<EditText>(R.id.etInstructionMaxBytes).apply {
             inputType = InputType.TYPE_CLASS_NUMBER
@@ -71,10 +79,13 @@ class PromptManagementActivity : ThemedActivity() {
         findViewById<android.view.View>(R.id.btnSavePromptSettings).setOnClickListener {
             val updated = runCatching {
                 PromptSettingsRepository.Settings(
+                    includeEnvironmentGuide = environmentGuide.isChecked,
                     includeHarnessIdentity = identity.isChecked,
                     includeRuntimeContext = runtime.isChecked,
                     personaPrefix = prefix.text.toString(),
                     personaSuffix = suffix.text.toString(),
+                    sessionPrompt = sessionPrompt.text.toString(),
+                    toolPrompt = toolPrompt.text.toString(),
                     maxBytes = maxBytes.text.toString().toInt(),
                     maxSourceBytes = maxSourceBytes.text.toString().toInt(),
                 )
