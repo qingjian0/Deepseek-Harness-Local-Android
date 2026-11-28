@@ -110,6 +110,14 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Checkout pinned dsh-gpt plugin source
+        if: matrix.asset == 'dsh-gpt-hook-agent'
+        uses: actions/checkout@v4
+        with:
+          repository: qingjian0/dsh-gpt
+          ref: f68f5e5a62750c5b2031f44bd1c7734c05c2f3ba
+          path: dsh-gpt-src
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -153,6 +161,9 @@ jobs:
           - pkg: "@xiaopb/dsh-solution-explorer"
             asset: solution-explorer
             version_var: SOLUTION_EXPLORER_VERSION
+          - pkg: "@dsh-external/dsh-gpt-hook-agent"
+            asset: dsh-gpt-hook-agent
+            version_var: DSH_GPT_HOOK_AGENT_VERSION
     steps:
       - uses: actions/checkout@v4
 
@@ -160,7 +171,8 @@ jobs:
         with:
           node-version: "22"
 
-      - name: 打包 ${{ matrix.pkg }}（上游 Release tgz + bundle 契约校验）
+      - name: 打包 npm 发布插件（上游 Release tgz + bundle 契约校验）
+        if: matrix.asset != 'dsh-gpt-hook-agent'
         env:
           PLUGIN_VERSION: ${{ vars[matrix.version_var] }}
         run: |
@@ -168,6 +180,28 @@ jobs:
           ./scripts/pack-profile-plugin.sh "${{ matrix.pkg }}" "${{ matrix.asset }}" dist
           test -f "dist/${{ matrix.asset }}/bundle.json"
           ls -l "dist/${{ matrix.asset }}/"
+
+      - name: 打包固定提交的 dsh-gpt Hook Agent
+        if: matrix.asset == 'dsh-gpt-hook-agent'
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/${{ matrix.asset }}"
+          npm pack "./dsh-gpt-src/integration/dsh-agent-hook-extension" --pack-destination "dist/${{ matrix.asset }}" >/dev/null
+          TGZ="$(find "dist/${{ matrix.asset }}" -maxdepth 1 -name '*.tgz' -print -quit)"
+          test -n "$TGZ"
+          tar -xOf "$TGZ" package/package.json > "$RUNNER_TEMP/hook-package.json"
+          tar -tzf "$TGZ" | grep -qx 'package/cordis.patch.yml'
+          node - "$TGZ" "dist/${{ matrix.asset }}/bundle.json" <<'NODE'
+          const fs = require("fs");
+          const crypto = require("crypto");
+          const cp = require("child_process");
+          const [tgz, out] = process.argv.slice(2);
+          const pkg = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/hook-package.json", "utf8"));
+          if (pkg.name !== "@dsh-external/dsh-gpt-hook-agent" || pkg.dsh?.bundle?.patch !== "./cordis.patch.yml") throw new Error("invalid Hook Agent bundle contract");
+          const sha = crypto.createHash("sha256").update(fs.readFileSync(tgz)).digest("hex");
+          fs.writeFileSync(out, JSON.stringify({pkg:pkg.name,version:pkg.version,tgz:require("path").basename(tgz),sha256:sha},null,2)+"\\n");
+          NODE
+          cat "dist/${{ matrix.asset }}/bundle.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -437,6 +471,12 @@ jobs:
           name: solution-explorer-bundle
           path: solution-explorer-dist
 
+      - name: 取回内置用户态插件（dsh-gpt-hook-agent）
+        uses: actions/download-artifact@v4
+        with:
+          name: dsh-gpt-hook-agent-bundle
+          path: dsh-gpt-hook-agent-dist
+
       - uses: actions/download-artifact@v4
         with:
           name: runtime-meta-${{ matrix.abi }}
@@ -569,6 +609,7 @@ jobs:
             -PhardsshDir="${{ github.workspace }}/hardssh-dist/hardssh"
             -PmobileLayoutTgzDir="${{ github.workspace }}/mobile-layout-dist"
             -PsolutionExplorerTgzDir="${{ github.workspace }}/solution-explorer-dist"
+            -PdshGptHookAgentTgzDir="${{ github.workspace }}/dsh-gpt-hook-agent-dist"
             -PruntimeVersion="$RVER"
             -PruntimeBuiltAt="$RBUILT"
             -PruntimeSha256="$RSHA"
