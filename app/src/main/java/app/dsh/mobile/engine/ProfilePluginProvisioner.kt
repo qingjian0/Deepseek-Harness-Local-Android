@@ -70,6 +70,9 @@ object ProfilePluginProvisioner {
      */
     const val SOLUTION_EXPLORER_PKG = "@xiaopb/dsh-solution-explorer"
 
+    /** Optional DSH-side adapter for the standalone dsh-gpt LSPosed module. */
+    const val DSH_GPT_HOOK_AGENT_PKG = "@dsh-external/dsh-gpt-hook-agent"
+
     /**
      * 一个随 APK 分发、以 profile bundle 形式安装的插件。
      *
@@ -115,6 +118,12 @@ object ProfilePluginProvisioner {
             enabledOnFirstRun = { false },
             hasNpmDependencies = true,
         ),
+        BundledProfilePlugin(
+            pkg = DSH_GPT_HOOK_AGENT_PKG,
+            assetRoot = "dsh-gpt-hook-agent",
+            // Developer Options owns activation; never mount this Agent plugin by default.
+            enabledOnFirstRun = { false },
+        ),
     )
 
     /** 资产元数据（构建期由 scripts/pack-mobile-layout.sh 生成）。 */
@@ -138,6 +147,9 @@ object ProfilePluginProvisioner {
             Log.i(TAG, "$pkg: pending ${if (on) "enable" else "disable"} recorded for next boot")
         }.onFailure { Log.w(TAG, "$pkg: cannot record pending state: ${it.message}") }
     }
+
+    /** Current mounted state in the web profile; false when the profile is not ready. */
+    fun isEnabled(ctx: Context, pkg: String): Boolean = isManaged(ctx, pkg)
 
     /**
      * 重新释放**已被删掉的内置暂存 tgz**（v1.7.32）。
