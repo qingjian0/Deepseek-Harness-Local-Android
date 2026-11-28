@@ -54,6 +54,7 @@ object AgentContextSeed {
     fun hasExplicitEnabledSetting(ctx: Context): Boolean =
         ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE).contains(KEY_DEFAULT_SEED_ENABLED)
 
+    @Synchronized
     fun setEnabled(ctx: Context, enabled: Boolean): Boolean =
         ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_DEFAULT_SEED_ENABLED, enabled).commit()
@@ -66,6 +67,7 @@ object AgentContextSeed {
         "<!-- Add your own instructions below this line. DSH Mobile never overwrites\n" +
             "     this section, and upgrades keep it as-is. Ask the AI to write here for you. -->"
 
+    @Synchronized
     fun ensure(ctx: Context) {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
