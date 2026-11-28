@@ -218,7 +218,11 @@ object AgentBridge {
         if (server == null) return   // 还没启动过，等 start() 自己读开关
         runCatching { stop() }
         runCatching { start(ctx) }
-        Log.i(TAG, "bridge rebound on $boundAddress:$PORT")
+        if (isRunning()) {
+            Log.i(TAG, "bridge rebound on $boundAddress:$PORT")
+        } else {
+            Log.e(TAG, "bridge rebind failed on selected port $PORT")
+        }
     }
 
     fun start(ctx: Context) {
