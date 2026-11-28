@@ -115,7 +115,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: qingjian0/dsh-gpt
-          ref: b9576082416292abcf4a0fe3dc0499e4d38e394a
+          ref: 172bf72126495bd9e10ca4c3f6b35e06b9fcdf7b
           path: dsh-gpt-src
 
       - uses: actions/setup-node@v4
