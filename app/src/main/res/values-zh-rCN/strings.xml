@@ -2081,4 +2081,5 @@
     <string name="prompt_session_hint">希望每个新会话都遵循的指令</string>
     <string name="prompt_tool_guidance_label">工具使用指导</string>
     <string name="prompt_tool_guidance_hint">指导 AI 如何选择和使用工具</string>
+    <string name="import_prompt_settings_restored">已恢复 Prompt 管理设置</string>
 </resources>
