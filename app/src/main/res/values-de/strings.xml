@@ -2060,4 +2060,10 @@ Nur der Entwickler kann ihn lesen. Nicht öffentlich, nicht indexiert, nach 30 T
     <string name="prompt_restart_message">Starte die DSH-Engine neu, um diese Einstellungen anzuwenden.</string>
     <string name="prompt_restart_later">Später</string>
     <string name="prompt_restart_now">Jetzt neu starten</string>
+    <string name="prompt_include_environment_guide">Integrierte Android-Umgebungsanleitung in AGENTS.md einfügen</string>
+    <string name="prompt_session_tool_title">Sitzungs- und Werkzeughinweise</string>
+    <string name="prompt_session_description">Wird als eigener Systemprompt-Abschnitt jeder neuen Agentensitzung hinzugefügt. Leer lassen zum Entfernen.</string>
+    <string name="prompt_session_hint">Anweisungen für jede neue Sitzung</string>
+    <string name="prompt_tool_guidance_label">Hinweise zur Werkzeugnutzung</string>
+    <string name="prompt_tool_guidance_hint">Anweisungen zur Auswahl und Verwendung von Werkzeugen</string>
 </resources>
