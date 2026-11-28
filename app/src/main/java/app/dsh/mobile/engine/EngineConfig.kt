@@ -1396,6 +1396,9 @@ object EngineConfig {
         mode: EngineModeSelector.Mode = EngineModeSelector.lastMode,
     ): File {
         val f = File(engineRoot(ctx), "android-overlay.yml")
+        val promptSettings = PromptSettingsRepository.load(ctx)
+        val personaPrefixYaml = PromptSettingsRepository.yamlString(promptSettings.personaPrefix)
+        val personaSuffixYaml = PromptSettingsRepository.yamlString(promptSettings.personaSuffix)
         // NOTE: keep this file free of CJK text — the i18n gate scans Kotlin string
         // literals and would flag it (explanations live in the Kotlin comments below).
         //
@@ -1736,7 +1739,25 @@ object EngineConfig {
             |# rail, broken panels), so it is no longer shipped. v1.6.3: the narrow-screen
             |# trio was removed too — upstream dsh-client-ui-layout handles narrow
             |# viewports natively now. Only chat-perf (pure CSS render relief) remains.
-
+            |
+            |# Prompt settings are user-owned app preferences. These rows are the final
+            |# Android overlay, so the app's saved values are the effective defaults.
+            |# The system-prompt config is restated completely because row patches replace
+            |# config rather than merging it.
+            |- id: system-prompt
+            |  name: '@deepseek-ai/dsh-system-prompt'
+            |  config:
+            |    includeHarnessIdentity: ${promptSettings.includeHarnessIdentity}
+            |    includeRuntimeContext: ${promptSettings.includeRuntimeContext}
+            |    personaPrefix: ${personaPrefixYaml}
+            |    personaSuffix: ${personaSuffixYaml}
+            |
+            |- id: agent-instructions
+            |  name: '@deepseek-ai/dsh-agent-instructions'
+            |  config:
+            |    maxBytes: ${promptSettings.maxBytes}
+            |    maxSourceBytes: ${promptSettings.maxSourceBytes}
+            |
             |""".trimMargin()
 
         // v1.4.67：两套竖屏 UI 方案互斥，由设置里的「官方推荐手机 UI」决定。
