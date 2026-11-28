@@ -2035,4 +2035,18 @@
     <string name="developer_hook_agent_title">DSH-GPT Hook Agent</string>
     <string name="developer_hook_agent_sub">可选的 DSH Profile 插件；不会启用 LSPosed Hook。</string>
     <string name="developer_hook_agent_pending">设置已保存，将在下次引擎启动前生效。</string>
+    <string name="developer_hook_base_url">本地 API 地址（仅允许回环地址）</string>
+    <string name="developer_hook_api_key">dsh-gpt API Key（加密保存）</string>
+    <string name="developer_hook_save">保存</string>
+    <string name="developer_hook_test">测试连接</string>
+    <string name="developer_hook_not_configured">尚未配置</string>
+    <string name="developer_hook_saved_encrypted">配置已保存；API Key 已由 Android Keystore 加密。</string>
+    <string name="developer_hook_key_required">请先输入 API Key。</string>
+    <string name="developer_hook_invalid_config">配置无效。请使用 HTTP 回环地址并检查 API Key。</string>
+    <string name="developer_hook_testing">正在测试已认证的 Hook API…</string>
+    <string name="developer_hook_connected">连接成功：已通过认证，Hook API 正常响应。</string>
+    <string name="developer_hook_auth_failed">API 可访问，但 API Key 验证失败。</string>
+    <string name="developer_hook_api_reachable">API 已认证，但 Hook 控制面不可用；请检查 dsh-gpt/LSPosed。</string>
+    <string name="developer_hook_http_error">API 返回了非预期 HTTP 状态。</string>
+    <string name="developer_hook_unreachable">无法连接本地 API。请检查 dsh-gpt 和 8766 端口。</string>
 </resources>
