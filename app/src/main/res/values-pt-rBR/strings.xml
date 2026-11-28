@@ -2014,4 +2014,10 @@ Somente o desenvolvedor lê. Não é público, não é indexado, é apagado apó
     <string name="prompt_restart_message">Reinicie o mecanismo DSH para aplicar estas configurações.</string>
     <string name="prompt_restart_later">Mais tarde</string>
     <string name="prompt_restart_now">Reiniciar agora</string>
+    <string name="prompt_include_environment_guide">Incluir o guia de ambiente Android integrado no AGENTS.md</string>
+    <string name="prompt_session_tool_title">Orientações de sessão e ferramentas</string>
+    <string name="prompt_session_description">Adicionado como uma seção própria do prompt de sistema em cada nova sessão do agente. Deixe em branco para remover.</string>
+    <string name="prompt_session_hint">Instruções que devem valer para todas as novas sessões</string>
+    <string name="prompt_tool_guidance_label">Orientações de uso das ferramentas</string>
+    <string name="prompt_tool_guidance_hint">Instruções sobre como o agente deve escolher e usar ferramentas</string>
 </resources>
