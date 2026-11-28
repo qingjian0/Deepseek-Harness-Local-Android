@@ -2078,4 +2078,5 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="prompt_session_hint">Instructions that should apply to every new session</string>
     <string name="prompt_tool_guidance_label">Tool usage guidance</string>
     <string name="prompt_tool_guidance_hint">Instructions for how the agent should choose and use tools</string>
+    <string name="import_prompt_settings_restored">Prompt settings restored</string>
 </resources>
