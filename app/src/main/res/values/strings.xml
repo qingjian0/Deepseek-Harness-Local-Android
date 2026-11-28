@@ -2072,4 +2072,10 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="prompt_restart_message">Restart the DSH engine to apply these settings.</string>
     <string name="prompt_restart_later">Later</string>
     <string name="prompt_restart_now">Restart now</string>
+    <string name="prompt_include_environment_guide">Include the built-in Android environment guide in AGENTS.md</string>
+    <string name="prompt_session_tool_title">Session and tool guidance</string>
+    <string name="prompt_session_description">Added as a named system-prompt section to each new agent session. Leave blank to remove it.</string>
+    <string name="prompt_session_hint">Instructions that should apply to every new session</string>
+    <string name="prompt_tool_guidance_label">Tool usage guidance</string>
+    <string name="prompt_tool_guidance_hint">Instructions for how the agent should choose and use tools</string>
 </resources>
