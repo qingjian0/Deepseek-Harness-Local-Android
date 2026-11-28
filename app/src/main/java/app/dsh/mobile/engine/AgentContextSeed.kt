@@ -22,6 +22,53 @@ object AgentContextSeed {
 
     private const val TAG = "AgentContextSeed"
     private const val FILE_NAME = "AGENTS.md"
+    private const val SYSTEM_PROMPT_PREFS = "dsh_system_prompt"
+    private const val KEY_SYSTEM_OVERRIDE = "content_override"
+    private const val KEY_SYSTEM_DELETED = "deleted"
+    private fun systemPromptPrefs(ctx: Context) = ctx.getSharedPreferences(SYSTEM_PROMPT_PREFS, Context.MODE_PRIVATE)
+
+    fun readSystemPrompt(ctx: Context): String? {
+        val prefs = systemPromptPrefs(ctx)
+        if (prefs.getBoolean(KEY_SYSTEM_DELETED, false)) return null
+        prefs.getString(KEY_SYSTEM_OVERRIDE, null)?.let { return it }
+        val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
+        val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
+        return if (existing?.contains(MARKER_PREFIX) == true) appSectionOf(existing) else render(ctx)
+    }
+
+    fun isSystemPromptDeleted(ctx: Context): Boolean = systemPromptPrefs(ctx).getBoolean(KEY_SYSTEM_DELETED, false)
+
+    fun writeSystemPrompt(ctx: Context, content: String) {
+        systemPromptPrefs(ctx).edit().putString(KEY_SYSTEM_OVERRIDE, content).putBoolean(KEY_SYSTEM_DELETED, false).apply()
+        rewritePromptFile(ctx, content, readExistingUserSection(ctx))
+    }
+
+    fun deleteSystemPrompt(ctx: Context) {
+        systemPromptPrefs(ctx).edit().remove(KEY_SYSTEM_OVERRIDE).putBoolean(KEY_SYSTEM_DELETED, true).apply()
+        rewritePromptFile(ctx, null, readExistingUserSection(ctx))
+    }
+
+    fun resetSystemPrompt(ctx: Context) {
+        systemPromptPrefs(ctx).edit().remove(KEY_SYSTEM_OVERRIDE).putBoolean(KEY_SYSTEM_DELETED, false).apply()
+        rewritePromptFile(ctx, render(ctx), readExistingUserSection(ctx))
+    }
+
+    private fun readExistingUserSection(ctx: Context): String? {
+        val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
+        val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull() ?: return null
+        return if (existing.contains(USER_SECTION_BEGIN)) extractUserSection(existing)
+        else if (!existing.contains(MARKER_PREFIX)) existing else null
+    }
+
+    private fun rewritePromptFile(ctx: Context, system: String?, user: String?) {
+        val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
+        val body = buildString {
+            if (!system.isNullOrBlank()) append(system.trimEnd()).append("\n\n")
+            append(userSection(user))
+        }
+        write(file, body)
+    }
+
     private const val MARKER_PREFIX = "<!-- dsh-android AGENTS seed v"
     /** 当前模板版本：改文案必须同步递增，旧版才会被升级覆盖 */
     private const val SEED_VERSION = 55
@@ -53,6 +100,17 @@ object AgentContextSeed {
     fun ensure(ctx: Context) {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
+
+        val promptPrefs = systemPromptPrefs(ctx)
+        if (promptPrefs.contains(KEY_SYSTEM_OVERRIDE) || promptPrefs.getBoolean(KEY_SYSTEM_DELETED, false)) {
+            val userContent = if (existing == null) null
+                else if (existing.contains(USER_SECTION_BEGIN)) extractUserSection(existing)
+                else if (!existing.contains(MARKER_PREFIX)) existing else null
+            val systemContent = if (promptPrefs.getBoolean(KEY_SYSTEM_DELETED, false)) null
+                else promptPrefs.getString(KEY_SYSTEM_OVERRIDE, null)
+            rewritePromptFile(ctx, systemContent, userContent)
+            return
+        }
 
         // ① 文件不存在 → 写入完整模板（含空的用户段）
         if (existing == null) {
@@ -101,7 +159,7 @@ object AgentContextSeed {
     fun writeUserSection(ctx: Context, content: String?) {
         val file = File(EngineConfig.dshHome(ctx), FILE_NAME)
         val existing = runCatching { if (file.isFile) file.readText() else null }.getOrNull()
-        val body = if (existing == null) render(ctx) else appSectionOf(existing)
+        val body = if (existing == null) readSystemPrompt(ctx).orEmpty() else appSectionOf(existing)
         write(file, body + userSection(content))
         Log.i(TAG, "AGENTS.md user section saved (${content?.length ?: 0} chars)")
     }

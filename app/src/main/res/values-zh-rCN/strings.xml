@@ -114,10 +114,10 @@
 
     <string name="setting_priv_mode">运行权限模式</string>
     <string name="setting_priv_mode_sub">决定 AI 能触及的系统能力边界，切换后自动重启引擎</string>
-    <string name="setting_root_status">Root 能力</string>
+    <string name="setting_root_status">Root 路径线索</string>
     <string name="setting_root_sub">以 su 身份运行引擎，AI 可获得系统级权限（需设备已 Root）；切换后自动重启引擎</string>
-    <string name="setting_root_status_yes">已检测到 su</string>
-    <string name="setting_root_status_no">未检测到 su</string>
+    <string name="setting_root_status_yes">发现 su 路径 · 未验证</string>
+    <string name="setting_root_status_no">未发现 su 路径</string>
     <string name="setting_shizuku_status">Shizuku 状态</string>
     <string name="setting_shizuku_sub">通过 Shizuku 以 adb 身份执行命令（保活/杀进程），引擎本身仍在沙箱内</string>
     <string name="setting_shizuku_granted">已授权</string>
@@ -2049,4 +2049,24 @@
     <string name="developer_hook_api_reachable">API 已认证，但 Hook 控制面不可用；请检查 dsh-gpt/LSPosed。</string>
     <string name="developer_hook_http_error">API 返回了非预期 HTTP 状态。</string>
     <string name="developer_hook_unreachable">无法连接本地 API。请检查 dsh-gpt 和 8766 端口。</string>
+    <string name="prompt_system_tab">系统默认</string>
+    <string name="prompt_user_tab">用户指令</string>
+    <string name="prompt_system_intro">这里是 DSH 内置的环境系统 Prompt，通过 AGENTS.md 注入。可以直接编辑或删除；删除状态会在重启和应用升级后保留。</string>
+    <string name="prompt_user_intro">用户自己的长期指令独立保存。编辑或删除系统默认 Prompt、应用升级，都不会覆盖用户指令。</string>
+    <string name="prompt_system_path">系统默认 Prompt · 本地可编辑副本</string>
+    <string name="prompt_system_deleted_path">系统默认 Prompt 已删除。输入内容并保存即可创建本地替代版本。</string>
+    <string name="prompt_user_path">用户指令 · 独立保存在 AGENTS.md 用户段</string>
+    <string name="prompt_delete_system">删除系统 Prompt</string>
+    <string name="prompt_delete_system_title">删除系统默认 Prompt？</string>
+    <string name="prompt_delete_system_message">将从 AGENTS.md 中移除内置环境 Prompt。用户指令会完整保留，删除状态也会在应用升级后保留。</string>
+    <string name="prompt_delete_system_confirm">确认删除</string>
+    <string name="prompt_system_saved">系统 Prompt 已保存，将应用于新会话。</string>
+    <string name="prompt_system_deleted">系统 Prompt 已删除，用户指令已保留。</string>
+    <string name="prompt_both_saved">系统 Prompt 和用户指令均已保存。</string>
+    <string name="setting_root_verified_yes">Root 权限已验证可用</string>
+    <string name="setting_root_verified_no">发现 su，但 Root 授权验证失败</string>
+    <string name="setting_root_verify_title">验证 Root 权限</string>
+    <string name="setting_root_verify_message">将实际执行 su 身份检测。Root 管理器可能弹出授权请求；此检测不会修改系统。</string>
+    <string name="setting_root_verify_action">开始验证</string>
+    <string name="setting_root_verifying">正在验证 Root 权限…</string>
 </resources>

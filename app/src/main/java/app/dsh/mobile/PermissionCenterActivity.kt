@@ -96,6 +96,31 @@ class PermissionCenterActivity : ThemedActivity() {
             showPrivDialog()
         }
 
+        // Root probing can trigger the system's su authorization UI, so run it only
+        // after the user explicitly taps the Root status row and confirms.
+        findViewById<LinearLayout>(R.id.rowRootStatus).setOnClickListener {
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.setting_root_verify_title)
+                .setMessage(R.string.setting_root_verify_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.setting_root_verify_action) { _, _ ->
+                    Toast.makeText(this, R.string.setting_root_verifying, Toast.LENGTH_SHORT).show()
+                    Thread({
+                        val verified = Privilege.verifyRootNow(this)
+                        runOnUiThread {
+                            if (isFinishing || isDestroyed) return@runOnUiThread
+                            refreshAll()
+                            Toast.makeText(
+                                this,
+                                if (verified) R.string.setting_root_verified_yes else R.string.setting_root_verified_no,
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }, "root-verify").apply { isDaemon = true }.start()
+                }
+                .show()
+        }
+
         // —— 系统能力：屏幕点击（无障碍） ——
         findViewById<LinearLayout>(R.id.rowAccess).setOnClickListener {
             handleAccessibility()
@@ -277,13 +302,22 @@ class PermissionCenterActivity : ThemedActivity() {
     private fun refreshAll() {
         findViewById<TextView>(R.id.valPriv).text = privLabel(Privilege.getMode(this))
         findViewById<TextView>(R.id.valRootStatus).let {
-            val rootOk = Privilege.rootAvailableMinimal()
-            it.text = getString(
-                if (rootOk) R.string.setting_root_status_yes else R.string.setting_root_status_no,
-            )
+            val rootPathFound = Privilege.rootAvailableMinimal()
+            val rootVerified = Privilege.rootVerification(this)
+            it.text = when (rootVerified) {
+                true -> getString(R.string.setting_root_verified_yes)
+                false -> getString(R.string.setting_root_verified_no)
+                null -> getString(
+                    if (rootPathFound) R.string.setting_root_status_yes else R.string.setting_root_status_no,
+                )
+            }
             it.asStatusChip(
-                if (rootOk) R.color.success else R.color.text_secondary,
-                if (rootOk) R.color.success_soft else R.color.surface_alt,
+                if (rootVerified == true) R.color.success
+                else if (rootPathFound && rootVerified == null) R.color.warning
+                else R.color.text_secondary,
+                if (rootVerified == true) R.color.success_soft
+                else if (rootPathFound && rootVerified == null) R.color.warning_soft
+                else R.color.surface_alt,
             )
         }
         refreshShizuku()

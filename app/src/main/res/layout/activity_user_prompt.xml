@@ -26,14 +26,48 @@
     </com.google.android.material.appbar.MaterialToolbar>
 
     <TextView
+        android:id="@+id/txtPromptIntro"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingHorizontal="@dimen/md3_page_padding"
         android:paddingTop="14dp"
-        android:text="@string/user_prompt_intro"
+        android:text="@string/prompt_system_intro"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         android:lineSpacingExtra="3dp" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/promptTypeTabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/md3_page_padding"
+        android:layout_marginTop="12dp"
+        app:singleSelection="true"
+        app:selectionRequired="true">
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSystemPrompt"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/md3_button_height"
+            android:layout_weight="1"
+            android:text="@string/prompt_system_tab" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnUserPrompt"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/md3_button_height"
+            android:layout_weight="1"
+            android:text="@string/prompt_user_tab" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnDeletePrompt"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_marginHorizontal="@dimen/md3_page_padding"
+        android:text="@string/prompt_delete_system" />
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/promptInputLayout"
