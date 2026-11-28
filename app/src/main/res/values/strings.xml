@@ -114,10 +114,10 @@
 
     <string name="setting_priv_mode">Permission mode</string>
     <string name="setting_priv_mode_sub">Sets how much of the system the AI can reach. Switching restarts the engine</string>
-    <string name="setting_root_status">Root capability</string>
+    <string name="setting_root_status">Root binary hint</string>
     <string name="setting_root_sub">Runs the engine as su so the AI gets system-level rights (device must be rooted). Switching restarts the engine</string>
-    <string name="setting_root_status_yes">su detected</string>
-    <string name="setting_root_status_no">su not detected</string>
+    <string name="setting_root_status_yes">su path found · unverified</string>
+    <string name="setting_root_status_no">su path not found</string>
     <string name="setting_shizuku_status">Shizuku status</string>
     <string name="setting_shizuku_sub">Runs commands as adb through Shizuku (keep-alive / kill processes); the engine itself stays sandboxed</string>
     <string name="setting_shizuku_granted">Granted</string>
@@ -2046,4 +2046,17 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="developer_hook_api_reachable">API authenticated; Hook control plane is unavailable. Check dsh-gpt/LSPosed.</string>
     <string name="developer_hook_http_error">API responded with an unexpected HTTP status.</string>
     <string name="developer_hook_unreachable">Cannot reach local API. Check dsh-gpt and port 8766.</string>
+    <string name="prompt_system_tab">System default</string>
+    <string name="prompt_user_tab">User instructions</string>
+    <string name="prompt_system_intro">This is the built-in DSH environment prompt injected through AGENTS.md. You can edit it or delete it. Deletion is remembered across restarts and app upgrades.</string>
+    <string name="prompt_user_intro">Your own standing instructions are appended separately. They are preserved when the built-in prompt is edited, deleted, or upgraded.</string>
+    <string name="prompt_system_path">System default prompt · local editable override</string>
+    <string name="prompt_system_deleted_path">System default prompt is deleted. Enter content and save to create a local replacement.</string>
+    <string name="prompt_user_path">User instructions · preserved in the user section of AGENTS.md</string>
+    <string name="prompt_delete_system">Delete system prompt</string>
+    <string name="prompt_delete_system_title">Delete system default prompt?</string>
+    <string name="prompt_delete_system_message">The built-in environment prompt will be removed from AGENTS.md. Your user instructions remain untouched. The deletion is remembered across app upgrades.</string>
+    <string name="prompt_delete_system_confirm">Delete prompt</string>
+    <string name="prompt_system_saved">System prompt saved. It applies to new sessions.</string>
+    <string name="prompt_system_deleted">System prompt deleted. User instructions were preserved.</string>
 </resources>

@@ -281,9 +281,10 @@ class PermissionCenterActivity : ThemedActivity() {
             it.text = getString(
                 if (rootOk) R.string.setting_root_status_yes else R.string.setting_root_status_no,
             )
+            // A discovered su path is only a hint; it does not prove that a root grant works.
             it.asStatusChip(
-                if (rootOk) R.color.success else R.color.text_secondary,
-                if (rootOk) R.color.success_soft else R.color.surface_alt,
+                if (rootOk) R.color.warning else R.color.text_secondary,
+                if (rootOk) R.color.warning_soft else R.color.surface_alt,
             )
         }
         refreshShizuku()

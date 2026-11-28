@@ -1,62 +1,91 @@
 package app.dsh.mobile
 
-import android.app.Activity
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import app.dsh.mobile.engine.AgentContextSeed
+import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
-/**
- * 用户自定义指令页（v1.3.2，issue #19）。
- *
- * ## 背景
- * 用户希望「在现有提示词之上补写自己的指令」。引擎只加载
- * `$DSH_HOME/AGENTS.md` 这一个 user-global 指令文件（不会加载同目录其它文件名），
- * 所以这里的做法是：**该文件分成两段** —— App 管理的环境说明段（随版本升级整段替换）
- * 与用户自有段（App 永不覆盖）。本页只编辑用户段，因此：
- *   · 升级 App 不会丢用户写的内容；
- *   · 用户改指令也不会让环境说明变旧（两者互不干扰）。
- *
- * 页面底部展示「环境说明由 App 管理」的说明，避免用户以为改不了。
- */
+/** Unified editor for the built-in system prompt and user-owned instructions in AGENTS.md. */
 class UserPromptActivity : ThemedActivity() {
-
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(LocaleHelper.wrap(newBase))
     }
 
+    private var showingSystem = true
+    private var systemDraft = ""
+    private var userDraft = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // v1.4.18：跟随应用朝向偏好（横屏下编辑区域更宽，必要时仍可滚动）
         OrientationPrefs.applyToSettingsPage(this)
         setContentView(R.layout.activity_user_prompt)
-
-        findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).setNavigationOnClickListener { finish() }
+        findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+            .setNavigationOnClickListener { finish() }
 
         val editor = findViewById<EditText>(R.id.editorPrompt)
         val hint = findViewById<TextView>(R.id.txtPath)
+        val intro = findViewById<TextView>(R.id.txtPromptIntro)
+        val tabs = findViewById<MaterialButtonToggleGroup>(R.id.promptTypeTabs)
+        val delete = findViewById<android.view.View>(R.id.btnDeletePrompt)
 
-        // 载入现有用户段（未写过则为空）
-        val current = AgentContextSeed.readUserSection(this)
-        editor.setText(current.orEmpty())
-        if (current.isNullOrEmpty()) {
-            editor.hint = getString(R.string.user_prompt_placeholder)
+        systemDraft = AgentContextSeed.readSystemPrompt(this).orEmpty()
+        userDraft = AgentContextSeed.readUserSection(this).orEmpty()
+
+        fun renderMode() {
+            editor.setText(if (showingSystem) systemDraft else userDraft)
+            intro.setText(if (showingSystem) R.string.prompt_system_intro else R.string.prompt_user_intro)
+            hint.setText(if (showingSystem) {
+                if (AgentContextSeed.isSystemPromptDeleted(this)) R.string.prompt_system_deleted_path
+                else R.string.prompt_system_path
+            } else R.string.prompt_user_path)
+            delete.visibility = if (showingSystem) android.view.View.VISIBLE else android.view.View.GONE
         }
-        hint.text = getString(R.string.user_prompt_path)
+
+        tabs.check(R.id.btnSystemPrompt)
+        tabs.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            if (showingSystem) systemDraft = editor.text.toString() else userDraft = editor.text.toString()
+            showingSystem = checkedId == R.id.btnSystemPrompt
+            renderMode()
+        }
+        renderMode()
 
         findViewById<android.view.View>(R.id.btnSave).setOnClickListener {
             val text = editor.text.toString()
-            AgentContextSeed.writeUserSection(this, text.ifBlank { null })
-            Toast.makeText(this, getString(R.string.user_prompt_saved), Toast.LENGTH_SHORT).show()
+            if (showingSystem) {
+                systemDraft = text
+                if (text.isBlank()) AgentContextSeed.deleteSystemPrompt(this)
+                else AgentContextSeed.writeSystemPrompt(this, text)
+                Toast.makeText(this, R.string.prompt_system_saved, Toast.LENGTH_SHORT).show()
+            } else {
+                userDraft = text
+                AgentContextSeed.writeUserSection(this, text.ifBlank { null })
+                Toast.makeText(this, R.string.user_prompt_saved, Toast.LENGTH_SHORT).show()
+            }
             finish()
+        }
+
+        delete.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.prompt_delete_system_title)
+                .setMessage(R.string.prompt_delete_system_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.prompt_delete_system_confirm) { _, _ ->
+                    AgentContextSeed.deleteSystemPrompt(this)
+                    systemDraft = ""
+                    if (showingSystem) editor.setText("")
+                    renderMode()
+                    Toast.makeText(this, R.string.prompt_system_deleted, Toast.LENGTH_SHORT).show()
+                }
+                .show()
         }
     }
 
-    /** 回到本页时重新对齐朝向：外观页可能刚改过开关/偏好。 */
     override fun onResume() {
         super.onResume()
-        // 从外观页返回时偏好可能已变（开关/朝向），重新对齐一次；值未变时是空操作
         OrientationPrefs.applyToSettingsPage(this)
     }
 }
