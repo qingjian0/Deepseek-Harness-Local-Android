@@ -151,6 +151,13 @@ object ProfilePluginProvisioner {
     /** Current mounted state in the web profile; false when the profile is not ready. */
     fun isEnabled(ctx: Context, pkg: String): Boolean = isManaged(ctx, pkg)
 
+    /** Pending user intent wins over the currently mounted profile state. */
+    fun requestedEnabled(ctx: Context, pkg: String): Boolean {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val key = pendingKey(pkg)
+        return if (prefs.contains(key)) prefs.getBoolean(key, false) else isManaged(ctx, pkg)
+    }
+
     /**
      * 重新释放**已被删掉的内置暂存 tgz**（v1.7.32）。
      *
