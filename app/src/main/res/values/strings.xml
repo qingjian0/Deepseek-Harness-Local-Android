@@ -2029,4 +2029,7 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="full_repair_progress">Repairing... (this can take up to a minute)</string>
     <string name="full_repair_restart">Restart engine</string>
     <string name="full_repair_failed">Repair aborted unexpectedly; see full-repair-last.txt</string>
+    <string name="developer_hook_agent_title">DSH-GPT Hook Agent</string>
+    <string name="developer_hook_agent_sub">Optional DSH profile plugin. Does not enable LSPosed hooks.</string>
+    <string name="developer_hook_agent_pending">Change saved; it will apply before the next engine start.</string>
 </resources>
