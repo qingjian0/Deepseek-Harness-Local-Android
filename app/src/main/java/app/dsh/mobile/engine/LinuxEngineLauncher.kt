@@ -371,6 +371,14 @@ class LinuxEngineLauncher(private val ctx: Context) {
             add("DSH_PROFILE=${runCatching { "web" }.getOrDefault("web")}")
             add("DSH_PROFILE_DIR=/dsh/profiles/web")
             add("PORT=$port")
+            // Keep Linux/container mode on the exact same runtime service-port map as
+            // native mode. EngineConfig.buildEnv is not used by this launcher.
+            add("DSH_ENGINE_PORT=$port")
+            add("DSH_SHZ_PORT=${ShizukuHttpBridge.port(port)}")
+            add("DSH_BRIDGE_PORT=${AgentBridge.PORT}")
+            add("DSH_EMBEDDING_PORT=${LocalEmbedder.PORT}")
+            add("DSH_LAN_PROXY_PORT=${LanWebProxy.PORT}")
+            add("DSH_REMOTE_ACCESS_PORT=${RemoteAccessServer.PORT}")
             add("NODE_ENV=production")
             addAll(HookAgentSecrets.environment(ctx))
             // v1.6.2：Node 模块编译缓存。实测（真机交替 4 轮）有缓存 1449/1442ms

@@ -332,7 +332,7 @@ object EngineTriage {
                 else -> Cause.PORT_FOREIGN
             }
             val evidence = buildList {
-                if (facts.portInUse) add("port ${EngineConfig.DEFAULT_PORT} is listening")
+                if (facts.portInUse) add("port ${ServicePortAllocator.current.engine} is listening")
                 facts.portOwners.entries.take(3).forEach { (pid, cmd) ->
                     add("pid $pid: ${cmd.take(120)}")
                 }
@@ -348,7 +348,7 @@ object EngineTriage {
                     Fix(Fix.Kind.RECLAIM_PORT, needsConfirm = cause == Cause.PORT_FOREIGN),
                     Fix(Fix.Kind.RESTART_ENGINE),
                 ),
-                summary = "${cause.id}: ${facts.portOwners.size} owner(s) on ${EngineConfig.DEFAULT_PORT}",
+                summary = "${cause.id}: ${facts.portOwners.size} owner(s) on ${ServicePortAllocator.current.engine}",
                 neverBooted = facts.neverBooted,
             )
         }
@@ -603,7 +603,7 @@ object EngineTriage {
     private fun portListening(): Boolean = runCatching {
         java.net.Socket().use { s ->
             s.connect(
-                java.net.InetSocketAddress("127.0.0.1", EngineConfig.DEFAULT_PORT),
+                java.net.InetSocketAddress("127.0.0.1", ServicePortAllocator.current.engine),
                 200,
             )
             true
@@ -621,7 +621,7 @@ object EngineTriage {
      * 拿不到就返回空 map —— 调用方会归到 PORT_UNKNOWN_OWNER，仍可清场。
      */
     private fun portOwners(): Map<Int, String> = runCatching {
-        val portHex = String.format("%04X", EngineConfig.DEFAULT_PORT)
+        val portHex = String.format("%04X", ServicePortAllocator.current.engine)
         val inodes = mutableSetOf<String>()
         for (f in listOf("/proc/net/tcp", "/proc/net/tcp6")) {
             val file = File(f)

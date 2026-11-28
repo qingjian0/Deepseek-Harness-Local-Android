@@ -31,7 +31,7 @@ object ShizukuHttpBridge {
     private val pool = Executors.newCachedThreadPool()
 
     /** 桥端口 = 引擎端口 + 2（默认 3080 → 3082），避开引擎 webServer。 */
-    fun port(enginePort: Int): Int = enginePort + 2
+    fun port(@Suppress("UNUSED_PARAMETER") enginePort: Int): Int = ServicePortAllocator.current.shizuku
 
     /** 启动环回 HTTP 服务；模式非 Shizuku 或不可用时不启动。幂等。 */
     @Synchronized
@@ -62,6 +62,9 @@ object ShizukuHttpBridge {
             Log.w(TAG, "shz bridge start failed: ${e.message}")
         }
     }
+
+    /** True only while the selected Shizuku listener is bound and open. */
+    fun isRunning(): Boolean = serverSocket?.isClosed == false
 
     @Synchronized
     fun stop() {

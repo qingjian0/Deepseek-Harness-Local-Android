@@ -1555,7 +1555,7 @@ object EngineConfig {
             |  disabled: false
             |  config:
             |    host: !!js ctx.webStartup.host ?? '127.0.0.1'
-            |    port: !!js ctx.webStartup.port ?? 3080
+            |    port: !!js ctx.webStartup.port ?? ${ServicePortAllocator.current.engine}
             |    compression: gzip
             |    compressionLevel: 1
             |    compressionThresholdBytes: 1024
@@ -1953,6 +1953,11 @@ object EngineConfig {
                     listOf("/system/bin", "/system/xbin")
                 ).joinToString(":"),
             "DSH_SHZ_PORT=${ShizukuHttpBridge.port(port)}",
+            "DSH_ENGINE_PORT=$port",
+            "DSH_BRIDGE_PORT=${AgentBridge.PORT}",
+            "DSH_EMBEDDING_PORT=${LocalEmbedder.PORT}",
+            "DSH_LAN_PROXY_PORT=${LanWebProxy.PORT}",
+            "DSH_REMOTE_ACCESS_PORT=${RemoteAccessServer.PORT}",
             // 桥 token（v1.2.99）：只交给引擎子进程，供 scr/notify 等闸门脚本鉴权。
             // 第三方 App 拿不到 → 无法调用读屏/点击/通知等设备能力。
             "DSH_BRIDGE_TOKEN=${AgentBridge.currentToken().orEmpty()}",

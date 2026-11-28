@@ -54,7 +54,7 @@ import java.nio.charset.StandardCharsets
 object AgentBridge {
 
     private const val TAG = "AgentBridge"
-    const val PORT = 3083
+    val PORT: Int get() = ServicePortAllocator.current.agentBridge
     private const val CHANNEL_ID = "agent_notify"
 
     /** 请求体上限（字节）。超限直接 413，见 handleOnWorker 里的说明。 */
@@ -218,7 +218,11 @@ object AgentBridge {
         if (server == null) return   // 还没启动过，等 start() 自己读开关
         runCatching { stop() }
         runCatching { start(ctx) }
-        Log.i(TAG, "bridge rebound on $boundAddress:$PORT")
+        if (isRunning()) {
+            Log.i(TAG, "bridge rebound on $boundAddress:$PORT")
+        } else {
+            Log.e(TAG, "bridge rebind failed on selected port $PORT")
+        }
     }
 
     fun start(ctx: Context) {
@@ -250,6 +254,17 @@ object AgentBridge {
                 onTurnEnd(ctx.applicationContext, session)
             }
         } catch (e: Exception) {
+            // A bind race can happen after the complete-block probe. During preflight
+            // no other DSH listener has started yet, so advancing the whole block is safe.
+            if (e is java.net.BindException) {
+                val failedPort = PORT
+                val next = ServicePortAllocator.advanceAfterBindFailure(ctx, failedPort)
+                if (next != null) {
+                    Log.w(TAG, "bind race on $failedPort; retrying AgentBridge on ${next.agentBridge}")
+                    start(ctx)
+                    return
+                }
+            }
             // ⚠️ v1.2.104：**bind 失败绝不能再静默**（主人反馈的起点）。
             // 旧实现只打一行 Log.w，于是「notify / scr / say 全哑」在现场被反复
             // 误判成「无障碍没开 / 桥没就绪」，真因（端口被占）谁也看不见。
@@ -357,6 +372,9 @@ object AgentBridge {
             ctx.getSharedPreferences("dsh_ui", Context.MODE_PRIVATE)
                 .getBoolean("tts_on_complete", false)
         }.getOrDefault(false)
+
+    /** True only while the selected-port listener is actually bound and open. */
+    fun isRunning(): Boolean = server?.isClosed == false
 
     fun stop() {
         runCatching { server?.close() }
@@ -2094,9 +2112,10 @@ object AgentBridge {
             if (f.isFile) f.readText().takeLast(2500) else "(no engine.log)"
         }.getOrDefault("(log read failed)")
 
-        // 3080 HTTP 探测
+        // Selected engine HTTP port probe.
+        val enginePort = ServicePortAllocator.current.engine
         val httpProbe = runCatching {
-            val c = (java.net.URL("http://127.0.0.1:3080/").openConnection()
+            val c = (java.net.URL("http://127.0.0.1:$enginePort/").openConnection()
                     as java.net.HttpURLConnection).apply { connectTimeout = 4000; readTimeout = 4000 }
             val code = c.responseCode
             // readNBytes(int) 是 API 33+；Android 11 上会 NoSuchMethod——用 Kotlin readBytes 截断
@@ -2109,10 +2128,10 @@ object AgentBridge {
         val crlf = "\r\n"
         val wsProbe = listOf("/ws", "/", "/api/ws", "/socket").joinToString("<br>") { p ->
             runCatching {
-                java.net.Socket("127.0.0.1", 3080).use { sock ->
+                java.net.Socket("127.0.0.1", enginePort).use { sock ->
                     sock.soTimeout = 4000
                     val req = "GET $p HTTP/1.1" + crlf +
-                        "Host: 127.0.0.1:3080" + crlf +
+                        "Host: 127.0.0.1:$enginePort" + crlf +
                         "Upgrade: websocket" + crlf +
                         "Connection: Upgrade" + crlf +
                         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" + crlf +
@@ -2131,7 +2150,7 @@ object AgentBridge {
 <h3>1. WebView UA</h3><pre id="ua"></pre>
 <h3>2. JS API probe (false = missing)</h3><pre id="api"></pre>
 <h3>3. Engine state</h3><pre>$engineState</pre>
-<h3>4. HTTP probe on 3080</h3><pre>$httpProbe</pre>
+<h3>4. HTTP probe on $enginePort</h3><pre>$httpProbe</pre>
 <h3>5. WebSocket probe</h3><pre>$wsProbe</pre>
 <h3>6. Runtime version</h3><pre>$runtimeVer</pre>
 <h3>7. Frontend polyfill</h3><pre>$poly</pre>
