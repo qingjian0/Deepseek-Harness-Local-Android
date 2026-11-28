@@ -40,6 +40,7 @@ object DataExport {
     private const val TAG = "DataExport"
     private const val REGISTRY = "storages/workspace.json"
     private const val USER_PROMPT_BACKUP = "settings/user-prompt.json"
+    private const val PROMPT_SETTINGS_BACKUP = "settings/prompt-manager.json"
     private val DIRS = listOf("sessions", "workspaces")
 
     data class Summary(
@@ -109,7 +110,8 @@ object DataExport {
                 log(ctx, "warning: $REGISTRY not found; exporting without the workspace registry")
             }
             val userPromptBytes = UserPromptRepository.backupPayload(ctx)
-            val total = entries.count { !it.first.endsWith("/") } + 1
+            val promptSettingsBytes = PromptSettingsRepository.backupPayload(ctx)
+            val total = entries.count { !it.first.endsWith("/") } + 2
 
             val manifest = JSONObject()
                 .put("schemaVersion", SCHEMA_VERSION)
@@ -122,7 +124,8 @@ object DataExport {
                         .put("sessions", counts["sessions"] ?: 0)
                         .put("workspaces", counts["workspaces"] ?: 0)
                         .put("workspaceRegistry", if (registry != null) 1 else 0)
-                        .put("userPromptSettings", 1),
+                        .put("userPromptSettings", 1)
+                        .put("promptManagerSettings", 1),
                 )
                 .put("skippedSymlinks", skippedLinks)
                 .put(
@@ -154,6 +157,11 @@ object DataExport {
             zip.putNextEntry(ZipEntry(USER_PROMPT_BACKUP))
             zip.write(userPromptBytes)
             bytes += userPromptBytes.size
+            zip.closeEntry()
+            onProgress(++done, total)
+            zip.putNextEntry(ZipEntry(PROMPT_SETTINGS_BACKUP))
+            zip.write(promptSettingsBytes)
+            bytes += promptSettingsBytes.size
             zip.closeEntry()
             onProgress(++done, total)
             zip.finish()
@@ -201,6 +209,7 @@ object DataExport {
         val overwritten: Int,
         val skipped: List<String>,
         val userPromptRestored: Boolean = false,
+        val promptSettingsRestored: Boolean = false,
     )
 
     class ImportException(message: String) : IOException(message)
@@ -244,6 +253,7 @@ object DataExport {
         val allowedRoots = listOf("sessions/", "workspaces/").map { home.resolve(it).canonicalPath }
         val registryTarget = home.resolve(REGISTRY).canonicalPath
         val userPromptTarget = home.resolve(USER_PROMPT_BACKUP).canonicalPath
+        val promptSettingsTarget = home.resolve(PROMPT_SETTINGS_BACKUP).canonicalPath
 
         var sessionFiles = 0
         var workspaceFiles = 0
@@ -251,6 +261,8 @@ object DataExport {
         var hasRegistry = false
         var hasUserPromptBackup = false
         var userPromptRestored = false
+        var hasPromptSettingsBackup = false
+        var promptSettingsRestored = false
         val skipped = mutableListOf<String>()
 
         try {
@@ -287,6 +299,15 @@ object DataExport {
                         hasUserPromptBackup = true
                         continue
                     }
+                    if (path == promptSettingsTarget) {
+                        if (e.size > 4 * 1024 * 1024) throw ImportException("prompt settings backup too large")
+                        val payload = zf.getInputStream(e).use { it.readBytes() }
+                        if (!PromptSettingsRepository.isValidBackupPayload(payload)) {
+                            throw ImportException("invalid_prompt_settings_backup")
+                        }
+                        hasPromptSettingsBackup = true
+                        continue
+                    }
                     if (allowedRoots.none { path.startsWith(it + File.separator) }) {
                         skipped += name   // profiles/ engine/ 等：包里不该有
                     }
@@ -306,7 +327,11 @@ object DataExport {
                     if (path == userPromptTarget) {
                         val payload = zf.getInputStream(e).use { it.readBytes() }
                         userPromptRestored = UserPromptRepository.restoreBackup(ctx, payload)
-                        if (userPromptRestored) UserPromptContextAdapter.refreshAsync(ctx)
+                        continue
+                    }
+                    if (path == promptSettingsTarget) {
+                        val payload = zf.getInputStream(e).use { it.readBytes() }
+                        promptSettingsRestored = PromptSettingsRepository.restoreBackup(ctx, payload)
                         continue
                     }
                     if (allowedRoots.none { path.startsWith(it + File.separator) }) continue
@@ -321,6 +346,11 @@ object DataExport {
                     }
                 }
 
+                if (userPromptRestored || promptSettingsRestored) {
+                    PromptSettingsRepository.syncGuidanceFile(ctx)
+                    UserPromptContextAdapter.refresh(ctx)
+                }
+
                 // ③ 注册表并集合并
                 if (hasRegistry) {
                     files.firstOrNull { it.name.replace('\\', '/') == REGISTRY }?.let { entry ->
@@ -329,13 +359,15 @@ object DataExport {
                 }
             }
             val sum = ImportSummary(
-                sessionFiles, workspaceFiles, hasRegistry, overwritten, skipped, userPromptRestored,
+                sessionFiles, workspaceFiles, hasRegistry, overwritten, skipped,
+                userPromptRestored, promptSettingsRestored,
             )
             log(
                 ctx,
                 "import done: sessions=$sessionFiles workspaces=$workspaceFiles " +
                     "overwritten=${overwritten} skipped=${skipped.size} " +
-                    "userPromptEntry=${hasUserPromptBackup} restored=${userPromptRestored}",
+                    "userPromptEntry=${hasUserPromptBackup} restored=${userPromptRestored} " +
+                    "promptSettingsEntry=${hasPromptSettingsBackup} restored=${promptSettingsRestored}",
             )
             return sum
         } catch (e: Exception) {
