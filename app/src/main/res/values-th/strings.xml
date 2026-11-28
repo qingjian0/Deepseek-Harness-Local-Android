@@ -1984,4 +1984,27 @@
     <string name="setting_user_prompt_toggle">Inject custom instructions into new sessions</string>
     <string name="user_prompt_path">Stored independently in app settings; injected into AGENTS.md when enabled</string>
     <string name="user_prompt_toggle_failed">Could not save this setting. Please try again.</string>
+    <string name="prompt_management_title">การจัดการพรอมป์ต์</string>
+    <string name="prompt_management_subtitle">แก้ไข system prompt ต้นทางและขีดจำกัดคำสั่ง</string>
+    <string name="prompt_upstream_description">ตัวเลือกเหล่านี้จะเขียนลงการตั้งค่า system-prompt และ agent-instructions ที่ DSH ใช้จริง การเปลี่ยนแปลงมีผลหลังรีสตาร์ตเอนจิน</string>
+    <string name="prompt_harness_identity_default">ตัวตนเริ่มต้นจาก upstream: “You are an AI agent powered by DeepSeek Harness.” ปิดสวิตช์เพื่อลบ หรือใช้ช่อง prefix ด้านล่างเพื่อแทนที่ด้วยข้อความของคุณ</string>
+    <string name="prompt_include_identity">ใส่ตัวตน Harness แบบคงที่</string>
+    <string name="prompt_include_runtime_context">ใส่บริบทขณะทำงานเพิ่มเติม</string>
+    <string name="prompt_persona_prefix_label">Persona prefix / ตัวตนที่ใช้แทน</string>
+    <string name="prompt_persona_prefix_hint">เว้นว่างเพื่อลบ prefix ที่กำหนดเอง</string>
+    <string name="prompt_persona_suffix_label">Persona suffix</string>
+    <string name="prompt_persona_suffix_hint">เว้นว่างเพื่อลบ suffix</string>
+    <string name="prompt_instruction_budget_title">ขีดจำกัดคำสั่ง AGENTS.md</string>
+    <string name="prompt_instruction_budget_description">จำนวนไบต์สูงสุดต่อชุดคำสั่ง และจำนวนไบต์สูงสุดที่อ่านจากไฟล์คำสั่งหนึ่งไฟล์</string>
+    <string name="prompt_open_user_instructions">แก้ไขคำสั่งผู้ใช้ของฉัน</string>
+    <string name="prompt_reset_title">รีเซ็ตการตั้งค่าพรอมป์ต์หรือไม่</string>
+    <string name="prompt_reset_message">คืนค่าเริ่มต้นจาก upstream และขีดจำกัดคำสั่งเริ่มต้นหรือไม่</string>
+    <string name="prompt_reset_action">คืนค่าเริ่มต้น</string>
+    <string name="prompt_save_action">บันทึก</string>
+    <string name="prompt_save_failed">บันทึกการตั้งค่าพรอมป์ต์ไม่สำเร็จ</string>
+    <string name="prompt_invalid_numbers">กรุณากรอกตัวเลขที่ถูกต้องสำหรับขีดจำกัดทั้งสองรายการ</string>
+    <string name="prompt_saved_title">บันทึกการตั้งค่าพรอมป์ต์แล้ว</string>
+    <string name="prompt_restart_message">รีสตาร์ตเอนจิน DSH เพื่อใช้การตั้งค่าเหล่านี้</string>
+    <string name="prompt_restart_later">ภายหลัง</string>
+    <string name="prompt_restart_now">รีสตาร์ตทันที</string>
 </resources>
