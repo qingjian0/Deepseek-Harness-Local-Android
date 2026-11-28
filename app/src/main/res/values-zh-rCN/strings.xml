@@ -2054,4 +2054,5 @@
     <string name="setting_user_prompt_toggle">将自定义指令注入新会话</string>
     <string name="user_prompt_path">独立保存在应用设置中；开启后注入 AGENTS.md</string>
     <string name="user_prompt_toggle_failed">设置保存失败，请重试</string>
+    <string name="import_prompt_restored">已恢复自定义指令</string>
 </resources>
