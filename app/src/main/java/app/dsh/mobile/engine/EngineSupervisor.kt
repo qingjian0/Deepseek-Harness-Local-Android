@@ -1,6 +1,7 @@
 package app.dsh.mobile.engine
 
 import app.dsh.mobile.R
+import app.dsh.mobile.DshApp
 
 import android.content.Context
 import android.util.Log
@@ -898,6 +899,18 @@ class EngineSupervisor(private val ctx: Context) {
                 }
                 initResults.firstOrNull { it.isFailure }?.getOrThrow()
                 step("parallel-preflight")
+
+                // Only now may optional listeners bind the selected block. EngineService
+                // previously started the detached LAN proxy before this asynchronous
+                // allocator ran, so a shifted block could leave the proxy on stale ports
+                // and make a later safe AgentBridge migration impossible.
+                ServicePortAllocator.markCorePreflightReady()
+                withContext(Dispatchers.IO) {
+                    LanWebProxy.setContext(ctx)
+                    if (DshApp.lanWebEnabled(ctx)) {
+                        LanWebProxy.start(DshApp.lanWebPassword(ctx))
+                    }
+                }
 
                 _state.value = State.Installing
                 BootTrace.stage(BootTrace.Stage.EXTRACTING)
