@@ -2062,4 +2062,5 @@
     <string name="prompt_delete_system_confirm">确认删除</string>
     <string name="prompt_system_saved">系统 Prompt 已保存，将应用于新会话。</string>
     <string name="prompt_system_deleted">系统 Prompt 已删除，用户指令已保留。</string>
+    <string name="prompt_both_saved">系统 Prompt 和用户指令均已保存。</string>
 </resources>

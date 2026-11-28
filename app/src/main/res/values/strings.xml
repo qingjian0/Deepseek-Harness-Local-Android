@@ -2059,4 +2059,5 @@ Only the developer can read it. Not public, not indexed, deleted after 30 days.<
     <string name="prompt_delete_system_confirm">Delete prompt</string>
     <string name="prompt_system_saved">System prompt saved. It applies to new sessions.</string>
     <string name="prompt_system_deleted">System prompt deleted. User instructions were preserved.</string>
+    <string name="prompt_both_saved">System and user prompts saved.</string>
 </resources>
