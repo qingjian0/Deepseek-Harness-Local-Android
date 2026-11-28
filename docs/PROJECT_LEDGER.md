@@ -64,7 +64,8 @@
 ## 6. 当前进行中
 
 - PR #44：`integrate/user-prompt-storage` → `dev`，选择性吸收旧 PR #13 的用户 Prompt 部分；PR 链接：https://github.com/qingjian0/Deepseek-Harness-Local-Android/pull/44。
-- PR #44 当前 head 有 17 个提交领先 dev、0 个落后；GitHub Actions 最近一次仓库运行仍是 2026-11-25，未发现 PR #44 对应的 run/check。工作流文件说明 fork 可能需要在 Actions → android-build 页面启用；目前不能声称构建/单测通过，也不能合并。
+- PR #44 当前 head 有 18 个提交领先 dev、0 个落后；GitHub Actions 最近一次仓库运行是 2026-11-25，之后未见新的每日 schedule 或 PR #44 run/check。工作流文件说明 fork 可能需要在 Actions → android-build 页面启用。
+- 最近一次 main 基线运行中，两个 ABI 的 APK 构建均成功；`jvm-behaviour` 单独失败，原因是 Gradle 无法从 Google/Maven Central/Plugin Portal 解析 `org.jetbrains.kotlin.android:1.9.24`，随后编译 classpath 为空。这是依赖解析失败，不是本次 Prompt 测试失败；但 PR #44 本身尚无构建结果。
 - PR #44 静态审查已发现并修复两处一致性风险：偏好写操作原先没有共用迁移锁；`/dev/prompt` 原先绕过独立仓储直接写 AGENTS.md。现在均已统一到仓储/适配器。
 - 系统默认 Prompt 已定位到 DSH 的 `@deepseek-ai/dsh-system-prompt` 组装层；Android 通过 `EngineConfig.ensureAndroidOverlay()` 注入最终 `--patch`。后续应改现有 overlay，不另建并行配置系统。旧 `PromptSettingsRepository` 里的 session/tool 字段仍无实际消费链路，不得显示为已生效。
 
