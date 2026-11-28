@@ -33,6 +33,9 @@ import java.net.URL
  * SafeMode 会作为独立状态暴露给 UI 展示「引擎运行于安全模式」。
  */
 class EngineSupervisor(private val ctx: Context) {
+    /** A required core listener failed to bind; retrying without changing the map cannot help. */
+    private class CoreServiceStartupException(message: String) : Exception(message)
+
 
     sealed interface State {
         data object Idle : State
@@ -871,16 +874,22 @@ class EngineSupervisor(private val ctx: Context) {
                                 // start() reports bind failures through logs/notifications for legacy
                                 // callers. The supervisor must additionally verify readiness so a
                                 // failed listener cannot be mistaken for a successful preflight.
-                                check(AgentBridge.isRunning()) {
-                                    "AgentBridge failed to bind selected port ${AgentBridge.PORT}"
+                                if (!AgentBridge.isRunning()) {
+                                    throw CoreServiceStartupException(
+                                        "AgentBridge failed to bind selected port ${AgentBridge.PORT}; " +
+                                            "automatic port migration was unavailable or unsafe",
+                                    )
                                 }
                                 // v1.7.1：远程访问总开关开着就一并起 3091（发现+配对）。
                                 // 放在这里而不是 App.onCreate：它依赖 DSH_HOME 与引擎目录，
                                 // 必须等 preflight 落盘之后才有意义。
                                 if (RemoteAccess.isEnabled(ctx)) {
                                     RemoteAccessServer.start(ctx)
-                                    check(RemoteAccessServer.isRunning()) {
-                                        "RemoteAccessServer is enabled but failed to bind selected port ${RemoteAccessServer.PORT}"
+                                    if (!RemoteAccessServer.isRunning()) {
+                                        throw CoreServiceStartupException(
+                                            "Remote Access is enabled but failed to bind selected port " +
+                                                "${RemoteAccessServer.PORT}",
+                                        )
                                     }
                                 }
                             }
@@ -1161,6 +1170,12 @@ class EngineSupervisor(private val ctx: Context) {
                     // 绝不计入崩溃计数（m1.6.4 真机误伤教训）
                     proc.stop()
                 }
+            } catch (e: CoreServiceStartupException) {
+                if (shouldExitLoop()) break
+                Log.e(TAG, "required core service listener unavailable — stopping retries", e)
+                BootTrace.fail(ctx, e.message ?: e.javaClass.simpleName)
+                failTerminal(e.message ?: "核心服务监听器启动失败")
+                return
             } catch (e: EngineStartException) {
                 if (shouldExitLoop()) break
                 Log.e(TAG, "supervision failure", e)
