@@ -53,16 +53,16 @@ object HookAgentSecrets {
             .apply()
     }
 
-    fun environment(context: Context): List<String> {
+    fun environment(context: Context): List<String> = runCatching {
         if (!ProfilePluginProvisioner.isEnabled(context, ProfilePluginProvisioner.DSH_GPT_HOOK_AGENT_PKG)) {
-            return emptyList()
+            return@runCatching emptyList()
         }
-        val config = read(context) ?: return emptyList()
-        return listOf(
+        val config = read(context) ?: return@runCatching emptyList()
+        listOf(
             "DSH_GPT_HOOK_BASE_URL=${config.baseUrl}",
             "DSH_GPT_HOOK_API_KEY=${config.apiKey}",
         )
-    }
+    }.getOrDefault(emptyList())
 
     fun validateBaseUrl(value: String): String {
         val uri = URI(value.trim())
